@@ -24,6 +24,15 @@ jobs:
       - name: Validate schemas and references
         run: python scripts/validate.py
 
+      - name: Validate incident scoping projection
+        run: python scripts/test_scoping_projection.py
+
+      - name: Validate investigation lab baseline
+        run: python scripts/test_investigation_lab.py
+
+      - name: Validate investigation MCP resources
+        run: python scripts/test_investigation_mcp_server.py
+
       - name: Validate diagnostic catalog codes
         run: python scripts/validate_catalog.py
 
