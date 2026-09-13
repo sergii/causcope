@@ -8,6 +8,15 @@ on:
       - "testbed/shop/**"
       - "schema/testbed-scenario*.json"
       - "scripts/validate_testbed.py"
+      - "scripts/structured_log_evidence.py"
+      - "scripts/test_structured_log_evidence.py"
+      - "knowledge/client/**"
+      - "knowledge/observations/http-*.yaml"
+      - "knowledge/probes/compare-client-cohorts.yaml"
+      - "causal/client/**"
+      - "causal/database/**"
+      - "vocabulary/capabilities.yaml"
+      - "vocabulary/tools.yaml"
       - ".github/workflows/testbed-shop.yml"
 
 jobs:
@@ -29,22 +38,64 @@ jobs:
       - name: Validate scenario contracts
         run: python scripts/validate_testbed.py
 
+      - name: Validate structured-log evidence adapter
+        run: python scripts/test_structured_log_evidence.py
+
       - name: Build and start happy path
         run: python testbed/shop/testbed.py up
 
       - name: Verify happy path
         run: python testbed/shop/testbed.py smoke
 
-      - name: Verify SQLite write-lock incident
+      - name: Verify SQLite write-lock incident and Causcope diagnosis
         run: |
           python testbed/shop/testbed.py scenario start sqlite-write-lock --duration 20
           python testbed/shop/testbed.py scenario verify sqlite-write-lock
+          python testbed/shop/testbed.py causcope --incident-id incident.ci.sqlite-lock --workspace /tmp/causcope-sqlite --json > /tmp/sqlite-summary.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(Path('/tmp/causcope-sqlite/runtime-evidence.json').read_text())
+          observations = {item['observation'] for item in evidence['instances'] if item['state'] == 'observed'}
+          assert 'observation.http.request_failure' in observations
+          assert 'observation.database.lock_wait_event' in observations
+
+          summary = json.loads(Path('/tmp/sqlite-summary.json').read_text())
+          lock = next(item for item in summary['diagnoses'] if item['target'] == 'observation.database.lock_wait_event')
+          assert lock['top_hypothesis'] == 'hypothesis.database.lock_contention'
+          request = next(item for item in summary['diagnoses'] if item['target'] == 'observation.http.request_failure' and item['candidate_count'] >= 2)
+          assert request['next_probe'] is not None
+          PY
           python testbed/shop/testbed.py scenario stop sqlite-write-lock
 
-      - name: Verify mobile cohort incident
+      - name: Reset reference system between incidents
+        run: |
+          python testbed/shop/testbed.py down
+          python testbed/shop/testbed.py up
+
+      - name: Verify mobile cohort incident and Causcope diagnosis
         run: |
           python testbed/shop/testbed.py scenario start mobile-bad-payload
           python testbed/shop/testbed.py scenario verify mobile-bad-payload
+          sleep 3
+          python testbed/shop/testbed.py causcope --incident-id incident.ci.mobile-payload --workspace /tmp/causcope-mobile --json > /tmp/mobile-summary.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(Path('/tmp/causcope-mobile/runtime-evidence.json').read_text())
+          skew = [
+              item for item in evidence['instances']
+              if item['observation'] == 'observation.http.client_cohort_failure_skew' and item['state'] == 'observed'
+          ]
+          assert skew
+          assert 'ios@7.42.0' in {item['labels']['failing_cohort'] for item in skew}
+
+          summary = json.loads(Path('/tmp/mobile-summary.json').read_text())
+          cohort = next(item for item in summary['diagnoses'] if item['target'] == 'observation.http.client_cohort_failure_skew')
+          assert cohort['top_hypothesis'] == 'hypothesis.client.payload_contract_mismatch'
+          PY
           python testbed/shop/testbed.py scenario stop mobile-bad-payload
 
       - name: Show logs on failure
