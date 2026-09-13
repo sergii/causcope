@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1",
+  "kind": "testbed_scenario",
+  "id": "scenario.shop.sqlite_write_lock",
+  "slug": "sqlite-write-lock",
+  "title": "SQLite write lock blocks order mutations",
+  "initial_report": {
+    "summary": "Some order writes fail intermittently while product reads remain healthy.",
+    "details": [
+      "The shop health endpoint remains available.",
+      "Product browsing still works.",
+      "Creating or paying an order may fail with a temporary server error."
+    ]
+  },
+  "activation": {
+    "service": "lock-holder",
+    "mode": "temporary_fault",
+    "duration_env": "LOCK_SECONDS",
+    "default_duration_seconds": 120,
+    "startup_wait_seconds": 1.0
+  },
+  "working_controls": [
+    "GET /health returns 200",
+    "GET /products returns 200"
+  ],
+  "verification": [
+    {
+      "name": "product reads remain healthy",
+      "method": "GET",
+      "path": "/products",
+      "expect_status": 200
+    },
+    {
+      "name": "order write is blocked",
+      "method": "POST",
+      "path": "/orders",
+      "json": {
+        "items": [
+          {
+            "product_id": 1,
+            "quantity": 1
+          }
+        ]
+      },
+      "headers": {
+        "X-Client-Platform": "web",
+        "X-App-Version": "2026.09"
+      },
+      "expect_status": 503
+    }
+  ],
+  "oracle_file": "oracle.json"
+}
