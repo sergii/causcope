@@ -81,6 +81,8 @@ def main() -> int:
         status = run("status", "--workspace", str(workspace), "--json")
         status_projection = json.loads(status.stdout)
         assert status_projection["known_count"] == 2
+        assert status_projection["partial_count"] == 1
+        assert status_projection["completeness"] == 0.25
         assert status_projection["next_action"]["dimension"] == "investigation.when"
 
         context = load_incident_context(context_path)
@@ -106,7 +108,7 @@ def main() -> int:
         report = run("report", "--workspace", str(workspace))
         assert "# Incident report: incident.test.checkout" in report.stdout
         assert "Checkout sometimes fails" in report.stdout
-        assert "Scoping completeness: 20.0%" in report.stdout
+        assert "Scoping completeness: 25.0%" in report.stdout
         assert "## Next recommended action" in report.stdout
         assert "When did the problem begin" in report.stdout
 
