@@ -1,0 +1,116 @@
+schema_version: "0.1"
+kind: investigation_dimension_registry
+
+dimensions:
+  - id: investigation.blast_radius
+    order: 1
+    title: Blast radius
+    question: Who is affected and how broadly?
+    rationale: Establish the affected population and a useful denominator before narrowing causes.
+    source_fields:
+      - scope.subjects
+      - impact.populations
+    legacy_unknowns:
+      - who
+
+  - id: investigation.where
+    order: 2
+    title: Where
+    question: Where does the failure occur?
+    rationale: Region, availability-zone, datacenter, and environment boundaries can sharply reduce the search space.
+    source_fields:
+      - scope.environments
+      - scope.regions
+      - scope.availability_zones
+      - scope.datacenters
+    legacy_unknowns:
+      - where
+
+  - id: investigation.when
+    order: 3
+    title: When
+    question: When did the problem begin and what is its temporal pattern?
+    rationale: Onset, last-known-good, and intermittency establish the time boundary for changes and evidence.
+    source_fields:
+      - time.onset_at
+      - time.last_known_good_at
+      - time.first_reported_at
+      - time.pattern
+    legacy_unknowns:
+      - when
+
+  - id: investigation.flow
+    order: 4
+    title: Flow
+    question: Which feature, endpoint, operation, or user journey is failing?
+    rationale: A precise failing flow separates broad system health from the actual user-visible failure path.
+    source_fields:
+      - scope.features
+      - scope.operations
+    legacy_unknowns:
+      - what
+
+  - id: investigation.client
+    order: 5
+    title: Client context
+    question: Which browser, mobile app, OS, device, worker, or API version is affected?
+    rationale: Client cohorts often provide a high-value failing-versus-working discriminator.
+    source_fields:
+      - scope.clients
+    legacy_unknowns:
+      - client
+
+  - id: investigation.change
+    order: 6
+    title: Recent change
+    question: What changed near the onset?
+    rationale: Deploys, flags, migrations, configuration, dependencies, and infrastructure changes are useful candidates but are not causal proof.
+    source_fields:
+      - changes
+    legacy_unknowns:
+      - change
+
+  - id: investigation.dependency
+    order: 7
+    title: Dependency scope
+    question: Which upstream, downstream, external, or peer dependency is in the failing path?
+    rationale: Dependency boundaries distinguish local failure from propagated or external failure without assuming direction of causality.
+    source_fields:
+      - scope.dependencies
+      - scope.boundaries
+    legacy_unknowns:
+      - dependency
+
+  - id: investigation.data
+    order: 8
+    title: Data scope
+    question: Which tenant, record type, role, permission, or data age is affected?
+    rationale: Data cohorts can explain failures that infrastructure-wide metrics cannot distinguish.
+    source_fields:
+      - scope.data
+    legacy_unknowns:
+      - data
+
+  - id: investigation.reproducibility
+    order: 9
+    title: Reproducibility
+    question: Under which conditions can the problem be reproduced?
+    rationale: Reproduction conditions convert an anecdotal symptom into a testable investigation boundary.
+    source_fields:
+      - reproduction.status
+      - reproduction.conditions
+      - reproduction.steps
+    legacy_unknowns:
+      - reproduction
+
+  - id: investigation.impact
+    order: 10
+    title: Impact and severity
+    question: What is actually broken for users or the business?
+    rationale: Severity is consequence, not breadth; impact should remain distinct from blast radius.
+    source_fields:
+      - impact.severity
+      - impact.user_effect
+      - impact.business_effect
+    legacy_unknowns:
+      - impact
