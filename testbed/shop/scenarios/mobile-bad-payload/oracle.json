@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.1",
+  "kind": "testbed_scenario_oracle",
+  "scenario_id": "scenario.shop.mobile_bad_payload",
+  "root_cause": {
+    "mechanism": "client.contract_mismatch",
+    "summary": "The iOS 7.42.0 client serializes quantity as a JSON string while the API contract requires a strict integer."
+  },
+  "expected_discriminators": [
+    "web requests with integer quantity succeed",
+    "iOS 7.42.0 requests with string quantity fail with 422",
+    "the failure follows client payload shape rather than infrastructure location"
+  ],
+  "expected_evidence": [
+    "application request logs show status 422 for client_platform=iOS app_version=7.42.0",
+    "equivalent web requests return 201",
+    "request body differs at items[].quantity type"
+  ],
+  "causal_notes": [
+    "Client version is a cohort discriminator before it is a cause.",
+    "The causal claim becomes strong only after comparing otherwise equivalent working and failing payloads."
+  ]
+}
