@@ -16,6 +16,8 @@ CLAIM_SCHEMA = ROOT / "schema" / "claim.schema.json"
 EXPERIMENT_SCHEMA = ROOT / "schema" / "experiment.schema.json"
 CAUSAL_EDGE_SCHEMA = ROOT / "schema" / "causal-edge.schema.json"
 INCIDENT_CONTEXT_SCHEMA = ROOT / "schema" / "incident-context.schema.json"
+INVESTIGATION_SESSION_SCHEMA = ROOT / "schema" / "investigation-session.schema.json"
+INVESTIGATION_SCENARIO_SCHEMA = ROOT / "schema" / "investigation-scenario.schema.json"
 
 REFERENCE_FIELDS = {"may_indicate", "tested_by", "produces", "requires", "preferred_tools", "prerequisites", "related_to"}
 SCALAR_REFERENCE_FIELDS = {"source", "target"}
@@ -37,6 +39,8 @@ def claim_files() -> list[Path]: return sorted((ROOT / "claims").rglob("*.yaml")
 def experiment_files() -> list[Path]: return sorted((ROOT / "experiments").rglob("*.yaml"))
 def causal_files() -> list[Path]: return sorted((ROOT / "causal").rglob("*.yaml")) if (ROOT / "causal").exists() else []
 def incident_context_files() -> list[Path]: return sorted((ROOT / "examples" / "incidents").rglob("*.yaml")) if (ROOT / "examples" / "incidents").exists() else []
+def investigation_session_files() -> list[Path]: return sorted((ROOT / "examples" / "investigations").rglob("*.yaml")) if (ROOT / "examples" / "investigations").exists() else []
+def investigation_scenario_files() -> list[Path]: return sorted((ROOT / "lab" / "investigation").rglob("scenario.yaml")) if (ROOT / "lab" / "investigation").exists() else []
 
 
 def registry_ids() -> set[str]:
@@ -96,11 +100,15 @@ def validate() -> None:
     experiment_validator = Draft202012Validator(load_json(EXPERIMENT_SCHEMA))
     causal_validator = Draft202012Validator(load_json(CAUSAL_EDGE_SCHEMA))
     incident_context_validator = Draft202012Validator(load_json(INCIDENT_CONTEXT_SCHEMA))
+    investigation_session_validator = Draft202012Validator(load_json(INVESTIGATION_SESSION_SCHEMA))
+    investigation_scenario_validator = Draft202012Validator(load_json(INVESTIGATION_SCENARIO_SCHEMA))
     concepts: dict[str, dict[str, Any]] = {}
     claims: dict[str, dict[str, Any]] = {}
     experiments: dict[str, dict[str, Any]] = {}
     causal_edges: dict[str, dict[str, Any]] = {}
     incident_ids: set[str] = set()
+    session_ids: set[str] = set()
+    scenario_ids: set[str] = set()
     errors: list[str] = []
 
     for path in knowledge_files():
@@ -200,6 +208,54 @@ def validate() -> None:
             boundary = concepts.get(boundary_id)
             if boundary is None: errors.append(f"{path.relative_to(ROOT)}: unresolved incident scope boundary: {boundary_id}")
             elif boundary.get("kind") != "boundary": errors.append(f"{path.relative_to(ROOT)}: incident scope boundary is not a boundary: {boundary_id}")
+        for dependency in scope.get("dependencies", []):
+            boundary_id = dependency.get("boundary")
+            if not boundary_id: continue
+            boundary = concepts.get(boundary_id)
+            if boundary is None: errors.append(f"{path.relative_to(ROOT)}: unresolved dependency boundary: {boundary_id}")
+            elif boundary.get("kind") != "boundary": errors.append(f"{path.relative_to(ROOT)}: dependency boundary is not a boundary: {boundary_id}")
+
+    for path in investigation_session_files():
+        document = load_yaml(path)
+        for error in sorted(investigation_session_validator.iter_errors(document), key=lambda item: list(item.path)):
+            errors.append(f"{path.relative_to(ROOT)}: schema: {error.message}")
+        session_id = document.get("session_id")
+        if session_id in session_ids: errors.append(f"{path.relative_to(ROOT)}: duplicate investigation session_id: {session_id}")
+        else: session_ids.add(session_id)
+        incident_id = document.get("incident_id")
+        if incident_id not in incident_ids: errors.append(f"{path.relative_to(ROOT)}: unresolved investigation incident_id: {incident_id}")
+        event_ids: set[str] = set()
+        for event in document.get("events", []):
+            event_id = event.get("id")
+            if event_id in event_ids: errors.append(f"{path.relative_to(ROOT)}: duplicate investigation event id: {event_id}")
+            else: event_ids.add(event_id)
+
+    for path in investigation_scenario_files():
+        document = load_yaml(path)
+        for error in sorted(investigation_scenario_validator.iter_errors(document), key=lambda item: list(item.path)):
+            errors.append(f"{path.relative_to(ROOT)}: schema: {error.message}")
+        scenario_id = document.get("id")
+        if scenario_id in scenario_ids: errors.append(f"{path.relative_to(ROOT)}: duplicate investigation scenario id: {scenario_id}")
+        else: scenario_ids.add(scenario_id)
+        context_ref = document.get("initial_context_file")
+        context_path = repo_path(context_ref) if isinstance(context_ref, str) else None
+        if context_path is None:
+            errors.append(f"{path.relative_to(ROOT)}: invalid initial context path: {context_ref}")
+        elif not context_path.is_file():
+            errors.append(f"{path.relative_to(ROOT)}: initial context file missing: {context_ref}")
+        else:
+            context_document = load_yaml(context_path)
+            for error in sorted(incident_context_validator.iter_errors(context_document), key=lambda item: list(item.path)):
+                errors.append(f"{context_path.relative_to(ROOT)}: schema: {error.message}")
+
+    dimension_registry = load_yaml(ROOT / "vocabulary" / "investigation-dimensions.yaml")
+    dimensions = dimension_registry.get("dimensions", []) if isinstance(dimension_registry, dict) else []
+    dimension_ids = [item.get("id") for item in dimensions if isinstance(item, dict)]
+    dimension_orders = [item.get("order") for item in dimensions if isinstance(item, dict)]
+    if len(dimensions) != 10 or len(set(dimension_ids)) != 10:
+        errors.append("vocabulary/investigation-dimensions.yaml: expected exactly 10 unique dimensions")
+    if sorted(dimension_orders) != list(range(1, 11)):
+        errors.append("vocabulary/investigation-dimensions.yaml: dimension order must be 1 through 10")
 
     for path in rule_files():
         document = load_yaml(path)
@@ -211,7 +267,14 @@ def validate() -> None:
     if errors:
         for error in errors: print(f"ERROR: {error}")
         raise SystemExit(1)
-    print("Validated " f"{len(concepts)} concepts, {len(claims)} claims, " f"{len(experiments)} experiments, {len(causal_edges)} causal edges, " f"{len(incident_ids)} incident contexts, and {len(rule_files())} rules " "with no unresolved references.")
+    print(
+        "Validated "
+        f"{len(concepts)} concepts, {len(claims)} claims, "
+        f"{len(experiments)} experiments, {len(causal_edges)} causal edges, "
+        f"{len(incident_ids)} incident contexts, {len(session_ids)} investigation sessions, "
+        f"{len(scenario_ids)} investigation scenarios, and {len(rule_files())} rules "
+        "with no unresolved references."
+    )
 
 
 if __name__ == "__main__": validate()
