@@ -4,6 +4,9 @@ capabilities:
   - id: capability.metrics.query
     title: Query metrics
     description: Read time-series or aggregate metrics from an available telemetry source.
+  - id: capability.logs.query
+    title: Query structured logs
+    description: Read and aggregate structured application or infrastructure logs without mutating the observed system.
   - id: capability.cpu.profile
     title: Capture CPU profile
     description: Sample or trace CPU execution to identify hot code paths.
