@@ -1,0 +1,6 @@
+id: observation.http.request_failure
+kind: observation
+title: HTTP request failure
+summary: One or more requests in a defined route and cohort complete with a non-success outcome.
+explanation:
+  short: Request failure is an observed outcome, not a root cause; preserve route, client, and other cohort scope when available.
