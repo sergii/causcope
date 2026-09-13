@@ -72,8 +72,7 @@
           "type": "array",
           "items": {"$ref": "#/$defs/data_scope"}
         }
-      },
-      "minProperties": 1
+      }
     },
     "client": {
       "type": "object",
