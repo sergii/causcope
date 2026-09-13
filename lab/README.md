@@ -1,10 +1,13 @@
 # Atlerror Lab
 
-Atlerror Lab contains small reproducible experiments that test diagnostic mechanisms encoded by the semantic knowledge base.
+Atlerror Lab contains two complementary kinds of reproducible validation:
 
-The goal is not to prove universal truths from one synthetic environment. Experiments produce empirical evidence that supports, contradicts, or leaves a diagnostic claim inconclusive under a recorded environment.
+1. **Mechanism labs** test diagnostic mechanisms encoded by the semantic knowledge base.
+2. **Investigation labs** test whether an investigator can move from incomplete incident context toward useful evidence without violating investigation invariants.
 
-## Contract
+The goal is not to prove universal truths from one synthetic environment. Experiments produce empirical evidence that supports, contradicts, or leaves a diagnostic claim inconclusive under a recorded environment. Investigation scenarios separately test investigation behavior and ordering.
+
+## Mechanism lab contract
 
 An empirical check has three layers:
 
@@ -29,6 +32,31 @@ The generic runner:
 7. checks the expected result;
 8. writes the result under `lab-results/`.
 
+## Investigation lab contract
+
+Investigation scenarios live under:
+
+```text
+lab/investigation/**/scenario.yaml
+```
+
+A scenario contains:
+
+- incomplete initial incident context;
+- hidden oracle facts;
+- optional red herrings;
+- an expected first scoping dimension;
+- required and forbidden investigation behaviors.
+
+Run the deterministic baseline with:
+
+```bash
+python scripts/run_investigation_lab.py \
+  lab/investigation/checkout-client-version/scenario.yaml
+```
+
+The first baseline does not claim to be an AI benchmark yet. It verifies that the same machine-readable incident context used by future agents produces the expected deterministic scoping move. Agent adapters can later consume the identical scenario contract and score multi-step behavior.
+
 ## Principles
 
 - Prefer the smallest environment that can reproduce the mechanism.
@@ -37,10 +65,12 @@ The generic runner:
 - Treat results as evidence, not proof.
 - Keep experiments deterministic enough for CI when possible.
 - Add semantic concepts only when a real measurement or diagnostic distinction requires them.
+- Keep hidden scenario truth separate from information available to the investigator.
+- Treat correlation and cohort differences as investigation clues, not causal proof.
 
 ## Evidence semantics
 
-Results are deliberately limited to:
+Mechanism-lab results are deliberately limited to:
 
 - `supports`
 - `contradicts`
@@ -48,7 +78,15 @@ Results are deliberately limited to:
 
 A successful synthetic experiment does not establish production frequency, impact, or exclusivity of a cause.
 
+Investigation-lab evaluation is separate. It can score whether an investigator scopes first, finds useful cohort differences, gathers discriminating evidence, avoids unsupported causal attribution, and verifies the original incident scope.
+
 ## Current experiments
+
+Mechanism labs include examples such as:
 
 - Ruby retained objects -> live heap and RSS growth
 - Ruby busy loop -> near-one-core CPU utilization with user-space dominance
+
+Investigation labs currently include:
+
+- checkout client-version regression with a nearby backend deploy red herring
