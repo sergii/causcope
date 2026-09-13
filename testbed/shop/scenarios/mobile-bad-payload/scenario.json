@@ -1,0 +1,63 @@
+{
+  "schema_version": "0.1",
+  "kind": "testbed_scenario",
+  "id": "scenario.shop.mobile_bad_payload",
+  "slug": "mobile-bad-payload",
+  "title": "Mobile client payload regression",
+  "initial_report": {
+    "summary": "Some users cannot create orders while web checkout appears healthy.",
+    "details": [
+      "The failure is repeatable for one client cohort.",
+      "The same product can be ordered successfully from the web client.",
+      "The API itself remains healthy."
+    ]
+  },
+  "activation": {
+    "service": "mobile-client",
+    "mode": "traffic_generator",
+    "startup_wait_seconds": 1.0
+  },
+  "working_controls": [
+    "Web client requests with integer quantity return 201",
+    "GET /health returns 200"
+  ],
+  "verification": [
+    {
+      "name": "web cohort can create an order",
+      "method": "POST",
+      "path": "/orders",
+      "json": {
+        "items": [
+          {
+            "product_id": 1,
+            "quantity": 1
+          }
+        ]
+      },
+      "headers": {
+        "X-Client-Platform": "web",
+        "X-App-Version": "2026.09"
+      },
+      "expect_status": 201
+    },
+    {
+      "name": "iOS 7.42.0 cohort fails validation",
+      "method": "POST",
+      "path": "/orders",
+      "json": {
+        "items": [
+          {
+            "product_id": 1,
+            "quantity": "1"
+          }
+        ]
+      },
+      "headers": {
+        "X-Client-Platform": "iOS",
+        "X-App-Version": "7.42.0"
+      },
+      "expect_status": 422
+    }
+  ],
+  "oracle_file": "oracle.json"
+}

@@ -1,0 +1,48 @@
+services:
+  app:
+    image: causcope-shop-testbed:local
+    build:
+      context: .
+    ports:
+      - "127.0.0.1:${SHOP_PORT:-18080}:8080"
+    environment:
+      DB_PATH: /data/shop.db
+      SQLITE_BUSY_TIMEOUT_MS: ${SQLITE_BUSY_TIMEOUT_MS:-150}
+    volumes:
+      - shop-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()
+      interval: 1s
+      timeout: 2s
+      retries: 30
+
+  lock-holder:
+    image: causcope-shop-testbed:local
+    command: ["python", "/app/tools/hold_lock.py"]
+    environment:
+      DB_PATH: /data/shop.db
+      LOCK_SECONDS: ${LOCK_SECONDS:-120}
+    volumes:
+      - shop-data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+    profiles: ["scenarios"]
+
+  mobile-client:
+    image: causcope-shop-testbed:local
+    command: ["python", "/app/tools/mobile_client.py"]
+    environment:
+      SHOP_BASE_URL: http://app:8080
+      INTERVAL_SECONDS: ${INTERVAL_SECONDS:-2}
+    depends_on:
+      app:
+        condition: service_healthy
+    profiles: ["scenarios"]
+
+volumes:
+  shop-data:

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/testbed-scenario-oracle.schema.json",
+  "title": "Causcope testbed scenario oracle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "scenario_id",
+    "root_cause",
+    "expected_discriminators",
+    "expected_evidence",
+    "causal_notes"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "testbed_scenario_oracle"},
+    "scenario_id": {"type": "string", "pattern": "^scenario\\."},
+    "root_cause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mechanism", "summary"],
+      "properties": {
+        "mechanism": {"type": "string", "minLength": 1},
+        "summary": {"type": "string", "minLength": 1}
+      }
+    },
+    "expected_discriminators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "expected_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "causal_notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

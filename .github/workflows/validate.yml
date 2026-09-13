@@ -27,6 +27,9 @@ jobs:
       - name: Validate schemas and references
         run: python scripts/validate.py
 
+      - name: Validate testbed contracts
+        run: python scripts/validate_testbed.py
+
       - name: Validate incident scoping projection
         run: python scripts/test_scoping_projection.py
 
