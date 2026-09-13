@@ -84,7 +84,16 @@ impact:
   severity: unknown
 reproduction:
   status: unknown
-unknowns: []
+unknowns:
+  - who
+  - where
+  - when
+  - what
+  - client
+  - change
+  - data
+  - reproduction
+  - impact
 ```
 
 An incident context is a runtime record, not a canonical semantic concept. It therefore does not add `incident_context` to the catalog of concept kinds such as `symptom`, `observation`, `hypothesis`, or `probe`.
@@ -339,9 +348,9 @@ It captures a production checkout incident with region, client version, blast ra
 
 Natural next slices are:
 
-1. validate incident context examples in repository CI;
-2. expose incident context through HTTP and MCP read-only projections;
-3. let agents report which material scoping dimensions remain unknown;
-4. recommend evidence collection from unresolved context without turning context into evidence;
-5. connect verification results back to the original incident scope and blast radius;
+1. expose incident context through HTTP and MCP read-only projections;
+2. let agents report which material scoping dimensions remain unknown;
+3. recommend evidence collection from unresolved context without turning context into evidence;
+4. connect verification results back to the original incident scope and blast radius;
+5. add ingestion adapters for tickets, chat reports, and manual operator input;
 6. model incident lifecycle state only if it can remain separate from causal truth.
