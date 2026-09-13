@@ -36,7 +36,7 @@
     "unknowns": {
       "type": "array",
       "items": {
-        "enum": ["who", "where", "when", "what", "client", "change", "data", "reproduction", "impact"]
+        "enum": ["who", "where", "when", "what", "client", "change", "dependency", "data", "reproduction", "impact"]
       },
       "uniqueItems": true
     },
@@ -59,11 +59,16 @@
         "environments": {"$ref": "#/$defs/string_list"},
         "regions": {"$ref": "#/$defs/string_list"},
         "availability_zones": {"$ref": "#/$defs/string_list"},
+        "datacenters": {"$ref": "#/$defs/string_list"},
         "services": {"$ref": "#/$defs/string_list"},
         "entities": {"$ref": "#/$defs/string_list"},
         "boundaries": {"$ref": "#/$defs/string_list"},
         "features": {"$ref": "#/$defs/string_list"},
         "operations": {"$ref": "#/$defs/string_list"},
+        "dependencies": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/dependency_scope"}
+        },
         "clients": {
           "type": "array",
           "items": {"$ref": "#/$defs/client"}
@@ -71,6 +76,21 @@
         "data": {
           "type": "array",
           "items": {"$ref": "#/$defs/data_scope"}
+        }
+      }
+    },
+    "dependency_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "relationship"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "relationship": {"enum": ["upstream", "downstream", "external", "peer", "unknown"]},
+        "service": {"type": "string", "minLength": 1},
+        "boundary": {"type": "string", "minLength": 1},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
         }
       }
     },
