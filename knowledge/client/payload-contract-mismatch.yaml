@@ -1,0 +1,26 @@
+id: hypothesis.client.payload_contract_mismatch
+kind: hypothesis
+title: Client payload contract mismatch
+summary: A client cohort sends a request shape or value type that does not satisfy the server-side request contract, causing that cohort to fail while a compatible cohort succeeds.
+predictions:
+  - observation: observation.http.request_failure
+    expected: present_in_affected_client_cohort
+    strength: moderate
+  - observation: observation.http.client_cohort_failure_skew
+    expected: present
+    strength: strong
+falsifiers:
+  - observation: observation.http.client_cohort_failure_skew
+    condition: absent_for_comparable_client_cohorts
+    effect: decrease
+tested_by:
+  - probe.http.compare_client_cohorts
+related_to:
+  - system_entity.application_service
+common_misconceptions:
+  - A client-specific failure proves the client implementation is the root cause; server-side version routing or compatibility behavior may still be responsible.
+search_terms:
+  - client payload mismatch
+  - request schema mismatch
+  - mobile version validation error
+  - 422 client cohort
