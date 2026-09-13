@@ -6,6 +6,7 @@ import os
 import sqlite3
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,10 @@ class OrderItemIn(BaseModel):
 
 class CreateOrderIn(BaseModel):
     items: list[OrderItemIn]
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def connect() -> sqlite3.Connection:
@@ -118,6 +123,7 @@ async def log_request(request: Request, call_next: Any) -> Response:
             json.dumps(
                 {
                     "event": "http_request",
+                    "observed_at": utc_now(),
                     "request_id": request_id,
                     "method": request.method,
                     "path": request.url.path,
@@ -136,6 +142,7 @@ def locked_error(exc: sqlite3.OperationalError) -> HTTPException:
         json.dumps(
             {
                 "event": "sqlite_operational_error",
+                "observed_at": utc_now(),
                 "error": str(exc),
                 "db_path": str(DB_PATH),
             },
