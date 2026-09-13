@@ -90,7 +90,7 @@ jobs:
               if item['observation'] == 'observation.http.client_cohort_failure_skew' and item['state'] == 'observed'
           ]
           assert skew
-          assert 'ios@7.42.0' in {item['labels']['failing_cohort'] for item in skew}
+          assert 'iOS@7.42.0' in {item['labels']['failing_cohort'] for item in skew}
 
           summary = json.loads(Path('/tmp/mobile-summary.json').read_text())
           cohort = next(item for item in summary['diagnoses'] if item['target'] == 'observation.http.client_cohort_failure_skew')
