@@ -1,0 +1,56 @@
+name: Validate shop testbed
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "testbed/shop/**"
+      - "schema/testbed-scenario*.json"
+      - "scripts/validate_testbed.py"
+      - ".github/workflows/testbed-shop.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install validator dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate scenario contracts
+        run: python scripts/validate_testbed.py
+
+      - name: Build and start happy path
+        run: python testbed/shop/testbed.py up
+
+      - name: Verify happy path
+        run: python testbed/shop/testbed.py smoke
+
+      - name: Verify SQLite write-lock incident
+        run: |
+          python testbed/shop/testbed.py scenario start sqlite-write-lock --duration 20
+          python testbed/shop/testbed.py scenario verify sqlite-write-lock
+          python testbed/shop/testbed.py scenario stop sqlite-write-lock
+
+      - name: Verify mobile cohort incident
+        run: |
+          python testbed/shop/testbed.py scenario start mobile-bad-payload
+          python testbed/shop/testbed.py scenario verify mobile-bad-payload
+          python testbed/shop/testbed.py scenario stop mobile-bad-payload
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f testbed/shop/compose.yaml --profile scenarios logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f testbed/shop/compose.yaml --profile scenarios down -v --remove-orphans
