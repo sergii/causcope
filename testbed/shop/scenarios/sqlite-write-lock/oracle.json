@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1",
+  "kind": "testbed_scenario_oracle",
+  "scenario_id": "scenario.shop.sqlite_write_lock",
+  "root_cause": {
+    "mechanism": "sqlite.single_writer_contention",
+    "summary": "A second process holds a BEGIN IMMEDIATE SQLite write transaction long enough for application writes to exceed the configured busy timeout."
+  },
+  "expected_discriminators": [
+    "reads continue to succeed while writes fail",
+    "failures disappear after the competing writer releases the transaction"
+  ],
+  "expected_evidence": [
+    "application log event sqlite_operational_error contains database is locked",
+    "POST /orders returns 503 during the lock window",
+    "GET /products remains 200 during the same window"
+  ],
+  "causal_notes": [
+    "The lock-holder process is the competing writer, not merely a nearby change.",
+    "The short SQLite busy timeout converts contention into visible request failures."
+  ]
+}
