@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlerror.dev/schema/scoping-projection.schema.json",
+  "title": "Atlerror incident scoping projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "completeness",
+    "known_count",
+    "partial_count",
+    "unknown_count",
+    "dimensions",
+    "next_action"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "scoping_projection"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "completeness": {"type": "number", "minimum": 0, "maximum": 1},
+    "known_count": {"type": "integer", "minimum": 0, "maximum": 10},
+    "partial_count": {"type": "integer", "minimum": 0, "maximum": 10},
+    "unknown_count": {"type": "integer", "minimum": 0, "maximum": 10},
+    "dimensions": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {"$ref": "#/$defs/dimension"}
+    },
+    "next_action": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/next_action"}
+      ]
+    }
+  },
+  "$defs": {
+    "dimension_id": {
+      "enum": [
+        "investigation.blast_radius",
+        "investigation.where",
+        "investigation.when",
+        "investigation.flow",
+        "investigation.client",
+        "investigation.change",
+        "investigation.dependency",
+        "investigation.data",
+        "investigation.reproducibility",
+        "investigation.impact"
+      ]
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "order", "title", "state", "question", "reason", "signals"],
+      "properties": {
+        "id": {"$ref": "#/$defs/dimension_id"},
+        "order": {"type": "integer", "minimum": 1, "maximum": 10},
+        "title": {"type": "string", "minLength": 1},
+        "state": {"enum": ["known", "partial", "unknown"]},
+        "question": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "signals": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "dimension", "priority", "question", "reason", "expected_information_gain"],
+      "properties": {
+        "kind": {"const": "ask_question"},
+        "dimension": {"$ref": "#/$defs/dimension_id"},
+        "priority": {"type": "integer", "minimum": 1, "maximum": 10},
+        "question": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "expected_information_gain": {"enum": ["high", "medium", "low"]}
+      }
+    }
+  }
+}
