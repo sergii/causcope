@@ -29,7 +29,7 @@ DEFAULT_WORKSPACE = REPO_ROOT / ".causcope"
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(microsecond=0)
+    return datetime.now(timezone.utc)
 
 
 def load_incident_id(workspace: Path, explicit: str | None) -> str:
