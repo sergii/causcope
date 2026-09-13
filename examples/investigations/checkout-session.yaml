@@ -1,0 +1,44 @@
+schema_version: "0.1"
+kind: investigation_session
+session_id: investigation.checkout.eu.latency.1
+incident_id: incident.checkout.eu.latency
+status: active
+context_revision: 3
+started_at: "2026-09-13T14:07:00Z"
+updated_at: "2026-09-13T14:12:00Z"
+
+events:
+  - id: event.question.client.1
+    type: question
+    recorded_at: "2026-09-13T14:08:00Z"
+    dimension: investigation.client
+    question: Does the failure affect both web and mobile clients?
+    rationale: A client split can distinguish a backend-wide failure from a client-specific path.
+    status: answered
+
+  - id: event.answer.client.1
+    type: answer
+    recorded_at: "2026-09-13T14:09:00Z"
+    dimension: investigation.client
+    answer: Web succeeds while iOS app 7.42.0 intermittently fails.
+    source: human
+    confidence: 0.9
+
+  - id: event.comparison.client.1
+    type: comparison
+    recorded_at: "2026-09-13T14:10:00Z"
+    summary: Same production checkout flow behaves differently by client.
+    failing:
+      client: iOS
+      app_version: 7.42.0
+    working:
+      client: web
+      environment: production
+    differences:
+      - client
+      - app_version
+
+  - id: event.note.deploy.1
+    type: note
+    recorded_at: "2026-09-13T14:12:00Z"
+    summary: The nearby checkout-api deploy remains a change candidate, not a demonstrated cause.
