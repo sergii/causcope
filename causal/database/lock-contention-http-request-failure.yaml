@@ -1,0 +1,12 @@
+id: causal.database.lock_contention.http_request_failure
+kind: causal_edge
+source: hypothesis.database.lock_contention
+target: observation.http.request_failure
+relation: contributes_to
+strength: moderate
+conditions:
+  - The failing request requires a database operation that conflicts with the held lock.
+  - The application surfaces lock timeout or lock acquisition failure as a request failure.
+explanation: Database lock contention can cause an otherwise valid HTTP request to fail when a critical database write cannot acquire its required lock within the application timeout.
+limitations:
+  - An HTTP request failure is nonspecific and must not be treated as proof of database lock contention without database or log evidence.
