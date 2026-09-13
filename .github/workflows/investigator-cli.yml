@@ -20,5 +20,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema
 
+      - name: Validate launcher
+        run: ./bin/causcope --help >/dev/null
+
       - name: Validate investigator CLI
         run: python scripts/test_causcope_cli.py
