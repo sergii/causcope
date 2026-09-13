@@ -330,7 +330,7 @@ def _parse_scope_attributes(values: list[str]) -> list[tuple[str, str]]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Discover and execute registered read-only Atlerror probes.")
+    parser = argparse.ArgumentParser(description="Discover and execute registered read-only Causcope probes.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     capabilities = subparsers.add_parser("capabilities")

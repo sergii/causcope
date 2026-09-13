@@ -25,7 +25,7 @@
                 {"key": "rpc.system", "value": {"stringValue": "http"}},
                 {"key": "peer.service", "value": {"stringValue": "stripe"}},
                 {"key": "error.type", "value": {"stringValue": "TimeoutError"}},
-                {"key": "atlerror.boundary", "value": {"stringValue": "boundary.application.external_dependency"}}
+                {"key": "causcope.boundary", "value": {"stringValue": "boundary.application.external_dependency"}}
               ]
             },
             {

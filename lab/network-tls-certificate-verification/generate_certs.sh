@@ -7,7 +7,7 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -keyout /certs/ca.key \
   -out /certs/ca.crt \
   -days 1 \
-  -subj "/CN=Atlerror Lab CA" \
+  -subj "/CN=Causcope Lab CA" \
   -addext "basicConstraints=critical,CA:TRUE" \
   -addext "keyUsage=critical,keyCertSign,cRLSign" \
   -addext "subjectKeyIdentifier=hash" >/dev/null 2>&1
@@ -15,9 +15,9 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 openssl req -newkey rsa:2048 -nodes \
   -keyout /certs/trusted.key \
   -out /certs/trusted.csr \
-  -subj "/CN=trusted.atlerror.test" >/dev/null 2>&1
+  -subj "/CN=trusted.causcope.test" >/dev/null 2>&1
 cat > /tmp/trusted.ext <<'EOF'
-subjectAltName=DNS:trusted.atlerror.test
+subjectAltName=DNS:trusted.causcope.test
 basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
@@ -38,8 +38,8 @@ openssl req -x509 -newkey rsa:2048 -nodes \
   -keyout /certs/untrusted.key \
   -out /certs/untrusted.crt \
   -days 1 \
-  -subj "/CN=untrusted.atlerror.test" \
-  -addext "subjectAltName=DNS:untrusted.atlerror.test" \
+  -subj "/CN=untrusted.causcope.test" \
+  -addext "subjectAltName=DNS:untrusted.causcope.test" \
   -addext "basicConstraints=critical,CA:FALSE" \
   -addext "keyUsage=critical,digitalSignature,keyEncipherment" \
   -addext "extendedKeyUsage=serverAuth" >/dev/null 2>&1

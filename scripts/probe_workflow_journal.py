@@ -232,7 +232,7 @@ def append_probe_workflow_event(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Verify and inspect the append-only Atlerror probe workflow journal."
+        description="Verify and inspect the append-only Causcope probe workflow journal."
     )
     parser.add_argument("--session-dir", type=Path, required=True)
     parser.add_argument("--incident-id")

@@ -4,7 +4,7 @@ Status: accepted
 
 ## Summary
 
-Atlerror can now receive live OTLP traces and maintain a current incident-scoped `runtime_evidence` bundle. The next layer is to keep causal diagnosis current without requiring a human or agent to invoke `causal_ranking.py` after every evidence change.
+Causcope can now receive live OTLP traces and maintain a current incident-scoped `runtime_evidence` bundle. The next layer is to keep causal diagnosis current without requiring a human or agent to invoke `causal_ranking.py` after every evidence change.
 
 This RFC introduces a transport-independent diagnosis snapshot plus a small watcher that consumes the OTLP receiver's existing `GET /evidence` contract.
 

@@ -38,7 +38,7 @@ from runtime_evidence_composition import compose_runtime_evidence
 
 DEFAULT_INCIDENT_ID = "incident.demo.checkout.stripe"
 DEFAULT_AS_OF = datetime(2026, 9, 11, 16, 31, tzinfo=timezone.utc)
-DEFAULT_OUTPUT_DIR = Path("/tmp/atlerror-demo")
+DEFAULT_OUTPUT_DIR = Path("/tmp/causcope-demo")
 
 PROMETHEUS_ADAPTER = Path("examples/adapters/prometheus/external-dependency.yaml")
 PROMETHEUS_RESPONSE = Path(
@@ -62,7 +62,7 @@ def _modern_meta() -> dict[str, Any]:
     return {
         PROTOCOL_VERSION_META_KEY: MODERN_PROTOCOL_VERSION,
         CLIENT_CAPABILITIES_META_KEY: {},
-        CLIENT_INFO_META_KEY: {"name": "atlerror-demo", "version": "0.1.0"},
+        CLIENT_INFO_META_KEY: {"name": "causcope-demo", "version": "0.1.0"},
     }
 
 
@@ -255,7 +255,7 @@ def run_demo(
 
 def _print_summary(result: dict[str, Any]) -> None:
     summary = result["summary"]
-    print(f"Atlerror demo incident: {summary['incident_id']}")
+    print(f"Causcope demo incident: {summary['incident_id']}")
     print(f"As of: {summary['as_of']}")
     for partition in summary["partitions"]:
         scope = partition["scope"] or {}
@@ -280,7 +280,7 @@ def _print_summary(result: dict[str, Any]) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the deterministic Atlerror checkout-to-Stripe demo from telemetry fixtures "
+            "Run the deterministic Causcope checkout-to-Stripe demo from telemetry fixtures "
             "through adapters, multi-source evidence, diagnosis, next-probe ranking, and "
             "read-only HTTP/MCP verification."
         )

@@ -17,7 +17,7 @@ RFC 0025 made this state detectable and explicitly reconcilable. This RFC makes 
 
 ## Decision
 
-`atlerror://diagnosis/agent-plan` becomes recovery-aware.
+`causcope://diagnosis/agent-plan` becomes recovery-aware.
 
 When there is no unresolved partial workflow state, the existing planner behavior is unchanged.
 
@@ -114,7 +114,7 @@ A partial workflow explicitly belonging to another incident is not projected int
 The existing resource URI remains:
 
 ```text
-atlerror://diagnosis/agent-plan
+causcope://diagnosis/agent-plan
 ```
 
 No new MCP resource is introduced.
@@ -137,7 +137,7 @@ The existing explicit local recovery command remains authoritative:
 
 ```bash
 python scripts/probe_workflow_reconciliation.py discard \
-  --session-dir /tmp/atlerror-demo/probe-sessions \
+  --session-dir /tmp/causcope-demo/probe-sessions \
   --session-id probe-session.0123456789abcdef \
   --pretty
 ```

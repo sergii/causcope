@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Summary
 
-Atlerror now has a complete local probe workflow lifecycle:
+Causcope now has a complete local probe workflow lifecycle:
 
 ```text
 recommendation
@@ -24,14 +24,14 @@ partial session/binding pair
 
 The missing read-only layer is a machine-readable answer to a different question:
 
-> What probe workflow has Atlerror already performed for this incident?
+> What probe workflow has Causcope already performed for this incident?
 
 This RFC adds a deterministic projection over persisted local workflow artifacts and normal runtime evidence.
 
 The projection is available from the CLI and, when runtime evidence is supplied to the MCP server, from:
 
 ```text
-atlerror://probe-workflow/history
+causcope://probe-workflow/history
 ```
 
 ## Non-goal: append-only audit log
@@ -170,7 +170,7 @@ The projection reads only existing workflow metadata and runtime evidence.
 The MCP resource URI is:
 
 ```text
-atlerror://probe-workflow/history
+causcope://probe-workflow/history
 ```
 
 It is exposed only when the MCP process has an explicit runtime evidence path. This preserves the existing minimal read-only deployment that needs only a diagnosis snapshot.
@@ -202,7 +202,7 @@ History does not influence causal ranking, probe ranking, executor availability,
 
 ## Security
 
-The resource exposes metadata already persisted by the local Atlerror workflow plus probe result evidence already present in the incident evidence document.
+The resource exposes metadata already persisted by the local Causcope workflow plus probe result evidence already present in the incident evidence document.
 
 It does not expose arbitrary files or accept a caller-controlled path.
 

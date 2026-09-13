@@ -8,7 +8,7 @@
           "__name__": "node_netstat_Tcp_RetransSegs",
           "service": "checkout-api",
           "dependency": "stripe",
-          "atlerror_boundary": "boundary.application.external_dependency"
+          "causcope_boundary": "boundary.application.external_dependency"
         },
         "value": [1789144200, "12.5"]
       }

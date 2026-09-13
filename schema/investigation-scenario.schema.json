@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/investigation-scenario.schema.json",
-  "title": "Atlerror investigation lab scenario",
+  "$id": "https://causcope.dev/schema/investigation-scenario.schema.json",
+  "title": "Causcope investigation lab scenario",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "kind", "id", "title", "initial_context_file", "oracle", "evaluation"],

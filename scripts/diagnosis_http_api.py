@@ -173,7 +173,7 @@ def _etag_matches(header_value: str | None, etag: str) -> bool:
 
 def make_handler(reader: DiagnosisSnapshotReader, *, verbose: bool = False) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "AtlerrorDiagnosisHTTP/0.1"
+        server_version = "CauscopeDiagnosisHTTP/0.1"
 
         def log_message(self, format: str, *args: Any) -> None:
             if verbose:
@@ -263,7 +263,7 @@ def make_handler(reader: DiagnosisSnapshotReader, *, verbose: bool = False) -> t
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Serve a validated Atlerror diagnosis snapshot through a small read-only HTTP API."
+        description="Serve a validated Causcope diagnosis snapshot through a small read-only HTTP API."
     )
     parser.add_argument(
         "--snapshot",
@@ -295,7 +295,7 @@ def main(root: Path = ROOT) -> int:
 
     host, port = server.server_address[:2]
     print(
-        f"Atlerror diagnosis API listening on http://{host}:{port}/diagnosis "
+        f"Causcope diagnosis API listening on http://{host}:{port}/diagnosis "
         f"from snapshot {args.snapshot}",
         file=sys.stderr,
     )

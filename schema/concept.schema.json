@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/concept.schema.json",
-  "title": "Atlerror Concept",
+  "$id": "https://causcope.dev/schema/concept.schema.json",
+  "title": "Causcope Concept",
   "type": "object",
   "required": ["id", "kind", "title", "summary"],
   "properties": {

@@ -20,7 +20,7 @@ services:
     environment:
       TLS_SERVER: "tls"
       TLS_PORT: "9443"
-      SERVER_NAME: "secure.atlerror.test"
+      SERVER_NAME: "secure.causcope.test"
       CA_FILE: "/certs/ca.crt"
       SOCKET_TIMEOUT: "1.0"
     networks:

@@ -3,8 +3,8 @@ import struct
 
 HOST = "0.0.0.0"
 PORT = 5353
-KNOWN_NAME = "known.atlerror.test."
-TIMEOUT_NAME = "timeout.atlerror.test."
+KNOWN_NAME = "known.causcope.test."
+TIMEOUT_NAME = "timeout.causcope.test."
 KNOWN_IP = "10.20.30.40"
 
 

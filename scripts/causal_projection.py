@@ -228,7 +228,7 @@ def project_causes(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Project Atlerror causal graph data as transport-independent JSON."
+        description="Project Causcope causal graph data as transport-independent JSON."
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
     subparsers = parser.add_subparsers(dest="command", required=True)

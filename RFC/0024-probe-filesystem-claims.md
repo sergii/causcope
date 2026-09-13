@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror active read-only probe execution now uses process-safe filesystem claims in addition to the existing in-process `RLock`.
+Causcope active read-only probe execution now uses process-safe filesystem claims in addition to the existing in-process `RLock`.
 
 The goal is to close races between multiple local MCP processes that share the same diagnosis snapshot, runtime evidence file, and probe session directory.
 
@@ -107,7 +107,7 @@ A contending process receives a transient fail-closed tool error and may retry.
 
 `finish` also claims the incident mutation identity while composing runtime evidence and replacing the diagnosis snapshot.
 
-This serializes cooperating Atlerror MCP writers for the same incident and prevents two probe completions from independently replacing the same old evidence state.
+This serializes cooperating Causcope MCP writers for the same incident and prevents two probe completions from independently replacing the same old evidence state.
 
 Different incidents remain independent.
 
@@ -117,7 +117,7 @@ When an operation needs multiple claims, claims are sorted by deterministic clai
 
 This keeps lock ordering stable and avoids order-dependent nested acquisition behavior.
 
-Claims are non-blocking. Atlerror fails closed rather than waiting indefinitely for another process.
+Claims are non-blocking. Causcope fails closed rather than waiting indefinitely for another process.
 
 ## Crash behavior
 
@@ -131,7 +131,7 @@ Stale owner metadata can remain in the file, but it is informational only and is
 
 This first slice requires POSIX advisory file locking.
 
-If `fcntl` is unavailable, active probe mutation fails closed with an explicit claim-unavailable error. Atlerror does not silently fall back to in-process locking because that would reintroduce the race.
+If `fcntl` is unavailable, active probe mutation fails closed with an explicit claim-unavailable error. Causcope does not silently fall back to in-process locking because that would reintroduce the race.
 
 This is a local-filesystem coordination mechanism, not a distributed lease protocol. Network filesystems with non-local or implementation-specific lock semantics are outside the current guarantee.
 
@@ -164,7 +164,7 @@ The read-only semantic surface remains unaffected.
 3. At most one cooperating process may replace runtime evidence for one incident through MCP probe completion at a time.
 4. Process death releases claims without manual cleanup.
 5. Claim metadata is never treated as evidence or authorization.
-6. Claim contention never causes Atlerror to execute a different probe.
+6. Claim contention never causes Causcope to execute a different probe.
 7. Active execution remains opt-in at the MCP process level.
 
 ## Tests

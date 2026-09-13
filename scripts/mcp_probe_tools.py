@@ -42,9 +42,9 @@ from runtime_evidence import (
 )
 from runtime_evidence_composition import compose_runtime_evidence
 
-BEGIN_TOOL_NAME = "atlerror.probe.begin_recommended"
-FINISH_TOOL_NAME = "atlerror.probe.finish"
-ABANDON_TOOL_NAME = "atlerror.probe.abandon"
+BEGIN_TOOL_NAME = "causcope.probe.begin_recommended"
+FINISH_TOOL_NAME = "causcope.probe.finish"
+ABANDON_TOOL_NAME = "causcope.probe.abandon"
 SESSION_ID_PATTERN = re.compile(r"^probe-session\.[0-9a-f]{16}$")
 
 TARGET_SCOPE_CLAIM = "target_scope"
@@ -101,7 +101,7 @@ _SESSION_INPUT_SCHEMA: dict[str, Any] = {
         "sessionId": {
             "type": "string",
             "pattern": r"^probe-session\.[0-9a-f]{16}$",
-            "description": "Opaque probe session identifier returned by atlerror.probe.begin_recommended.",
+            "description": "Opaque probe session identifier returned by causcope.probe.begin_recommended.",
         }
     },
 }
@@ -163,7 +163,7 @@ class RecommendedProbeToolController:
                 "name": BEGIN_TOOL_NAME,
                 "title": "Begin recommended read-only probe",
                 "description": (
-                    "Capture a baseline for the current top recommended Atlerror probe. "
+                    "Capture a baseline for the current top recommended Causcope probe. "
                     "The server chooses the probe from the validated diagnosis snapshot, refuses "
                     "non-read-only or unregistered executors, binds the session to the exact "
                     "diagnosis scope, and refuses a second unfinished session for the same target "
@@ -597,7 +597,7 @@ class RecommendedProbeToolController:
             "baseline": copy.deepcopy(session["baseline"]),
             "diagnosis_revision": snapshot["evidence_revision"],
             "next_action": (
-                "Run the controlled workload outside Atlerror, then call "
+                "Run the controlled workload outside Causcope, then call "
                 f"{FINISH_TOOL_NAME} with this sessionId before the session expires."
             ),
         }

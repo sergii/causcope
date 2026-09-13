@@ -1,6 +1,6 @@
 # Diagnostic Workflow
 
-Atlerror's diagnostic workflow starts before causal ranking. A report such as "checkout is slow" is not yet enough context to reason safely about causes.
+Causcope's diagnostic workflow starts before causal ranking. A report such as "checkout is slow" is not yet enough context to reason safely about causes.
 
 The full workflow is:
 
@@ -160,8 +160,8 @@ What evidence should prevent or detect recurrence?
 `scripts/investigation_mcp_server.py` extends the diagnosis MCP surface with:
 
 ```text
-atlerror://incident/context
-atlerror://incident/scoping
+causcope://incident/context
+causcope://incident/scoping
 ```
 
 The investigation lab under `lab/investigation/` keeps initial information separate from hidden oracle truth and can be used as the foundation for future multi-model debugging benchmarks.

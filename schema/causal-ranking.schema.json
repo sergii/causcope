@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/causal-ranking.schema.json",
-  "title": "Atlerror causal ranking",
+  "$id": "https://causcope.dev/schema/causal-ranking.schema.json",
+  "title": "Causcope causal ranking",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "kind", "query", "found", "ranking_method", "candidates"],

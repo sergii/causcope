@@ -8,43 +8,43 @@ services:
       - -c
       - superuser_reserved_connections=2
     environment:
-      POSTGRES_USER: atlerror_admin
-      POSTGRES_PASSWORD: atlerror
-      POSTGRES_DB: atlerror
+      POSTGRES_USER: causcope_admin
+      POSTGRES_PASSWORD: causcope
+      POSTGRES_DB: causcope
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U atlerror_admin -d atlerror"]
+      test: ["CMD-SHELL", "pg_isready -U causcope_admin -d causcope"]
       interval: 1s
       timeout: 1s
       retries: 30
 
   harness:
     build: .
-    image: atlerror-database-connection-admission-lab
+    image: causcope-database-connection-admission-lab
     command: ["sleep", "infinity"]
     environment:
       DB_HOST: db
       DB_PORT: "5432"
-      DB_NAME: atlerror
-      ADMIN_USER: atlerror_admin
-      ADMIN_PASSWORD: atlerror
-      APP_USER: atlerror_app
-      APP_PASSWORD: atlerror_app
+      DB_NAME: causcope
+      ADMIN_USER: causcope_admin
+      ADMIN_PASSWORD: causcope
+      APP_USER: causcope_app
+      APP_PASSWORD: causcope_app
       MAX_ATTEMPTS: "20"
     depends_on:
       db:
         condition: service_healthy
 
   probe:
-    image: atlerror-database-connection-admission-lab
+    image: causcope-database-connection-admission-lab
     command: ["python", "/lab/probe.py"]
     environment:
       DB_HOST: db
       DB_PORT: "5432"
-      DB_NAME: atlerror
-      ADMIN_USER: atlerror_admin
-      ADMIN_PASSWORD: atlerror
-      APP_USER: atlerror_app
-      APP_PASSWORD: atlerror_app
+      DB_NAME: causcope
+      ADMIN_USER: causcope_admin
+      ADMIN_PASSWORD: causcope
+      APP_USER: causcope_app
+      APP_PASSWORD: causcope_app
       MAX_ATTEMPTS: "20"
     depends_on:
       db:

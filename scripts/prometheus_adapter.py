@@ -390,7 +390,7 @@ def load_response_file(path: Path) -> dict[str, Any]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Translate Prometheus instant-query results into Atlerror runtime evidence."
+        description="Translate Prometheus instant-query results into Causcope runtime evidence."
     )
     parser.add_argument("adapter", type=Path, help="Prometheus adapter mapping YAML")
     parser.add_argument("--incident-id", required=True, help="Runtime evidence incident ID")

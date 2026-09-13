@@ -1,6 +1,6 @@
-# Atlerror Lab
+# Causcope Lab
 
-Atlerror Lab contains two complementary kinds of reproducible validation:
+Causcope Lab contains two complementary kinds of reproducible validation:
 
 1. **Mechanism labs** test diagnostic mechanisms encoded by the semantic knowledge base.
 2. **Investigation labs** test whether an investigator can move from incomplete incident context toward useful evidence without violating investigation invariants.

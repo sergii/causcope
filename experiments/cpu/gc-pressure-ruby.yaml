@@ -7,7 +7,7 @@ description: Compare a low-allocation baseline with a sustained short-lived allo
 runner:
   type: docker
   build_context: lab/gc-pressure
-  image: atlerror-gc-pressure
+  image: causcope-gc-pressure
   docker_args:
     - --cpus=1
     - --memory=256m

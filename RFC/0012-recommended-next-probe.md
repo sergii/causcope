@@ -231,10 +231,10 @@ The initial CLI consumes a causal ranking JSON document:
 ```bash
 python scripts/causal_ranking.py \
   observation.network.tcp_retransmissions \
-  --pretty > /tmp/atlerror-ranking.json
+  --pretty > /tmp/causcope-ranking.json
 
 python scripts/probe_ranking.py \
-  /tmp/atlerror-ranking.json \
+  /tmp/causcope-ranking.json \
   --pretty
 ```
 

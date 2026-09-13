@@ -5,10 +5,10 @@
 
 ## Summary
 
-Atlerror exposes the existing host-local probe executor capability projection as a read-only MCP resource:
+Causcope exposes the existing host-local probe executor capability projection as a read-only MCP resource:
 
 ```text
-atlerror://probe-execution/capabilities
+causcope://probe-execution/capabilities
 ```
 
 The resource lets an agent distinguish three separate facts before requesting active diagnostics:
@@ -71,7 +71,7 @@ The MCP server calls the existing `build_probe_execution_capabilities()` project
 URI:
 
 ```text
-atlerror://probe-execution/capabilities
+causcope://probe-execution/capabilities
 ```
 
 MIME type:
@@ -147,9 +147,9 @@ Default server shape:
 
 ```text
 resources:
-  atlerror://diagnosis/current
-  atlerror://diagnosis/status
-  atlerror://probe-execution/capabilities
+  causcope://diagnosis/current
+  causcope://diagnosis/status
+  causcope://probe-execution/capabilities
 
 tools:
   none
@@ -162,8 +162,8 @@ resources:
   same three read-only resources
 
 tools:
-  atlerror.probe.begin_recommended
-  atlerror.probe.finish
+  causcope.probe.begin_recommended
+  causcope.probe.finish
 ```
 
 The resource does not change the process-level opt-in requirement for tools.

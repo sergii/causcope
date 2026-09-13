@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror should distinguish semantic knowledge from empirical support.
+Causcope should distinguish semantic knowledge from empirical support.
 
 A hypothesis is a candidate explanation. A claim is a concrete, testable statement derived from a hypothesis. An experiment is a reproducible procedure that tests one or more claims. Empirical evidence is the result of one concrete run in a declared environment.
 

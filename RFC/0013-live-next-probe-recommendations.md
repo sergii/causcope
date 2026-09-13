@@ -59,7 +59,7 @@ No fallback probe is invented.
 
 A compact `recommended_probe_id` field would be easy to consume but would hide the reason the probe was selected.
 
-Atlerror's contract is explainability-first. Consumers should be able to inspect:
+Causcope's contract is explainability-first. Consumers should be able to inspect:
 
 - which hypotheses are being discriminated
 - which unresolved observations the probe can produce
@@ -102,9 +102,9 @@ The count is operational metadata only. It does not replace the full recommendat
 
 No new MCP reasoning implementation is introduced.
 
-`atlerror://diagnosis/current` returns the same snapshot served by HTTP and therefore includes the embedded probe rankings automatically.
+`causcope://diagnosis/current` returns the same snapshot served by HTTP and therefore includes the embedded probe rankings automatically.
 
-`atlerror://diagnosis/status` is backed by the same status projection as HTTP and therefore also reports the recommendation count.
+`causcope://diagnosis/status` is backed by the same status projection as HTTP and therefore also reports the recommendation count.
 
 This preserves the sibling transport architecture:
 

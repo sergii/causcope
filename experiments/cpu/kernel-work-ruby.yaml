@@ -7,7 +7,7 @@ description: Compare a mostly user-space Ruby compute baseline with a filesystem
 runner:
   type: docker
   build_context: lab/kernel-work
-  image: atlerror-kernel-work
+  image: causcope-kernel-work
   docker_args:
     - --cpus=1
     - --memory=128m

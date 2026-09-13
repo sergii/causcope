@@ -4,7 +4,7 @@ Status: accepted
 
 ## Summary
 
-Atlerror now has a static semantic graph, incident-scoped runtime evidence, freshness rules, and scope-aware causal ranking. This RFC adds the first concrete telemetry adapter: Prometheus instant-query results can be translated into the existing `runtime_evidence` contract without putting Prometheus-specific semantics into canonical knowledge.
+Causcope now has a static semantic graph, incident-scoped runtime evidence, freshness rules, and scope-aware causal ranking. This RFC adds the first concrete telemetry adapter: Prometheus instant-query results can be translated into the existing `runtime_evidence` contract without putting Prometheus-specific semantics into canonical knowledge.
 
 The adapter boundary is intentional:
 
@@ -16,7 +16,7 @@ Prometheus / PromQL
   -> causal ranking
 ```
 
-Prometheus is a producer of runtime facts, not part of Atlerror's ontology.
+Prometheus is a producer of runtime facts, not part of Causcope's ontology.
 
 ## Decision
 
@@ -95,9 +95,9 @@ For example:
 ```yaml
 scope:
   boundary_labels:
-    - atlerror_boundary
+    - causcope_boundary
   entity_labels:
-    - atlerror_entity
+    - causcope_entity
   attribute_labels:
     service: service
     instance: instance
@@ -129,7 +129,7 @@ In particular:
 - a query may be deployment-specific
 - a threshold may need local calibration
 - an exporter metric may not exist everywhere
-- labels may need relabeling before they carry Atlerror topology IDs
+- labels may need relabeling before they carry Causcope topology IDs
 
 The example mapping intentionally demonstrates both a standard node-exporter retransmission query and a deployment-specific checksum-error metric. The latter must only be used when the metric actually represents TCP checksum or equivalent integrity failures. A generic TCP error counter must not be relabeled as `observation.network.tcp_integrity_errors` merely because the names look similar.
 
@@ -153,7 +153,7 @@ This conservative behavior is preferable to emitting plausible-looking but seman
 
 This RFC does not introduce:
 
-- Prometheus as canonical Atlerror storage
+- Prometheus as canonical Causcope storage
 - automatic threshold learning
 - automatic semantic mapping from arbitrary metric names
 - range-query or histogram interpretation

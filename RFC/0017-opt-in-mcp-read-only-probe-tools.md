@@ -5,11 +5,11 @@
 
 ## Context
 
-Atlerror already exposes the current diagnosis through read-only MCP resources and can execute one explicitly registered Linux read-only probe through `scripts/probe_execution.py`. The remaining gap is agent orchestration: an MCP-aware host can read the recommended next probe, but it cannot ask Atlerror to execute that probe through the same bounded interface.
+Causcope already exposes the current diagnosis through read-only MCP resources and can execute one explicitly registered Linux read-only probe through `scripts/probe_execution.py`. The remaining gap is agent orchestration: an MCP-aware host can read the recommended next probe, but it cannot ask Causcope to execute that probe through the same bounded interface.
 
 A generic command runner would erase the safety boundary established by RFC 0016. The MCP layer must not accept arbitrary shell commands, arbitrary probe IDs, arbitrary filesystem paths, network mutations, or remediation actions.
 
-The first executable probe is two-phase. `probe.network.inspect_tcp_integrity_errors` captures Linux `Tcp.InErrs` before a controlled workload and compares the counter after that workload. Atlerror does not execute the workload itself.
+The first executable probe is two-phase. `probe.network.inspect_tcp_integrity_errors` captures Linux `Tcp.InErrs` before a controlled workload and compares the counter after that workload. Causcope does not execute the workload itself.
 
 ## Decision
 
@@ -19,30 +19,30 @@ The default remains resource-only:
 
 ```bash
 python scripts/diagnosis_mcp_server.py \
-  --snapshot /tmp/atlerror-demo/diagnosis.json
+  --snapshot /tmp/causcope-demo/diagnosis.json
 ```
 
 Active read-only tools require both explicit opt-in and the mutable runtime evidence document:
 
 ```bash
 python scripts/diagnosis_mcp_server.py \
-  --snapshot /tmp/atlerror-demo/diagnosis.json \
+  --snapshot /tmp/causcope-demo/diagnosis.json \
   --enable-readonly-probe-tools \
-  --runtime-evidence /tmp/atlerror-demo/runtime-evidence.json
+  --runtime-evidence /tmp/causcope-demo/runtime-evidence.json
 ```
 
 When enabled, the server advertises the MCP `tools` capability and exactly two tools:
 
 ```text
-atlerror.probe.begin_recommended
-atlerror.probe.finish
+causcope.probe.begin_recommended
+causcope.probe.finish
 ```
 
 The two tools are one execution capability split across the existing two-phase probe lifecycle.
 
 ## Begin tool
 
-`atlerror.probe.begin_recommended` accepts a semantic diagnosis target and, only when necessary, an exact semantic scope.
+`causcope.probe.begin_recommended` accepts a semantic diagnosis target and, only when necessary, an exact semantic scope.
 
 It does not accept a probe ID.
 
@@ -64,11 +64,11 @@ The tool captures the baseline and returns an opaque `probe-session.<digest>` ha
 
 ## Finish tool
 
-`atlerror.probe.finish` accepts only the opaque session ID returned by the begin tool.
+`causcope.probe.finish` accepts only the opaque session ID returned by the begin tool.
 
 It loads the persisted probe session and its MCP binding, validates that the incident, probe, and scope still match, completes the registered read-only executor, and produces standard `runtime_evidence` through the RFC 0016 implementation.
 
-The result is composed with the configured runtime evidence document using the existing deterministic composition layer. Atlerror then rebuilds the diagnosis snapshot using the existing causal and next-probe ranking code and increments `evidence_revision`.
+The result is composed with the configured runtime evidence document using the existing deterministic composition layer. Causcope then rebuilds the diagnosis snapshot using the existing causal and next-probe ranking code and increments `evidence_revision`.
 
 The feedback path is therefore:
 
@@ -90,7 +90,7 @@ No diagnosis logic is implemented in the MCP tool layer.
 
 A completed probe session is identified in runtime evidence by its stable `session_id` label.
 
-If `atlerror.probe.finish` is retried after a successful write, the controller detects the already persisted evidence instance and returns the existing result instead of reading the counter again or appending duplicate evidence.
+If `causcope.probe.finish` is retried after a successful write, the controller detects the already persisted evidence instance and returns the existing result instead of reading the counter again or appending duplicate evidence.
 
 If the evidence instance exists but the diagnosis snapshot does not yet reference it, the controller repairs the interrupted state by recomputing the snapshot once.
 
@@ -124,9 +124,9 @@ destructiveHint = false
 openWorldHint = false
 ```
 
-The tools do write Atlerror-local session, evidence, and diagnosis files, so they do not claim `readOnlyHint=true` even though the executed system probe itself is canonically `risk: read_only`.
+The tools do write Causcope-local session, evidence, and diagnosis files, so they do not claim `readOnlyHint=true` even though the executed system probe itself is canonically `risk: read_only`.
 
-`atlerror.probe.finish` is marked idempotent because retries return the already persisted session result rather than executing the probe again.
+`causcope.probe.finish` is marked idempotent because retries return the already persisted session result rather than executing the probe again.
 
 ## Security boundary
 
@@ -153,7 +153,7 @@ The retry behavior described above repairs the important partial-write case wher
 
 ## Why not one blocking tool call?
 
-The probe requires a meaningful workload interval between baseline and final counter reads. Sleeping inside a tool does not create that workload, and allowing Atlerror to generate arbitrary workload would expand the safety surface substantially.
+The probe requires a meaningful workload interval between baseline and final counter reads. Sleeping inside a tool does not create that workload, and allowing Causcope to generate arbitrary workload would expand the safety surface substantially.
 
 Two explicit calls preserve the semantic experiment boundary:
 
@@ -178,6 +178,6 @@ This RFC does not add:
 
 ## Consequences
 
-Atlerror now supports a bounded agent-controlled diagnostic feedback loop while keeping probe choice, risk classification, semantic scope, evidence representation, and causal reasoning explicit.
+Causcope now supports a bounded agent-controlled diagnostic feedback loop while keeping probe choice, risk classification, semantic scope, evidence representation, and causal reasoning explicit.
 
 The next expansion should add more registered read-only executors and capability discovery before considering any higher-risk probe class.

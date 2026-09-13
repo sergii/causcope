@@ -18,7 +18,7 @@ mappings:
       state_when_false: absent
     scope:
       boundary_labels:
-        - atlerror_boundary
+        - causcope_boundary
       attribute_labels:
         service: service
         dependency: dependency

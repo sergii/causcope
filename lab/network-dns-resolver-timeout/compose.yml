@@ -21,8 +21,8 @@ services:
     environment:
       DNS_SERVER: "172.32.0.53"
       DNS_PORT: "5353"
-      KNOWN_NAME: "known.atlerror.test"
-      TIMEOUT_NAME: "timeout.atlerror.test"
+      KNOWN_NAME: "known.causcope.test"
+      TIMEOUT_NAME: "timeout.causcope.test"
       DNS_TIMEOUT_SECONDS: "0.6"
     networks:
       - labnet

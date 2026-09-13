@@ -14,9 +14,9 @@ from causal_projection import ROOT
 from runtime_evidence import parse_timestamp
 
 SCHEMA_PATH = ROOT / "schema" / "agent-plan.schema.json"
-BEGIN_RECOMMENDED_OPERATION = "atlerror.probe.begin_recommended"
-FINISH_OPERATION = "atlerror.probe.finish"
-ABANDON_OPERATION = "atlerror.probe.abandon"
+BEGIN_RECOMMENDED_OPERATION = "causcope.probe.begin_recommended"
+FINISH_OPERATION = "causcope.probe.finish"
+ABANDON_OPERATION = "causcope.probe.abandon"
 SESSION_ID_PATTERN = re.compile(r"^probe-session\.[0-9a-f]{16}$")
 
 STATES = (

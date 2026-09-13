@@ -193,7 +193,7 @@ class OtlpHttpReceiverTest(unittest.TestCase):
         payload = self.payload()
         attributes = payload["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["attributes"]
         for attribute in attributes:
-            if attribute["key"] == "atlerror.boundary":
+            if attribute["key"] == "causcope.boundary":
                 attribute["value"]["stringValue"] = "boundary.unknown.path"
 
         status, error = self.receiver.post_payload(payload)

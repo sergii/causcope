@@ -4,7 +4,7 @@ Status: Draft
 
 ## Purpose
 
-Atlerror uses descriptive canonical semantic IDs such as:
+Causcope uses descriptive canonical semantic IDs such as:
 
 ```text
 hypothesis.database.deadlock
@@ -23,7 +23,7 @@ The short code is a catalog address. It does not replace the canonical ID and it
 
 ## Identity layers
 
-Atlerror deliberately separates four identities:
+Causcope deliberately separates four identities:
 
 ```text
 canonical semantic identity   hypothesis.database.deadlock
@@ -128,7 +128,7 @@ vocabulary/diagnostic-code-history.yaml
 
 ## Facets
 
-Because real faults cross tree boundaries, Atlerror keeps facets separately from the primary catalog location.
+Because real faults cross tree boundaries, Causcope keeps facets separately from the primary catalog location.
 
 Example conceptual profile:
 

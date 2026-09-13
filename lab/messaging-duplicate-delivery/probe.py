@@ -7,7 +7,7 @@ import redis
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
-GROUP = "atlerror-consumers"
+GROUP = "causcope-consumers"
 CONSUMER_ONE = "consumer-1"
 CONSUMER_TWO = "consumer-2"
 
@@ -87,7 +87,7 @@ def idempotent_effect(event_id, effect_key):
 
 
 # Baseline: one delivery, side effect once, durable ACK.
-baseline_stream = "atlerror:baseline"
+baseline_stream = "causcope:baseline"
 baseline_effect_key = "effect:baseline"
 r.delete(baseline_effect_key)
 create_stream(baseline_stream)
@@ -98,7 +98,7 @@ baseline_ack_count = r.xack(baseline_stream, GROUP, baseline_entry_id)
 baseline_pending = pending_snapshot(baseline_stream)
 
 # Intervention: apply effect, omit ACK, then another consumer claims the same entry and applies effect again.
-intervention_stream = "atlerror:intervention"
+intervention_stream = "causcope:intervention"
 intervention_effect_key = "effect:intervention"
 r.delete(intervention_effect_key)
 create_stream(intervention_stream)
@@ -113,7 +113,7 @@ intervention_ack_count = r.xack(intervention_stream, GROUP, intervention_entry_i
 intervention_pending_after_ack = pending_snapshot(intervention_stream)
 
 # Recovery: keep the same redelivery pattern, but make the business effect idempotent.
-recovery_stream = "atlerror:recovery"
+recovery_stream = "causcope:recovery"
 recovery_effect_key = "effect:recovery"
 r.delete(recovery_effect_key, "processed:recovery-event")
 create_stream(recovery_stream)

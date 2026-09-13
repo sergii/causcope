@@ -7,9 +7,9 @@ from urllib.parse import parse_qs, urlparse
 
 DB_HOST = os.environ.get("DB_HOST", "db")
 DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_USER = os.environ.get("DB_USER", "atlerror")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "atlerror")
-DB_NAME = os.environ.get("DB_NAME", "atlerror")
+DB_USER = os.environ.get("DB_USER", "causcope")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "causcope")
+DB_NAME = os.environ.get("DB_NAME", "causcope")
 
 
 def pg_env(application_name: str):
@@ -53,15 +53,15 @@ def psql_popen(sql: str, application_name: str):
 
 
 def scalar(sql: str) -> str:
-    result = psql_command(sql, "atlerror_observer")
+    result = psql_command(sql, "causcope_observer")
     return result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
 
 
 def initialize():
     psql_command(
-        "CREATE TABLE IF NOT EXISTS atlerror_lock_lab (id integer PRIMARY KEY, value integer NOT NULL); "
-        "INSERT INTO atlerror_lock_lab(id, value) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;",
-        "atlerror_setup",
+        "CREATE TABLE IF NOT EXISTS causcope_lock_lab (id integer PRIMARY KEY, value integer NOT NULL); "
+        "INSERT INTO causcope_lock_lab(id, value) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;",
+        "causcope_setup",
     )
 
 
@@ -70,7 +70,7 @@ def wait_for_locker_sleep(timeout_seconds=2.0):
     while time.monotonic() < deadline:
         count = scalar(
             "SELECT count(*) FROM pg_stat_activity "
-            "WHERE application_name = 'atlerror_locker' AND wait_event = 'PgSleep';"
+            "WHERE application_name = 'causcope_locker' AND wait_event = 'PgSleep';"
         )
         if count == "1":
             return
@@ -83,7 +83,7 @@ def observe_waiter_lock(waiter, timeout_seconds=0.20):
     while time.monotonic() < deadline and waiter.poll() is None:
         count = scalar(
             "SELECT count(*) FROM pg_stat_activity "
-            "WHERE application_name = 'atlerror_waiter' AND wait_event_type = 'Lock';"
+            "WHERE application_name = 'causcope_waiter' AND wait_event_type = 'Lock';"
         )
         if count == "1":
             return True
@@ -94,8 +94,8 @@ def observe_waiter_lock(waiter, timeout_seconds=0.20):
 def run_unblocked_update():
     started = time.monotonic()
     psql_command(
-        "UPDATE atlerror_lock_lab SET value = value + 1 WHERE id = 1;",
-        "atlerror_waiter",
+        "UPDATE causcope_lock_lab SET value = value + 1 WHERE id = 1;",
+        "causcope_waiter",
     )
     return (time.monotonic() - started) * 1000.0, False
 
@@ -104,17 +104,17 @@ def run_blocked_update(hold_ms: float):
     hold_seconds = max(hold_ms, 0.0) / 1000.0
     locker_sql = (
         "BEGIN; "
-        "SELECT id FROM atlerror_lock_lab WHERE id = 1 FOR UPDATE; "
+        "SELECT id FROM causcope_lock_lab WHERE id = 1 FOR UPDATE; "
         f"SELECT pg_sleep({hold_seconds:.6f}); "
         "COMMIT;"
     )
-    locker = psql_popen(locker_sql, "atlerror_locker")
+    locker = psql_popen(locker_sql, "causcope_locker")
     try:
         wait_for_locker_sleep()
         started = time.monotonic()
         waiter = psql_popen(
-            "UPDATE atlerror_lock_lab SET value = value + 1 WHERE id = 1;",
-            "atlerror_waiter",
+            "UPDATE causcope_lock_lab SET value = value + 1 WHERE id = 1;",
+            "causcope_waiter",
         )
         lock_event_observed = observe_waiter_lock(waiter)
         stdout, stderr = waiter.communicate(timeout=5)

@@ -6,7 +6,7 @@ import redis
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
-GROUP = "atlerror-consumers"
+GROUP = "causcope-consumers"
 CONSUMERS = ["consumer-1", "consumer-2", "consumer-3"]
 RETRY_THRESHOLD = 3
 
@@ -85,7 +85,7 @@ def delivery_count(snapshot):
 
 
 # Baseline: a valid message produces one durable effect and is acknowledged.
-baseline_stream = "atlerror:poison:baseline"
+baseline_stream = "causcope:poison:baseline"
 baseline_effect_key = "effect:poison:baseline"
 r.delete(baseline_effect_key)
 create_stream(baseline_stream)
@@ -96,8 +96,8 @@ baseline_ack_count = r.xack(baseline_stream, GROUP, baseline_entry_id)
 baseline_pending = pending_snapshot(baseline_stream)
 
 # Intervention: one deterministic poison payload fails on three deliveries of the same broker entry.
-stream = "atlerror:poison:active"
-dlq_stream = "atlerror:poison:dlq"
+stream = "causcope:poison:active"
+dlq_stream = "causcope:poison:dlq"
 poison_effect_key = "effect:poison:intervention"
 recovery_effect_key = "effect:poison:recovery"
 r.delete(dlq_stream, poison_effect_key, recovery_effect_key)

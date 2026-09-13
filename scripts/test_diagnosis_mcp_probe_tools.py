@@ -52,7 +52,7 @@ class DiagnosisMcpProbeToolsTest(unittest.TestCase):
         return {
             PROTOCOL_VERSION_META_KEY: MODERN_PROTOCOL_VERSION,
             CLIENT_CAPABILITIES_META_KEY: {},
-            CLIENT_INFO_META_KEY: {"name": "atlerror-probe-test", "version": "1.0.0"},
+            CLIENT_INFO_META_KEY: {"name": "causcope-probe-test", "version": "1.0.0"},
         }
 
     def modern_request(
@@ -240,7 +240,7 @@ class DiagnosisMcpProbeToolsTest(unittest.TestCase):
                 server,
                 1,
                 "tools/call",
-                {"name": "atlerror.shell", "arguments": {}},
+                {"name": "causcope.shell", "arguments": {}},
             )
             self.assertEqual(INVALID_PARAMS, unknown["error"]["code"])
 

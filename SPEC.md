@@ -1,6 +1,6 @@
-# Atlerror Semantic Specification
+# Causcope Semantic Specification
 
-This document defines the minimal semantic contract used by Atlerror knowledge files and runtime diagnostic records.
+This document defines the minimal semantic contract used by Causcope knowledge files and runtime diagnostic records.
 
 ## Dual-use invariant
 
@@ -8,7 +8,7 @@ This document defines the minimal semantic contract used by Atlerror knowledge f
 
 ## Layers
 
-Atlerror separates four semantic concerns:
+Causcope separates four semantic concerns:
 
 1. **Vocabulary** - the language: concept kinds, relations, action classes, and semantic constraints.
 2. **Knowledge** - concrete facts expressed using that language, including explicit causal edges.

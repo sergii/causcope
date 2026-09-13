@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror now records successful local probe workflow transitions in an append-only JSONL journal stored next to probe session artifacts:
+Causcope now records successful local probe workflow transitions in an append-only JSONL journal stored next to probe session artifacts:
 
 ```text
 <probe-session-dir>/probe-workflow.journal.jsonl
@@ -116,7 +116,7 @@ fsync
 
 The claim is keyed to the fixed local workflow journal rather than a specific probe session.
 
-This prevents two cooperating Atlerror processes from assigning the same sequence or racing the hash-chain head.
+This prevents two cooperating Causcope processes from assigning the same sequence or racing the hash-chain head.
 
 ## Retry behavior
 
@@ -138,7 +138,7 @@ The journal can be inspected directly:
 
 ```bash
 python scripts/probe_workflow_journal.py \
-  --session-dir /tmp/atlerror-probe-sessions \
+  --session-dir /tmp/causcope-probe-sessions \
   --pretty
 ```
 
@@ -219,4 +219,4 @@ This RFC does not introduce:
 
 ## Next step
 
-The next coherent layer is to merge this verified event stream into `atlerror://probe-workflow/history` so history can retain completed, abandoned, and reconciled workflow facts even after the corresponding mutable session artifacts are no longer present.
+The next coherent layer is to merge this verified event stream into `causcope://probe-workflow/history` so history can retain completed, abandoned, and reconciled workflow facts even after the corresponding mutable session artifacts are no longer present.

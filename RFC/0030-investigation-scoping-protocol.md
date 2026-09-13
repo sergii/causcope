@@ -200,15 +200,15 @@ A dependency in the failing path can be relevant without being at fault.
 The diagnosis MCP server may expose incident scoping as read-only resources when an incident-context provider is configured:
 
 ```text
-atlerror://incident/context
-atlerror://incident/scoping
+causcope://incident/context
+causcope://incident/scoping
 ```
 
 The first resource returns validated incident context. The second returns the deterministic scoping projection.
 
 This allows an agent to ask Causcope what is known and what should be clarified before jumping directly to root-cause hypotheses.
 
-The existing `atlerror://` namespace is retained for compatibility. Product naming and URI migration are a separate versioning decision.
+The existing `causcope://` namespace is retained for compatibility. Product naming and URI migration are a separate versioning decision.
 
 ## Product architecture
 
@@ -269,7 +269,7 @@ This RFC does not:
 - execute arbitrary diagnostic actions;
 - make an LLM the semantic source of truth;
 - define SaaS tenancy or billing;
-- rename existing Atlerror protocol identifiers.
+- rename existing Causcope protocol identifiers.
 
 ## Next slices
 

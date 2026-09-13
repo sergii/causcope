@@ -4,7 +4,7 @@ Status: accepted
 
 ## Summary
 
-RFC 0007 introduced a file-oriented OpenTelemetry trace adapter. That proved the semantic translation from OTLP spans into Atlerror runtime evidence, but it still required a saved JSON payload.
+RFC 0007 introduced a file-oriented OpenTelemetry trace adapter. That proved the semantic translation from OTLP spans into Causcope runtime evidence, but it still required a saved JSON payload.
 
 This RFC adds a small live ingestion boundary for OTLP/HTTP JSON traces. The receiver accepts trace export requests, applies the existing OpenTelemetry mapping configuration, keeps one current evidence instance per semantic observation and exact scope, and exposes the resulting runtime evidence bundle over HTTP or an optional atomic JSON snapshot.
 
@@ -20,7 +20,7 @@ Example:
 python scripts/otlp_http_receiver.py \
   examples/adapters/opentelemetry/external-dependency.yaml \
   --incident-id incident.checkout.live \
-  --snapshot /tmp/atlerror-runtime-evidence.json
+  --snapshot /tmp/causcope-runtime-evidence.json
 ```
 
 The default listener is `127.0.0.1:4318`. Binding to loopback is deliberate so the experimental receiver is not exposed remotely by default.
@@ -50,21 +50,21 @@ For example:
 
 ```yaml
 exporters:
-  otlp_http/atlerror:
+  otlp_http/causcope:
     endpoint: http://127.0.0.1:4318
     encoding: json
 
 service:
   pipelines:
     traces:
-      exporters: [otlp_http/atlerror]
+      exporters: [otlp_http/causcope]
 ```
 
-The Collector remains responsible for production-grade receiving, batching, retries, TLS, queues, and upstream protocol diversity. Atlerror consumes the JSON export boundary after those concerns.
+The Collector remains responsible for production-grade receiving, batching, retries, TLS, queues, and upstream protocol diversity. Causcope consumes the JSON export boundary after those concerns.
 
 ## Unmatched spans
 
-A live OTLP stream normally contains many spans that are irrelevant to one Atlerror mapping configuration.
+A live OTLP stream normally contains many spans that are irrelevant to one Causcope mapping configuration.
 
 Therefore the live receiver differs intentionally from the file adapter CLI:
 
@@ -120,12 +120,12 @@ This makes Collector retries and fixture replay safe without relying on arrival 
 
 After a successful state change the receiver writes the complete runtime evidence bundle to a temporary sibling file and atomically replaces the configured snapshot path.
 
-The snapshot uses the same `runtime_evidence` contract as every other Atlerror evidence source. It can therefore feed existing commands directly:
+The snapshot uses the same `runtime_evidence` contract as every other Causcope evidence source. It can therefore feed existing commands directly:
 
 ```bash
 python scripts/causal_ranking.py \
   observation.dependency.latency \
-  --evidence /tmp/atlerror-runtime-evidence.json \
+  --evidence /tmp/causcope-runtime-evidence.json \
   --scope-boundary boundary.application.external_dependency \
   --scope-attribute dependency=stripe \
   --pretty

@@ -4,7 +4,7 @@ Status: accepted
 
 ## Summary
 
-Atlerror can now ingest metric evidence through the Prometheus adapter. Distributed traces add a different class of information: concrete service interactions, span timing, trace correlation, error status, and topology attributes attached to one request path.
+Causcope can now ingest metric evidence through the Prometheus adapter. Distributed traces add a different class of information: concrete service interactions, span timing, trace correlation, error status, and topology attributes attached to one request path.
 
 This RFC defines a first OpenTelemetry trace adapter that translates OTLP/HTTP JSON trace payloads into the existing `runtime_evidence` contract.
 
@@ -33,7 +33,7 @@ mappings:
       threshold: 100
     scope:
       boundary_attributes:
-        - atlerror.boundary
+        - causcope.boundary
       attribute_map:
         service: service.name
         dependency: peer.service
@@ -93,9 +93,9 @@ Mappings can combine:
 - static semantic entities and boundaries
 - semantic entity IDs read from configured attributes
 - semantic boundary IDs read from configured attributes
-- ordinary runtime attributes copied into exact Atlerror scope attributes
+- ordinary runtime attributes copied into exact Causcope scope attributes
 
-Dynamic semantic references are validated. If a span says `atlerror.boundary=boundary.application.external_dependency`, that ID must exist and must have `kind: boundary`.
+Dynamic semantic references are validated. If a span says `causcope.boundary=boundary.application.external_dependency`, that ID must exist and must have `kind: boundary`.
 
 Missing required scope attributes fail conversion. The adapter does not silently downgrade a scoped mapping into unscoped evidence.
 

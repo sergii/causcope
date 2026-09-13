@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror can now compose multiple `runtime_evidence` documents for the same incident into one deterministic evidence bundle before causal diagnosis.
+Causcope can now compose multiple `runtime_evidence` documents for the same incident into one deterministic evidence bundle before causal diagnosis.
 
 The first executable example combines Prometheus metric evidence with OpenTelemetry trace evidence for the same checkout-to-Stripe dependency scope.
 
@@ -21,7 +21,7 @@ Composition is intentionally a data-contract operation. It does not introduce an
 
 Real incidents rarely have a single telemetry source. A trace can show that one downstream call was slow or failed while metrics can show retransmissions, saturation, queueing, or other surrounding behavior.
 
-Atlerror already normalizes each telemetry family into the same runtime evidence contract. The missing operation was a conservative way to combine those normalized documents without losing provenance or semantic scope.
+Causcope already normalizes each telemetry family into the same runtime evidence contract. The missing operation was a conservative way to combine those normalized documents without losing provenance or semantic scope.
 
 ## Decision
 

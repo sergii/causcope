@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror's executable diagnostic loop already models runtime evidence, causal ranking, discriminating probes, execution availability, and agent planning. It starts too late for many real incidents, however. Before reliable observations exist, an engineer or agent first has to answer a different question:
+Causcope's executable diagnostic loop already models runtime evidence, causal ranking, discriminating probes, execution availability, and agent planning. It starts too late for many real incidents, however. Before reliable observations exist, an engineer or agent first has to answer a different question:
 
 ```text
 What exactly is broken, for whom, where, since when, under which conditions, and with what impact?

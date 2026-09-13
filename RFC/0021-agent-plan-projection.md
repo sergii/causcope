@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror now has enough separate layers to answer four different questions without collapsing them into one score or one opaque agent decision:
+Causcope now has enough separate layers to answer four different questions without collapsing them into one score or one opaque agent decision:
 
 ```text
 What might be causing the symptom?
@@ -30,7 +30,7 @@ The projection is intentionally small. It does not rerun diagnosis, rerank hypot
 The MCP server exposes:
 
 ```text
-atlerror://diagnosis/agent-plan
+causcope://diagnosis/agent-plan
 ```
 
 The resource is available in both resource-only mode and active probe-tool mode.
@@ -71,7 +71,7 @@ summary:
 
 Each diagnosis entry produces exactly one compact step.
 
-The plan preserves the diagnosis partition scope so an agent has the exact arguments needed by `atlerror.probe.begin_recommended` when that operation is allowed.
+The plan preserves the diagnosis partition scope so an agent has the exact arguments needed by `causcope.probe.begin_recommended` when that operation is allowed.
 
 ## States
 
@@ -86,7 +86,7 @@ recommended_probe: probe.network.inspect_tcp_integrity_errors
 registered: true
 executable_here: true
 executor_id: executor.linux.proc_net_snmp.tcp_inerrs
-operation: atlerror.probe.begin_recommended
+operation: causcope.probe.begin_recommended
 allowed: true
 requires_opt_in: false
 fallback: none
@@ -113,7 +113,7 @@ If the executor is available but active tools were not explicitly enabled:
 ```yaml
 state: blocked
 reason: active_execution_disabled
-operation: atlerror.probe.begin_recommended
+operation: causcope.probe.begin_recommended
 allowed: false
 requires_opt_in: true
 fallback: enable_readonly_probe_tools
@@ -123,7 +123,7 @@ This distinction is important. Host capability and process authorization are sep
 
 ### `no_executor`
 
-A semantic next probe exists, but Atlerror has no registered executor for it.
+A semantic next probe exists, but Causcope has no registered executor for it.
 
 ```yaml
 state: no_executor
@@ -201,7 +201,7 @@ This prevents host capability discovery from silently becoming execution authori
 When a step is actionable, the only operation currently exposed by the plan is:
 
 ```text
-atlerror.probe.begin_recommended
+causcope.probe.begin_recommended
 ```
 
 The plan never includes an arbitrary probe ID as a caller-selectable execution argument. It provides the diagnosis target and exact semantic scope. The existing MCP tool controller still reads the current validated snapshot and chooses the current top recommendation itself.

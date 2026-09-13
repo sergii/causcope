@@ -21,6 +21,9 @@ jobs:
       - name: Install validator dependencies
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema
 
+      - name: Validate product identity
+        run: python scripts/test_product_identity.py
+
       - name: Validate schemas and references
         run: python scripts/validate.py
 

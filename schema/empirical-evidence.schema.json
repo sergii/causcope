@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/empirical-evidence.schema.json",
-  "title": "Atlerror Empirical Evidence",
+  "$id": "https://causcope.dev/schema/empirical-evidence.schema.json",
+  "title": "Causcope Empirical Evidence",
   "type": "object",
   "required": ["schema_version", "kind", "experiment", "claims", "environment", "observations", "assertions", "result", "interpretation"],
   "properties": {

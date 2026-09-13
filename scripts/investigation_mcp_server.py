@@ -17,8 +17,8 @@ from diagnosis_mcp_server import (
 )
 from scoping_projection import ROOT, build_scoping_projection, load_incident_context
 
-INCIDENT_CONTEXT_URI = "atlerror://incident/context"
-INCIDENT_SCOPING_URI = "atlerror://incident/scoping"
+INCIDENT_CONTEXT_URI = "causcope://incident/context"
+INCIDENT_SCOPING_URI = "causcope://incident/scoping"
 
 
 class InvestigationMcpServer(DiagnosisMcpServer):
@@ -62,8 +62,8 @@ class InvestigationMcpServer(DiagnosisMcpServer):
             },
         ]
         if modern:
-            incident_resources[0]["title"] = "Atlerror incident context"
-            incident_resources[1]["title"] = "Atlerror incident scoping"
+            incident_resources[0]["title"] = "Causcope incident context"
+            incident_resources[1]["title"] = "Causcope incident scoping"
         return sorted(resources + incident_resources, key=lambda resource: resource["uri"])
 
     def _incident_context(self, uri: str) -> dict[str, Any]:
@@ -115,7 +115,7 @@ class InvestigationMcpServer(DiagnosisMcpServer):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Expose Atlerror diagnosis plus incident context and scoping over MCP stdio."
+        description="Expose Causcope diagnosis plus incident context and scoping over MCP stdio."
     )
     parser.add_argument(
         "--snapshot",

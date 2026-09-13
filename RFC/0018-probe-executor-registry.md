@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror active diagnostics now use an explicit built-in executor registry instead of a single hard-coded probe branch.
+Causcope active diagnostics now use an explicit built-in executor registry instead of a single hard-coded probe branch.
 
 The registry maps a canonical read-only probe to one concrete local executor, validates that the probe's declared capability and produced observation still match the executor contract, exposes deterministic capability discovery, and owns the executor-specific baseline and result policy.
 
@@ -189,7 +189,7 @@ utilization >= 80% -> observation.cpu.utilization = observed
 utilization < 80%  -> observation.cpu.utilization = absent
 ```
 
-This threshold is explicitly executor policy. It is not a universal Atlerror ontology threshold and must not be interpreted as one.
+This threshold is explicitly executor policy. It is not a universal Causcope ontology threshold and must not be interpreted as one.
 
 The measurement stores the actual utilization percentage, the executor threshold as the comparison baseline, and the signed delta from that threshold.
 
@@ -229,7 +229,7 @@ The MCP caller still cannot choose:
 
 ## Security boundary
 
-The registry is static Python code shipped with Atlerror.
+The registry is static Python code shipped with Causcope.
 
 This RFC does not add dynamic plugin loading, executable configuration, shell interpolation, arbitrary subprocess execution, packet generation, service mutation, or remediation.
 

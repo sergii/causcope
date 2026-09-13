@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/probe-workflow-history.schema.json",
-  "title": "Atlerror probe workflow history",
+  "$id": "https://causcope.dev/schema/probe-workflow-history.schema.json",
+  "title": "Causcope probe workflow history",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "kind", "incident_id", "generated_at", "summary", "sessions"],

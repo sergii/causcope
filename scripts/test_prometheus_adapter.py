@@ -114,7 +114,7 @@ class PrometheusAdapterTest(unittest.TestCase):
     def test_dynamic_scope_label_must_reference_known_boundary(self) -> None:
         responses = self.load_responses()
         responses["tcp_retransmissions_rate"]["data"]["result"][0]["metric"][
-            "atlerror_boundary"
+            "causcope_boundary"
         ] = "boundary.unknown.path"
         with self.assertRaisesRegex(ValueError, "unknown boundary"):
             self.build_document(responses)

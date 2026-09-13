@@ -80,7 +80,7 @@ def run_docker_compose(
         raise SystemExit(f"ERROR: compose file not found: {compose_file.relative_to(ROOT)}")
 
     project_suffix = experiment_id.replace(".", "-").replace("_", "-")
-    project_name = f"atlerror-{project_suffix}"[:63]
+    project_name = f"causcope-{project_suffix}"[:63]
     compose = ["docker", "compose", "-p", project_name, "-f", str(compose_file)]
 
     try:

@@ -8,8 +8,8 @@ import time
 
 DNS_SERVER = os.environ.get("DNS_SERVER", "172.31.0.53")
 DNS_PORT = int(os.environ.get("DNS_PORT", "5353"))
-KNOWN_NAME = os.environ.get("KNOWN_NAME", "known.atlerror.test")
-MISSING_NAME = os.environ.get("MISSING_NAME", "missing.atlerror.test")
+KNOWN_NAME = os.environ.get("KNOWN_NAME", "known.causcope.test")
+MISSING_NAME = os.environ.get("MISSING_NAME", "missing.causcope.test")
 TIMEOUT_SECONDS = float(os.environ.get("DNS_TIMEOUT_SECONDS", "1.0"))
 
 EXPERIMENT_ID = "experiment.network.dns_resolution_failure.python_linux"

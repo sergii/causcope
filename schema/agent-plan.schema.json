@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/agent-plan.schema.json",
-  "title": "Atlerror agent plan",
+  "$id": "https://causcope.dev/schema/agent-plan.schema.json",
+  "title": "Causcope agent plan",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -224,10 +224,10 @@
         "operation": {
           "oneOf": [
             {"type": "null"},
-            {"const": "atlerror.probe.begin_recommended"},
-            {"const": "atlerror.probe.finish"},
-            {"const": "atlerror.probe.abandon"},
-            {"const": "atlerror.probe.reconcile_partial"}
+            {"const": "causcope.probe.begin_recommended"},
+            {"const": "causcope.probe.finish"},
+            {"const": "causcope.probe.abandon"},
+            {"const": "causcope.probe.reconcile_partial"}
           ]
         },
         "arguments": {

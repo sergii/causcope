@@ -1,6 +1,6 @@
-# Atlerror end-to-end demo
+# Causcope end-to-end demo
 
-The checkout-to-Stripe demo exercises the current Atlerror stack in one deterministic command.
+The checkout-to-Stripe demo exercises the current Causcope stack in one deterministic command.
 
 ## Run
 
@@ -13,7 +13,7 @@ python scripts/demo_checkout_stripe.py
 By default the harness writes artifacts under:
 
 ```text
-/tmp/atlerror-demo
+/tmp/causcope-demo
 ```
 
 Use another directory when needed:
@@ -94,11 +94,11 @@ The recommendation is derived from the existing causal paths, hypothesis predict
 A successful run writes:
 
 ```text
-/tmp/atlerror-demo/prometheus-evidence.json
-/tmp/atlerror-demo/opentelemetry-evidence.json
-/tmp/atlerror-demo/runtime-evidence.json
-/tmp/atlerror-demo/diagnosis.json
-/tmp/atlerror-demo/demo-summary.json
+/tmp/causcope-demo/prometheus-evidence.json
+/tmp/causcope-demo/opentelemetry-evidence.json
+/tmp/causcope-demo/runtime-evidence.json
+/tmp/causcope-demo/diagnosis.json
+/tmp/causcope-demo/demo-summary.json
 ```
 
 Inspect `diagnosis.json` for the full transparent causal and next-probe rankings. `demo-summary.json` is a smaller human-facing projection.
@@ -111,7 +111,7 @@ To leave the HTTP API running after the demo:
 
 ```bash
 python scripts/diagnosis_http_api.py \
-  --snapshot /tmp/atlerror-demo/diagnosis.json
+  --snapshot /tmp/causcope-demo/diagnosis.json
 ```
 
 Then read:
@@ -129,14 +129,14 @@ To attach an MCP host after the demo in resource-only mode, run:
 
 ```bash
 python scripts/diagnosis_mcp_server.py \
-  --snapshot /tmp/atlerror-demo/diagnosis.json
+  --snapshot /tmp/causcope-demo/diagnosis.json
 ```
 
 The resources are:
 
 ```text
-atlerror://diagnosis/current
-atlerror://diagnosis/status
+causcope://diagnosis/current
+causcope://diagnosis/status
 ```
 
 Resource-only mode remains the default and exposes no MCP mutation tools.
@@ -167,7 +167,7 @@ Discovery is read-only. It checks platform and registered source availability bu
 
 ## Optional active read-only extension
 
-The checkout-to-Stripe diagnosis recommends `probe.network.inspect_tcp_integrity_errors`. On a Linux host, Atlerror dispatches that probe through the registered executor rather than a probe-specific branch.
+The checkout-to-Stripe diagnosis recommends `probe.network.inspect_tcp_integrity_errors`. On a Linux host, Causcope dispatches that probe through the registered executor rather than a probe-specific branch.
 
 Capture a baseline directly through the CLI:
 
@@ -175,18 +175,18 @@ Capture a baseline directly through the CLI:
 python scripts/probe_execution.py begin \
   --incident-id incident.demo.checkout.stripe \
   --probe probe.network.inspect_tcp_integrity_errors \
-  --session /tmp/atlerror-demo/tcp-integrity-probe-session.json \
+  --session /tmp/causcope-demo/tcp-integrity-probe-session.json \
   --scope-boundary boundary.application.external_dependency \
   --scope-attribute service=checkout-api \
   --scope-attribute dependency=stripe
 ```
 
-Exercise the intended controlled workload outside Atlerror, then finish the session:
+Exercise the intended controlled workload outside Causcope, then finish the session:
 
 ```bash
 python scripts/probe_execution.py finish \
-  --session /tmp/atlerror-demo/tcp-integrity-probe-session.json \
-  --output /tmp/atlerror-demo/tcp-integrity-probe-evidence.json \
+  --session /tmp/causcope-demo/tcp-integrity-probe-session.json \
+  --output /tmp/causcope-demo/tcp-integrity-probe-evidence.json \
   --pretty
 ```
 
@@ -202,20 +202,20 @@ The same two-phase runtime can execute the second registered probe:
 python scripts/probe_execution.py begin \
   --incident-id incident.cpu.example \
   --probe probe.cpu.inspect_utilization \
-  --session /tmp/atlerror-cpu-session.json
+  --session /tmp/causcope-cpu-session.json
 ```
 
 Run the workload externally, then finish:
 
 ```bash
 python scripts/probe_execution.py finish \
-  --session /tmp/atlerror-cpu-session.json \
+  --session /tmp/causcope-cpu-session.json \
   --pretty
 ```
 
 This executor samples aggregate Linux CPU counters from `/proc/stat` at begin and finish. It computes utilization from cumulative idle and total deltas and emits `observation.cpu.utilization` as standard runtime evidence.
 
-Its first built-in classification policy uses an 80% observed threshold. That threshold is executor policy, not a universal Atlerror semantic threshold. The exact utilization percentage and threshold are retained in the evidence measurement.
+Its first built-in classification policy uses an 80% observed threshold. That threshold is executor policy, not a universal Causcope semantic threshold. The exact utilization percentage and threshold are retained in the evidence measurement.
 
 ## Opt-in MCP probe tools
 
@@ -223,20 +223,20 @@ The same safe execution path can be exposed to an MCP host, but only through exp
 
 ```bash
 python scripts/diagnosis_mcp_server.py \
-  --snapshot /tmp/atlerror-demo/diagnosis.json \
+  --snapshot /tmp/causcope-demo/diagnosis.json \
   --enable-readonly-probe-tools \
-  --runtime-evidence /tmp/atlerror-demo/runtime-evidence.json \
-  --probe-session-dir /tmp/atlerror-demo/probe-sessions
+  --runtime-evidence /tmp/causcope-demo/runtime-evidence.json \
+  --probe-session-dir /tmp/causcope-demo/probe-sessions
 ```
 
 When enabled, the server advertises exactly two tools:
 
 ```text
-atlerror.probe.begin_recommended
-atlerror.probe.finish
+causcope.probe.begin_recommended
+causcope.probe.finish
 ```
 
-`atlerror.probe.begin_recommended` accepts a diagnosis target, not an arbitrary probe ID. Atlerror reads the current validated diagnosis, selects the current top next-probe recommendation, verifies that it is canonical `risk: read_only`, and dispatches it through the registered executor for the exact diagnosis scope.
+`causcope.probe.begin_recommended` accepts a diagnosis target, not an arbitrary probe ID. Causcope reads the current validated diagnosis, selects the current top next-probe recommendation, verifies that it is canonical `risk: read_only`, and dispatches it through the registered executor for the exact diagnosis scope.
 
 For the demo target:
 
@@ -250,7 +250,7 @@ the selected probe is:
 probe.network.inspect_tcp_integrity_errors
 ```
 
-The begin result returns an opaque `probe-session.<digest>` handle. Run the controlled workload outside Atlerror, then pass that handle to `atlerror.probe.finish`.
+The begin result returns an opaque `probe-session.<digest>` handle. Run the controlled workload outside Causcope, then pass that handle to `causcope.probe.finish`.
 
 Finish emits standard probe runtime evidence, composes it into `runtime-evidence.json`, increments `evidence_revision`, recomputes `diagnosis.json`, and returns the revised top hypothesis and next probe. A positive integrity-error result therefore closes the loop:
 

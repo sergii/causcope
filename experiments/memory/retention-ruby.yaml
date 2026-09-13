@@ -7,7 +7,7 @@ claims:
 runner:
   type: docker
   build_context: lab/memory-retention
-  image: atlerror-memory-retention
+  image: causcope-memory-retention
   docker_args:
     - --memory=256m
 expected_result: supports
