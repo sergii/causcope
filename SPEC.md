@@ -15,7 +15,7 @@ Atlerror separates four semantic concerns:
 3. **Rules** - deterministic inference over observations and hypotheses.
 4. **Projections** - generated views for people and software: docs, website pages, CLI, MCP, HTTP APIs, agent skills, or other adapters.
 
-Runtime records such as incident context and runtime evidence sit beside the canonical semantic source. They describe a particular incident and may reference canonical semantic IDs, but they are not themselves reusable ontology concepts.
+Runtime records such as incident context, investigation sessions, and runtime evidence sit beside the canonical semantic source. They describe a particular incident and may reference canonical semantic IDs, but they are not themselves reusable ontology concepts.
 
 The canonical semantic source is machine-readable YAML validated by JSON Schema. Markdown is a human projection and explanatory layer, not the source of truth for executable relations.
 
@@ -34,6 +34,8 @@ probe.http.inspect_request_rate
 capability.cpu.profile
 tool.ebpf
 causal.network.packet_loss.tcp_retransmissions
+investigation.blast_radius
+investigation.client
 ```
 
 Product or repository names MUST NOT be embedded into semantic IDs.
@@ -51,7 +53,9 @@ The current executable slice uses:
 
 Causal edges are first-class semantic records but are not concept nodes. They connect existing concepts and carry typed causal semantics, conditions, strength, and optional evidence references.
 
-`incident_context` and `runtime_evidence` are runtime record kinds, not concept kinds. They describe one incident and can reference semantic entities, boundaries, and observations without becoming reusable nodes in the canonical knowledge graph.
+`incident_context`, `investigation_session`, and `runtime_evidence` are runtime record kinds, not concept kinds. They describe one incident and can reference semantic entities, boundaries, observations, and investigation dimensions without becoming reusable nodes in the canonical knowledge graph.
+
+`scoping_projection` is a deterministic projection over incident context, not a source-of-truth record.
 
 The broader target model is documented in `RFC/0001-semantic-foundation.md`.
 
@@ -61,7 +65,9 @@ The complete workflow starts before evidence collection:
 
 ```text
 something is wrong
-  -> incident context / scoping
+  -> incident context
+  -> scoping projection
+  -> next unresolved investigation dimension
   -> blast radius and impact
   -> failing-vs-working comparison
   -> runtime evidence
@@ -75,29 +81,34 @@ something is wrong
   -> verification / prevention
 ```
 
-The human-readable workflow is documented in `WORKFLOW.md`. The machine-readable incident-scoping contract is defined by `schema/incident-context.schema.json` and RFC 0022.
+The human-readable workflow is documented in `WORKFLOW.md`. The machine-readable incident context is defined by `schema/incident-context.schema.json` and RFC 0022. The executable scoping protocol is defined by `vocabulary/investigation-dimensions.yaml`, `schema/scoping-projection.schema.json`, `schema/investigation-session.schema.json`, and RFC 0030.
 
 Incident context MUST NOT silently become causal evidence. It may guide what to measure next, but only facts represented through the runtime evidence contract can affect deterministic diagnosis.
 
-## Incident context
+## Incident context and investigation scoping
 
 Incident context captures the earliest triage state before reliable diagnostic evidence is complete.
 
-It covers nine scoping dimensions:
+Causcope defines ten stable investigation dimensions:
 
-- who is affected;
-- where the problem appears;
-- when it started and how it behaves over time;
-- what feature, operation, or flow fails;
-- which clients or versions correlate with failure;
-- which changes happened near onset;
-- which data shapes, tenants, roles, or permissions are involved;
-- how the issue reproduces;
-- what impact and blast radius exist.
+- `investigation.blast_radius` - who is affected and how broadly;
+- `investigation.where` - environment, region, availability zone, or datacenter;
+- `investigation.when` - onset, last-known-good, and temporal pattern;
+- `investigation.flow` - feature, endpoint, operation, or user journey;
+- `investigation.client` - browser, mobile, OS, device, worker, app, or API version;
+- `investigation.change` - deploy, flag, migration, config, dependency, infrastructure, or data change near onset;
+- `investigation.dependency` - upstream, downstream, external, or peer dependency scope;
+- `investigation.data` - tenant, record type, role, permission, or data age;
+- `investigation.reproducibility` - whether and under which conditions the problem reproduces;
+- `investigation.impact` - actual user or business consequence and severity.
+
+Blast radius and impact are distinct. Breadth of affected population MUST NOT be treated as severity.
 
 Unknown dimensions are explicit rather than guessed. A dimension can be partially known and still be marked materially incomplete.
 
-Nearby changes and failing-vs-working differences are contextual discriminators, not causal proof. They should become diagnostic evidence only after they can be represented as sourced, time-bounded observations with confidence and applicable scope.
+The scoping projection classifies each dimension as `known`, `partial`, or `unknown`, computes context completeness, and recommends the next unresolved clarification using an explainable deterministic baseline. Scoping completeness MUST NOT be interpreted as root-cause confidence.
+
+Nearby changes, dependencies in the failing path, and failing-vs-working differences are contextual discriminators, not causal proof. They should become diagnostic evidence only after they can be represented as sourced, time-bounded observations with confidence and applicable scope.
 
 ## Diagnostic semantics
 
@@ -213,10 +224,13 @@ These fields can power documentation, learning paths, SEO pages, and short educa
 Machine-facing fields include:
 
 - stable semantic `id` values;
-- runtime `incident_id` values;
-- concept `kind` and runtime record `kind`;
+- runtime `incident_id` and investigation `session_id` values;
+- concept `kind`, runtime record `kind`, and projection `kind`;
 - explicit diagnostic and causal relations;
+- the ten stable investigation dimensions;
 - incident scope, impact, reproduction, comparisons, and unknowns;
+- deterministic scoping state and next-question projections;
+- investigation-session events;
 - predictions;
 - probes;
 - capabilities;
@@ -237,11 +251,13 @@ Expected consumers include:
 - MCP server
 - HTTP API
 - gRPC API if justified
+- agent-evaluation harnesses
+- SaaS control planes
 - Run Witness-like local runtime instrumentation
 - RunDiff/Plywo-style regression analysis
 - incident and observability integrations
 
-MCP is an adapter, not the ontology itself.
+MCP, HTTP, CLI, SaaS, and harnesses are adapters or projections, not the ontology itself.
 
 ## Versioning
 
