@@ -1,0 +1,52 @@
+schema_version: "0.1"
+kind: incident_context
+incident_id: incident.lab.checkout.client_version
+summary: Some customers cannot complete checkout.
+reported_at: "2026-09-13T15:04:00Z"
+
+scope:
+  subjects:
+    - checkout customers
+  environments:
+    - production
+  regions:
+    - eu-central
+  features:
+    - checkout
+  operations:
+    - POST /checkout
+
+time:
+  onset_at: "2026-09-13T14:52:00Z"
+  last_known_good_at: "2026-09-13T14:45:00Z"
+  pattern: intermittent
+
+impact:
+  severity: high
+  populations:
+    - unit: requests
+      affected: 61
+      total: 611
+      percentage: 9.98
+  user_effect: Checkout submission sometimes fails before confirmation.
+
+reproduction:
+  status: sometimes
+  conditions:
+    - production
+    - eu-central
+
+changes:
+  - type: deploy
+    description: checkout-api release 2026.09.13.4
+    occurred_at: "2026-09-13T14:48:00Z"
+    timing: near_onset
+    reference: deploy/2026.09.13.4
+
+unknowns:
+  - client
+  - dependency
+  - data
+
+notes:
+  - The nearby backend deploy is deliberately a red herring in this synthetic scenario.

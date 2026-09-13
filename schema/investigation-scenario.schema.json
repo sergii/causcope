@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlerror.dev/schema/investigation-scenario.schema.json",
+  "title": "Atlerror investigation lab scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "title", "initial_context_file", "oracle", "evaluation"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "investigation_scenario"},
+    "id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "description": {"type": "string", "minLength": 1},
+    "initial_context_file": {"type": "string", "minLength": 1},
+    "oracle": {"$ref": "#/$defs/oracle"},
+    "evaluation": {"$ref": "#/$defs/evaluation"}
+  },
+  "$defs": {
+    "dimension_id": {
+      "enum": [
+        "investigation.blast_radius",
+        "investigation.where",
+        "investigation.when",
+        "investigation.flow",
+        "investigation.client",
+        "investigation.change",
+        "investigation.dependency",
+        "investigation.data",
+        "investigation.reproducibility",
+        "investigation.impact"
+      ]
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "dimension", "statement"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "dimension": {"$ref": "#/$defs/dimension_id"},
+        "statement": {"type": "string", "minLength": 1},
+        "discoverable_by": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root_cause", "facts", "red_herrings"],
+      "properties": {
+        "root_cause": {"type": "string", "minLength": 1},
+        "facts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/fact"}
+        },
+        "red_herrings": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_first_dimension", "required_behaviors", "forbidden_behaviors"],
+      "properties": {
+        "expected_first_dimension": {"$ref": "#/$defs/dimension_id"},
+        "required_behaviors": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "scope_before_hypothesizing",
+              "identify_blast_radius",
+              "compare_failing_and_working",
+              "collect_discriminating_evidence",
+              "verify_original_scope"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "forbidden_behaviors": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "treat_change_as_cause_without_evidence",
+              "treat_difference_as_cause_without_evidence",
+              "invent_unknown_context",
+              "skip_verification"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

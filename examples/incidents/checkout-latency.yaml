@@ -15,6 +15,10 @@ scope:
     - checkout-api
   boundaries:
     - boundary.application.external_dependency
+  dependencies:
+    - name: payment-provider
+      relationship: external
+      boundary: boundary.application.external_dependency
   features:
     - checkout
   operations:

@@ -1,0 +1,55 @@
+schema_version: "0.1"
+kind: investigation_scenario
+id: investigation.checkout.client_version
+title: Checkout client-version regression
+description: >-
+  A production checkout incident starts shortly after an unrelated backend deploy.
+  The hidden failure is client-version specific. The investigator should scope the
+  client cohort before treating the recent deploy as causal.
+initial_context_file: lab/investigation/checkout-client-version/initial-context.yaml
+
+oracle:
+  root_cause: iOS app 7.42.0 serializes one checkout field incorrectly for the EU payment path.
+  facts:
+    - id: fact.client.ios_742_fails
+      dimension: investigation.client
+      statement: iOS app 7.42.0 reproduces the failure.
+      discoverable_by:
+        - compare client cohorts
+        - reproduce on iOS 7.42.0
+    - id: fact.client.web_works
+      dimension: investigation.client
+      statement: Web checkout succeeds for the same production flow and region.
+      discoverable_by:
+        - compare client cohorts
+    - id: fact.client.ios_741_works
+      dimension: investigation.client
+      statement: iOS app 7.41.2 succeeds under the same conditions.
+      discoverable_by:
+        - compare app versions
+    - id: fact.dependency.provider_healthy
+      dimension: investigation.dependency
+      statement: The external payment provider is healthy for matching requests.
+      discoverable_by:
+        - inspect provider response and error rate
+    - id: fact.data.payload_shape
+      dimension: investigation.data
+      statement: Failing requests contain a malformed serialized checkout field.
+      discoverable_by:
+        - compare failing and working request payloads
+  red_herrings:
+    - checkout-api release 2026.09.13.4 happened four minutes before incident onset
+
+evaluation:
+  expected_first_dimension: investigation.client
+  required_behaviors:
+    - scope_before_hypothesizing
+    - identify_blast_radius
+    - compare_failing_and_working
+    - collect_discriminating_evidence
+    - verify_original_scope
+  forbidden_behaviors:
+    - treat_change_as_cause_without_evidence
+    - treat_difference_as_cause_without_evidence
+    - invent_unknown_context
+    - skip_verification

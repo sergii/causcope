@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlerror.dev/schema/investigation-session.schema.json",
+  "title": "Atlerror investigation session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "session_id",
+    "incident_id",
+    "status",
+    "context_revision",
+    "events"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "investigation_session"},
+    "session_id": {"type": "string", "minLength": 1},
+    "incident_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "resolved", "closed"]},
+    "context_revision": {"type": "integer", "minimum": 0},
+    "started_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/event"}
+    }
+  },
+  "$defs": {
+    "dimension_id": {
+      "enum": [
+        "investigation.blast_radius",
+        "investigation.where",
+        "investigation.when",
+        "investigation.flow",
+        "investigation.client",
+        "investigation.change",
+        "investigation.dependency",
+        "investigation.data",
+        "investigation.reproducibility",
+        "investigation.impact"
+      ]
+    },
+    "event_base": {
+      "type": "object",
+      "required": ["id", "type", "recorded_at"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "type": {"type": "string", "minLength": 1},
+        "recorded_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "question_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "dimension", "question", "rationale", "status"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "question"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "dimension": {"$ref": "#/$defs/dimension_id"},
+            "question": {"type": "string", "minLength": 1},
+            "rationale": {"type": "string", "minLength": 1},
+            "status": {"enum": ["pending", "answered", "skipped"]}
+          }
+        }
+      ]
+    },
+    "answer_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "dimension", "answer", "source"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "answer"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "dimension": {"$ref": "#/$defs/dimension_id"},
+            "answer": {"type": "string", "minLength": 1},
+            "source": {"enum": ["human", "agent", "tool", "system"]},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      ]
+    },
+    "comparison_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "summary", "failing", "working", "differences"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "comparison"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "summary": {"type": "string", "minLength": 1},
+            "failing": {"type": "object", "additionalProperties": {"type": "string"}},
+            "working": {"type": "object", "additionalProperties": {"type": "string"}},
+            "differences": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1},
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+    "evidence_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "evidence_instance_id", "summary"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "evidence"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "evidence_instance_id": {"type": "string", "minLength": 1},
+            "summary": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "hypothesis_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "hypothesis", "action"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "hypothesis"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "hypothesis": {"type": "string", "minLength": 1},
+            "action": {"enum": ["considered", "supported", "contradicted", "rejected"]}
+          }
+        }
+      ]
+    },
+    "probe_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "probe", "action"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "probe"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "probe": {"type": "string", "minLength": 1},
+            "action": {"enum": ["recommended", "started", "finished", "blocked"]},
+            "result": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "verification_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "summary", "original_scope_verified"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "verification"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "summary": {"type": "string", "minLength": 1},
+            "original_scope_verified": {"type": "boolean"}
+          }
+        }
+      ]
+    },
+    "note_event": {
+      "allOf": [
+        {"$ref": "#/$defs/event_base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "recorded_at", "summary"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "type": {"const": "note"},
+            "recorded_at": {"type": "string", "format": "date-time"},
+            "summary": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "event": {
+      "oneOf": [
+        {"$ref": "#/$defs/question_event"},
+        {"$ref": "#/$defs/answer_event"},
+        {"$ref": "#/$defs/comparison_event"},
+        {"$ref": "#/$defs/evidence_event"},
+        {"$ref": "#/$defs/hypothesis_event"},
+        {"$ref": "#/$defs/probe_event"},
+        {"$ref": "#/$defs/verification_event"},
+        {"$ref": "#/$defs/note_event"}
+      ]
+    }
+  }
+}
