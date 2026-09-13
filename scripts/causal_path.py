@@ -9,7 +9,7 @@ from causal_projection import edge_view, load_edges, shortest_path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Find a directed path through Atlerror causal edges.")
+    parser = argparse.ArgumentParser(description="Find a directed path through Causcope causal edges.")
     parser.add_argument("source", help="Source concept ID")
     parser.add_argument("target", help="Target concept ID")
     args = parser.parse_args()

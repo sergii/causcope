@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/scoping-projection.schema.json",
-  "title": "Atlerror incident scoping projection",
+  "$id": "https://causcope.dev/schema/scoping-projection.schema.json",
+  "title": "Causcope incident scoping projection",
   "type": "object",
   "additionalProperties": false,
   "required": [

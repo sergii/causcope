@@ -23,7 +23,7 @@ SOCKET_TIMEOUT_SECONDS = float(os.environ.get("SOCKET_TIMEOUT_SECONDS", "20"))
 
 TARGET_IP = socket.gethostbyname(TARGET_HOST)
 TARGET = (TARGET_IP, TARGET_PORT)
-PATTERN = b"atlerror-n1.6-l2-checksum-retransmission-"
+PATTERN = b"causcope-n1.6-l2-checksum-retransmission-"
 PAYLOAD = (PATTERN * ((PAYLOAD_BYTES // len(PATTERN)) + 1))[:PAYLOAD_BYTES]
 PAYLOAD_DIGEST = hashlib.sha256(PAYLOAD).digest()
 

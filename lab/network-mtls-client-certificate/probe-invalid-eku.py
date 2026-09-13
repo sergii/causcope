@@ -8,7 +8,7 @@ import time
 
 TLS_SERVER = os.environ.get("TLS_SERVER", "tls")
 TLS_PORT = int(os.environ.get("TLS_PORT", "9443"))
-SERVER_NAME = os.environ.get("SERVER_NAME", "secure.atlerror.test")
+SERVER_NAME = os.environ.get("SERVER_NAME", "secure.causcope.test")
 CA_FILE = os.environ.get("CA_FILE", "/certs/ca.crt")
 CLIENT_CERT = os.environ.get("CLIENT_CERT", "/certs/client.crt")
 CLIENT_KEY = os.environ.get("CLIENT_KEY", "/certs/client.key")

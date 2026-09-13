@@ -26,13 +26,13 @@ The MCP adapter does not run causal ranking, interpret telemetry, or define anot
 `scripts/diagnosis_mcp_server.py` exposes two fixed resources:
 
 ```text
-atlerror://diagnosis/current
-atlerror://diagnosis/status
+causcope://diagnosis/current
+causcope://diagnosis/status
 ```
 
-`atlerror://diagnosis/current` returns the complete validated `diagnosis_snapshot` document as `application/json` text.
+`causcope://diagnosis/current` returns the complete validated `diagnosis_snapshot` document as `application/json` text.
 
-`atlerror://diagnosis/status` returns the same operational readiness projection used by the HTTP adapter, including snapshot availability, incident ID, evidence revision, freshness boundary, and diagnosis counts.
+`causcope://diagnosis/status` returns the same operational readiness projection used by the HTTP adapter, including snapshot availability, incident ID, evidence revision, freshness boundary, and diagnosis counts.
 
 Both resources are backed by `DiagnosisSnapshotReader`, so HTTP and MCP use the same schema validation, atomic-replacement detection, and snapshot semantics.
 
@@ -40,7 +40,7 @@ Both resources are backed by `DiagnosisSnapshotReader`, so HTTP and MCP use the 
 
 The current diagnosis is context, not an action.
 
-MCP resources are application-controlled data that a host can attach to model context. That matches the Atlerror boundary better than a tool call because reading the current diagnosis has no side effect and requires no model-selected action semantics.
+MCP resources are application-controlled data that a host can attach to model context. That matches the Causcope boundary better than a tool call because reading the current diagnosis has no side effect and requires no model-selected action semantics.
 
 The server therefore advertises only the `resources` capability. It exposes no tools, prompts, mutation methods, or remediation actions.
 
@@ -52,7 +52,7 @@ The client launches the server as a subprocess:
 
 ```bash
 python scripts/diagnosis_mcp_server.py \
-  --snapshot /tmp/atlerror-diagnosis.json
+  --snapshot /tmp/causcope-diagnosis.json
 ```
 
 Messages are newline-delimited UTF-8 JSON-RPC. The server writes only MCP JSON-RPC messages to stdout. Optional diagnostics use stderr.
@@ -114,7 +114,7 @@ This compatibility layer covers only the small resource server surface. It does 
 
 The current diagnosis resource remains discoverable even before the first snapshot exists. Discovery describes capability, not current readiness.
 
-Consumers can read `atlerror://diagnosis/status` to distinguish:
+Consumers can read `causcope://diagnosis/status` to distinguish:
 
 ```text
 waiting_for_snapshot

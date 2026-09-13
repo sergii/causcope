@@ -11,9 +11,9 @@ CLAIM_ID = "claim.database.serialization_failure.concurrent_serializable_update_
 DSN = (
     f"host={os.environ.get('DB_HOST', 'db')} "
     f"port={os.environ.get('DB_PORT', '5432')} "
-    f"user={os.environ.get('DB_USER', 'atlerror')} "
-    f"password={os.environ.get('DB_PASSWORD', 'atlerror')} "
-    f"dbname={os.environ.get('DB_NAME', 'atlerror')}"
+    f"user={os.environ.get('DB_USER', 'causcope')} "
+    f"password={os.environ.get('DB_PASSWORD', 'causcope')} "
+    f"dbname={os.environ.get('DB_NAME', 'causcope')}"
 )
 
 

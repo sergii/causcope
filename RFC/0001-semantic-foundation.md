@@ -6,13 +6,13 @@
 
 ## Summary
 
-Atlerror aims to become a canonical semantic layer for software troubleshooting that serves both human learning and machine/agent reasoning.
+Causcope aims to become a canonical semantic layer for software troubleshooting that serves both human learning and machine/agent reasoning.
 
 This RFC records the broader semantic model discussed at project inception. The initial implementation intentionally covers only a minimal subset. New concepts should be added incrementally through concrete vertical slices rather than by attempting to model the whole universe upfront.
 
 ## Product boundary
 
-Atlerror is not primarily an observability backend, incident-management SaaS, or LLM wrapper.
+Causcope is not primarily an observability backend, incident-management SaaS, or LLM wrapper.
 
 It is a semantic and reasoning layer above telemetry and diagnostic tools.
 
@@ -28,7 +28,7 @@ Audit systems answer questions such as:
 - What was authorized?
 - What was the provenance of an action?
 
-Atlerror aims to answer:
+Causcope aims to answer:
 
 - What could explain these observations?
 - What would each hypothesis predict?
@@ -154,7 +154,7 @@ A condition that contributes to an incident without necessarily being sufficient
 
 A causal factor that explains part of the failure mechanism.
 
-Atlerror MUST NOT assume every incident has exactly one root cause.
+Causcope MUST NOT assume every incident has exactly one root cause.
 
 ### NecessaryCondition
 
@@ -311,7 +311,7 @@ The vocabulary is expected to evolve, but the following relationships are import
 
 ## Falsification as a first-class requirement
 
-Atlerror should not only encode evidence that supports a hypothesis.
+Causcope should not only encode evidence that supports a hypothesis.
 
 For each important hypothesis, the model should make it possible to ask:
 
@@ -393,7 +393,7 @@ Read-only probes should be easy to automate. Production-changing actions should 
 
 As systems gain non-human actors, troubleshooting and auditability increasingly overlap.
 
-Atlerror should be able to reason over chains such as:
+Causcope should be able to reason over chains such as:
 
 ```text
 human intent

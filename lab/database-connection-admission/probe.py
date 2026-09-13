@@ -8,11 +8,11 @@ from psycopg import sql
 
 DB_HOST = os.environ.get("DB_HOST", "db")
 DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_NAME = os.environ.get("DB_NAME", "atlerror")
-ADMIN_USER = os.environ.get("ADMIN_USER", "atlerror_admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "atlerror")
-APP_USER = os.environ.get("APP_USER", "atlerror_app")
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "atlerror_app")
+DB_NAME = os.environ.get("DB_NAME", "causcope")
+ADMIN_USER = os.environ.get("ADMIN_USER", "causcope_admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "causcope")
+APP_USER = os.environ.get("APP_USER", "causcope_app")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "causcope_app")
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "20"))
 
 EXPERIMENT_ID = "experiment.database.connection_admission_exhaustion.python_postgres"

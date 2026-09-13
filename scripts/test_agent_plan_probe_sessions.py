@@ -54,7 +54,7 @@ class AgentPlanProbeSessionTest(unittest.TestCase):
         return {
             PROTOCOL_VERSION_META_KEY: MODERN_PROTOCOL_VERSION,
             CLIENT_CAPABILITIES_META_KEY: {},
-            CLIENT_INFO_META_KEY: {"name": "atlerror-session-plan-test", "version": "1.0.0"},
+            CLIENT_INFO_META_KEY: {"name": "causcope-session-plan-test", "version": "1.0.0"},
         }
 
     def modern_request(

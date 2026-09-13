@@ -6,7 +6,7 @@ import redis
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
-GROUP = "atlerror-consumers"
+GROUP = "causcope-consumers"
 CONSUMER = "consumer-1"
 
 EXPERIMENT_ID = "experiment.messaging.duplicate_publication.redis_streams_python"
@@ -86,7 +86,7 @@ def idempotent_effect(event_id, effect_key):
 
 
 # Baseline: one business event is published once, delivered once, and applies one effect.
-baseline_stream = "atlerror:duplicate-publication:baseline"
+baseline_stream = "causcope:duplicate-publication:baseline"
 baseline_effect_key = "effect:duplicate-publication:baseline"
 r.delete(baseline_effect_key)
 create_stream(baseline_stream)
@@ -99,7 +99,7 @@ baseline_ack_count = r.xack(baseline_stream, GROUP, baseline_entry_id)
 baseline_pending_after_ack = pending_snapshot(baseline_stream)
 
 # Intervention: publish the same business event twice as two distinct broker entries.
-intervention_stream = "atlerror:duplicate-publication:intervention"
+intervention_stream = "causcope:duplicate-publication:intervention"
 intervention_effect_key = "effect:duplicate-publication:intervention"
 r.delete(intervention_effect_key)
 create_stream(intervention_stream)
@@ -119,7 +119,7 @@ intervention_ack_count = r.xack(
 intervention_pending_after_ack = pending_snapshot(intervention_stream)
 
 # Recovery: keep the duplicate publications, but deduplicate by stable business event identity.
-recovery_stream = "atlerror:duplicate-publication:recovery"
+recovery_stream = "causcope:duplicate-publication:recovery"
 recovery_effect_key = "effect:duplicate-publication:recovery"
 recovery_event_id = "recovery-business-event"
 r.delete(recovery_effect_key, f"processed:{recovery_event_id}")

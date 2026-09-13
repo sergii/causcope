@@ -7,8 +7,8 @@ import time
 
 TLS_SERVER = os.environ.get("TLS_SERVER", "tls")
 TLS_PORT = int(os.environ.get("TLS_PORT", "9443"))
-TRUSTED_NAME = os.environ.get("TRUSTED_NAME", "trusted.atlerror.test")
-UNTRUSTED_NAME = os.environ.get("UNTRUSTED_NAME", "untrusted.atlerror.test")
+TRUSTED_NAME = os.environ.get("TRUSTED_NAME", "trusted.causcope.test")
+UNTRUSTED_NAME = os.environ.get("UNTRUSTED_NAME", "untrusted.causcope.test")
 CA_FILE = os.environ.get("CA_FILE", "/certs/ca.crt")
 SOCKET_TIMEOUT = float(os.environ.get("SOCKET_TIMEOUT", "1.0"))
 

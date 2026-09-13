@@ -32,7 +32,7 @@ def tc(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def probe_once(phase: str, sequence: int) -> dict[str, object]:
-    payload = f"atlerror:{phase}:{sequence}".encode()
+    payload = f"causcope:{phase}:{sequence}".encode()
     started = time.monotonic()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(SOCKET_TIMEOUT_SECONDS)

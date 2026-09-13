@@ -118,7 +118,7 @@ class OpenTelemetryTraceAdapterTest(unittest.TestCase):
         mutated = copy.deepcopy(payload)
         attributes = mutated["resourceSpans"][0]["scopeSpans"][0]["spans"][0]["attributes"]
         for attribute in attributes:
-            if attribute["key"] == "atlerror.boundary":
+            if attribute["key"] == "causcope.boundary":
                 attribute["value"]["stringValue"] = "boundary.unknown.path"
         with self.assertRaisesRegex(ValueError, "unknown boundary"):
             build_runtime_evidence(

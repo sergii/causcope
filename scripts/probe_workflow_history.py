@@ -491,7 +491,7 @@ def build_probe_workflow_history(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Project persisted Atlerror probe sessions into read-only incident workflow history."
+        description="Project persisted Causcope probe sessions into read-only incident workflow history."
     )
     parser.add_argument("--session-dir", type=Path, required=True)
     parser.add_argument("--runtime-evidence", type=Path, required=True)

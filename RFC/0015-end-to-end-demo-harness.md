@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Summary
 
-Atlerror now has enough independent semantic and transport layers to demonstrate the complete read-only troubleshooting loop in one reproducible scenario.
+Causcope now has enough independent semantic and transport layers to demonstrate the complete read-only troubleshooting loop in one reproducible scenario.
 
 This RFC defines a deterministic checkout-to-Stripe demo harness that exercises existing adapters, multi-source runtime evidence composition, causal diagnosis, recommended next-probe ranking, persisted diagnosis snapshots, and both read-only transport projections.
 
@@ -12,7 +12,7 @@ The harness is intentionally orchestration, not a second implementation of any s
 
 ## Motivation
 
-Before this slice, every individual layer was executable and tested, but a person evaluating Atlerror still had to assemble the following manually:
+Before this slice, every individual layer was executable and tested, but a person evaluating Causcope still had to assemble the following manually:
 
 ```text
 Prometheus fixture
@@ -58,7 +58,7 @@ python scripts/demo_checkout_stripe.py
 The default output directory is:
 
 ```text
-/tmp/atlerror-demo
+/tmp/causcope-demo
 ```
 
 The harness uses the existing checkout-to-Stripe fixtures and a fixed default `as_of` time so results are reproducible.
@@ -138,8 +138,8 @@ The returned diagnosis must exactly equal the persisted diagnosis snapshot and s
 The harness instantiates the existing stdio MCP server implementation in-process and performs modern `resources/read` calls for:
 
 ```text
-atlerror://diagnosis/current
-atlerror://diagnosis/status
+causcope://diagnosis/current
+causcope://diagnosis/status
 ```
 
 The current diagnosis must exactly equal the persisted diagnosis snapshot and status must be `ready`.
@@ -183,7 +183,7 @@ Examples include:
 - HTTP read-back mismatch
 - MCP read-back mismatch
 
-This keeps the demo aligned with normal Atlerror fail-closed behavior.
+This keeps the demo aligned with normal Causcope fail-closed behavior.
 
 ## CLI options
 
@@ -247,7 +247,7 @@ Those can be evaluated after the read-only semantic loop is demonstrably complet
 
 ## Result
 
-After this RFC, Atlerror has a single-command, multi-source, end-to-end read-only demo that preserves the project's architectural rule:
+After this RFC, Causcope has a single-command, multi-source, end-to-end read-only demo that preserves the project's architectural rule:
 
 ```text
 one semantic source -> multiple transparent projections

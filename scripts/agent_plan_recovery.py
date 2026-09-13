@@ -10,7 +10,7 @@ from agent_plan import STATES, build_agent_plan, validate_agent_plan
 
 RECOVERY_STATE = "workflow_recovery_required"
 RECOVERY_REASON = "partial_probe_workflow_state"
-RECOVERY_OPERATION = "atlerror.probe.reconcile_partial"
+RECOVERY_OPERATION = "causcope.probe.reconcile_partial"
 RECOVERY_FALLBACK = "reconcile_partial_workflow"
 FINGERPRINT_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SESSION_ID_PATTERN = re.compile(r"^probe-session\.[0-9a-f]{16}$")

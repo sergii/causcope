@@ -27,7 +27,7 @@ Example:
 
 ```bash
 python scripts/diagnosis_http_api.py \
-  --snapshot /tmp/atlerror-diagnosis.json
+  --snapshot /tmp/causcope-diagnosis.json
 ```
 
 The default listener is `127.0.0.1:4320`. Loopback is deliberate because this is an integration boundary, not an internet-facing service.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/causal-edge.schema.json",
-  "title": "Atlerror Causal Edge",
+  "$id": "https://causcope.dev/schema/causal-edge.schema.json",
+  "title": "Causcope Causal Edge",
   "type": "object",
   "required": ["id", "kind", "source", "target", "relation", "strength", "explanation"],
   "properties": {

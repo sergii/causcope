@@ -20,7 +20,7 @@ from probe_workflow_reconciliation import (
     scan_partial_probe_workflows,
 )
 
-RECONCILE_PARTIAL_TOOL_NAME = "atlerror.probe.reconcile_partial"
+RECONCILE_PARTIAL_TOOL_NAME = "causcope.probe.reconcile_partial"
 WORKFLOW_RECOVERY_CLAIM = "workflow_recovery"
 FINGERPRINT_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SESSION_ID_PATTERN = re.compile(r"^probe-session\.[0-9a-f]{16}$")

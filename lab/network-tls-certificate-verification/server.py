@@ -3,8 +3,8 @@ import ssl
 
 HOST = "0.0.0.0"
 PORT = 9443
-TRUSTED_NAME = "trusted.atlerror.test"
-UNTRUSTED_NAME = "untrusted.atlerror.test"
+TRUSTED_NAME = "trusted.causcope.test"
+UNTRUSTED_NAME = "untrusted.causcope.test"
 
 
 def server_context(certfile, keyfile):

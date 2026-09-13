@@ -91,7 +91,7 @@ def compose_runtime_evidence(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Compose multiple Atlerror runtime evidence bundles for one incident without "
+            "Compose multiple Causcope runtime evidence bundles for one incident without "
             "changing instance provenance or semantic scope."
         )
     )

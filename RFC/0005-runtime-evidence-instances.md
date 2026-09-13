@@ -4,7 +4,7 @@ Status: accepted
 
 ## Summary
 
-Atlerror's canonical knowledge describes classes of symptoms, hypotheses, observations, probes, and causal relationships. Diagnostic reasoning also needs incident-specific facts: what was actually observed, when it was observed, where it applies, and where the evidence came from.
+Causcope's canonical knowledge describes classes of symptoms, hypotheses, observations, probes, and causal relationships. Diagnostic reasoning also needs incident-specific facts: what was actually observed, when it was observed, where it applies, and where the evidence came from.
 
 This RFC introduces runtime evidence instances as a separate layer over the static semantic graph.
 
@@ -52,7 +52,7 @@ The initial state vocabulary is deliberately small:
 - `observed` means the referenced observation is currently present according to the evidence instance
 - `absent` means it was explicitly checked and is currently absent or normal according to the evidence instance
 
-Absence is evidence, not missing data. If no instance exists for an observation, Atlerror treats its runtime state as unknown.
+Absence is evidence, not missing data. If no instance exists for an observation, Causcope treats its runtime state as unknown.
 
 ## Time and freshness
 

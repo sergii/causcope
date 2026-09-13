@@ -1,8 +1,8 @@
 require "json"
 
 WINDOW_SECONDS = Float(ENV.fetch("WINDOW_SECONDS", "1.5"))
-TARGET = "/tmp/atlerror-kernel-work-target"
-File.write(TARGET, "atlerror\n")
+TARGET = "/tmp/causcope-kernel-work-target"
+File.write(TARGET, "causcope\n")
 
 
 def measure_phase(duration)

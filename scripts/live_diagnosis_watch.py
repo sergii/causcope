@@ -114,14 +114,14 @@ class DiagnosisWatcher:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Watch an Atlerror OTLP receiver evidence endpoint and automatically refresh "
+            "Watch an Causcope OTLP receiver evidence endpoint and automatically refresh "
             "transparent causal diagnosis snapshots."
         )
     )
     parser.add_argument(
         "--receiver-url",
         default=DEFAULT_RECEIVER_URL,
-        help=f"Atlerror receiver base URL, default {DEFAULT_RECEIVER_URL}",
+        help=f"Causcope receiver base URL, default {DEFAULT_RECEIVER_URL}",
     )
     parser.add_argument(
         "--snapshot",

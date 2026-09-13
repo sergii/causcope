@@ -1,6 +1,6 @@
-# Atlerror
+# Causcope
 
-Atlerror is an open, machine-readable semantic layer for software troubleshooting.
+Causcope is an open, machine-readable semantic layer for software troubleshooting.
 
 It is designed for two consumers at the same time:
 
@@ -11,7 +11,7 @@ The project starts from a small executable vertical slice around **high CPU util
 
 ## Core idea
 
-Atlerror models a diagnostic loop explicitly:
+Causcope models a diagnostic loop explicitly:
 
 ```text
 symptom
@@ -31,7 +31,7 @@ The long-term goal is to make this loop useful both as documentation and as a de
 ## Design principles
 
 - **One semantic source, multiple projections.** Human documentation, agent context, CLI output, APIs, MCP resources, and websites should derive from the same canonical knowledge.
-- **Knowledge first. Tools second. AI third.** Atlerror should not depend on Datadog, OpenTelemetry, Kubernetes, Ruby, or an LLM. Those are adapters and consumers.
+- **Knowledge first. Tools second. AI third.** Causcope should not depend on Datadog, OpenTelemetry, Kubernetes, Ruby, or an LLM. Those are adapters and consumers.
 - **Stable machine-addressable IDs.** Product naming may change; semantic IDs should not.
 - **Falsification matters.** A useful hypothesis defines what evidence would support it and what evidence would make it less likely.
 - **Transport agnostic.** CLI, embedded libraries, MCP, HTTP, gRPC, or Unix domain sockets are integration choices above the semantic core.
@@ -176,7 +176,7 @@ python scripts/prometheus_adapter.py \
   examples/adapters/prometheus/network-tcp.yaml \
   --incident-id incident.network.production \
   --base-url http://localhost:9090 \
-  > /tmp/atlerror-evidence.yaml
+  > /tmp/causcope-evidence.yaml
 ```
 
 The generated bundle can immediately feed scope-aware causal ranking:
@@ -184,7 +184,7 @@ The generated bundle can immediately feed scope-aware causal ranking:
 ```bash
 python scripts/causal_ranking.py \
   observation.network.tcp_retransmissions \
-  --evidence /tmp/atlerror-evidence.yaml \
+  --evidence /tmp/causcope-evidence.yaml \
   --scope-boundary boundary.application.external_dependency \
   --pretty
 ```
@@ -218,7 +218,7 @@ python scripts/opentelemetry_trace_adapter.py \
 
 The example emits `observation.dependency.latency` and `observation.network.connection_timeout` for `boundary.application.external_dependency`, preserving `service=checkout-api`, `dependency=stripe`, trace ID, span ID, timing, and source provenance.
 
-Dynamic semantic boundary and entity IDs read from telemetry are validated before evidence is emitted. OpenTelemetry span names, status codes, deployment attributes, and latency thresholds remain adapter policy rather than canonical Atlerror knowledge. The mapping contract and rationale are documented in `schema/opentelemetry-trace-adapter.schema.json` and [RFC 0007](RFC/0007-opentelemetry-trace-adapter.md).
+Dynamic semantic boundary and entity IDs read from telemetry are validated before evidence is emitted. OpenTelemetry span names, status codes, deployment attributes, and latency thresholds remain adapter policy rather than canonical Causcope knowledge. The mapping contract and rationale are documented in `schema/opentelemetry-trace-adapter.schema.json` and [RFC 0007](RFC/0007-opentelemetry-trace-adapter.md).
 
 ## Live OTLP/HTTP receiver
 
@@ -228,7 +228,7 @@ Run an incident-scoped live receiver on the standard OTLP/HTTP port:
 python scripts/otlp_http_receiver.py \
   examples/adapters/opentelemetry/external-dependency.yaml \
   --incident-id incident.checkout.live \
-  --snapshot /tmp/atlerror-runtime-evidence.json
+  --snapshot /tmp/causcope-runtime-evidence.json
 ```
 
 The receiver binds to `127.0.0.1:4318` by default and accepts JSON trace exports at `POST /v1/traces`. It also exposes `GET /health`, `GET /status`, and `GET /evidence`. Identity and gzip request bodies are supported; binary protobuf is intentionally rejected in this first slice.
@@ -237,14 +237,14 @@ A Collector can send JSON OTLP to the receiver:
 
 ```yaml
 exporters:
-  otlp_http/atlerror:
+  otlp_http/causcope:
     endpoint: http://127.0.0.1:4318
     encoding: json
 
 service:
   pipelines:
     traces:
-      exporters: [otlp_http/atlerror]
+      exporters: [otlp_http/causcope]
 ```
 
 Live traces repeat continuously, so the receiver does not retain every span-derived state. It keeps the latest evidence instance for each `(observation, exact scope)` pair. Exact replays are deduplicated, older out-of-order spans cannot roll state backward, and different dependency scopes stay independent. `/status` exposes the insert, replacement, duplicate, and out-of-order counters.
@@ -260,7 +260,7 @@ Start the receiver as above, then run:
 ```bash
 python scripts/live_diagnosis_watch.py \
   --receiver-url http://127.0.0.1:4318 \
-  --snapshot /tmp/atlerror-diagnosis.json \
+  --snapshot /tmp/causcope-diagnosis.json \
   --verbose
 ```
 
@@ -282,7 +282,7 @@ The diagnosis snapshot can be served directly to local agents, IDEs, and UIs thr
 
 ```bash
 python scripts/diagnosis_http_api.py \
-  --snapshot /tmp/atlerror-diagnosis.json
+  --snapshot /tmp/causcope-diagnosis.json
 ```
 
 The API binds to `127.0.0.1:4320` by default and exposes `GET /health`, `GET /status`, and `GET /diagnosis`. It validates the snapshot against the existing diagnosis schema before serving it, so HTTP does not introduce another diagnosis contract.
@@ -299,17 +299,17 @@ MCP-aware agents and IDEs can consume the same diagnosis snapshot through a loca
 
 ```bash
 python scripts/diagnosis_mcp_server.py \
-  --snapshot /tmp/atlerror-diagnosis.json
+  --snapshot /tmp/causcope-diagnosis.json
 ```
 
 The server exposes two resources:
 
 ```text
-atlerror://diagnosis/current
-atlerror://diagnosis/status
+causcope://diagnosis/current
+causcope://diagnosis/status
 ```
 
-`atlerror://diagnosis/current` returns the complete validated diagnosis snapshot. `atlerror://diagnosis/status` returns readiness, incident revision, freshness, and compact diagnosis counts. Both reuse the same `DiagnosisSnapshotReader` as the HTTP API, so MCP is another transport projection rather than another reasoning path.
+`causcope://diagnosis/current` returns the complete validated diagnosis snapshot. `causcope://diagnosis/status` returns readiness, incident revision, freshness, and compact diagnosis counts. Both reuse the same `DiagnosisSnapshotReader` as the HTTP API, so MCP is another transport projection rather than another reasoning path.
 
 The primary wire target is MCP `2026-07-28`: the server supports stateless per-request metadata, `server/discover`, required `resultType` discrimination, server identity metadata, and cache hints. The fixed resource catalog is cacheable for 60 seconds, while incident-specific resource reads use zero TTL and private cache scope. The adapter also supports the basic resource subset of legacy handshake revisions through `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`.
 
@@ -319,9 +319,9 @@ For MCP hosts that use command/argument configuration, the process can be regist
 {
   "command": "python",
   "args": [
-    "/path/to/atlerror/scripts/diagnosis_mcp_server.py",
+    "/path/to/causcope/scripts/diagnosis_mcp_server.py",
     "--snapshot",
-    "/tmp/atlerror-diagnosis.json"
+    "/tmp/causcope-diagnosis.json"
   ]
 }
 ```

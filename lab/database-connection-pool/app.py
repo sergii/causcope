@@ -10,9 +10,9 @@ from psycopg_pool import ConnectionPool
 
 DB_HOST = os.environ.get("DB_HOST", "db")
 DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_USER = os.environ.get("DB_USER", "atlerror")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "atlerror")
-DB_NAME = os.environ.get("DB_NAME", "atlerror")
+DB_USER = os.environ.get("DB_USER", "causcope")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "causcope")
+DB_NAME = os.environ.get("DB_NAME", "causcope")
 APP_PORT = int(os.environ.get("APP_PORT", "8080"))
 POOL_SIZE = int(os.environ.get("POOL_SIZE", "1"))
 

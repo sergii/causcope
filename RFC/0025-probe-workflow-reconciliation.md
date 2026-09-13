@@ -34,11 +34,11 @@ or, because of manual damage or older tooling, only:
 probe-session.<id>.binding.json
 ```
 
-The first case is especially important. The session contains a real captured baseline, but without the binding Atlerror cannot know which diagnosis target authorized that baseline. Silently ignoring the file could allow a second probe to start while incomplete workflow state still exists.
+The first case is especially important. The session contains a real captured baseline, but without the binding Causcope cannot know which diagnosis target authorized that baseline. Silently ignoring the file could allow a second probe to start while incomplete workflow state still exists.
 
 ## Decision
 
-Atlerror now treats a missing member of the persisted session/binding pair as explicit partial workflow state.
+Causcope now treats a missing member of the persisted session/binding pair as explicit partial workflow state.
 
 The two recognized issue kinds are:
 
@@ -59,7 +59,7 @@ A separate local command exposes the issue set:
 
 ```bash
 python scripts/probe_workflow_reconciliation.py status \
-  --session-dir /tmp/atlerror-demo/probe-sessions \
+  --session-dir /tmp/causcope-demo/probe-sessions \
   --pretty
 ```
 
@@ -67,12 +67,12 @@ A partial state can be discarded explicitly:
 
 ```bash
 python scripts/probe_workflow_reconciliation.py discard \
-  --session-dir /tmp/atlerror-demo/probe-sessions \
+  --session-dir /tmp/causcope-demo/probe-sessions \
   --session-id probe-session.0123456789abcdef \
   --pretty
 ```
 
-Discarding does not delete the surviving session or binding file. Instead Atlerror writes:
+Discarding does not delete the surviving session or binding file. Instead Causcope writes:
 
 ```text
 probe-session.<id>.reconciled.json
@@ -163,9 +163,9 @@ No schema change is required for runtime evidence, diagnosis snapshots, causal r
 
 ## Failure behavior
 
-If partial state is unresolved, Atlerror raises an explicit error instructing the operator to inspect reconciliation status and discard the partial state before continuing.
+If partial state is unresolved, Causcope raises an explicit error instructing the operator to inspect reconciliation status and discard the partial state before continuing.
 
-Atlerror does not guess a missing target, reconstruct a missing baseline, fabricate a binding, or infer a probe result.
+Causcope does not guess a missing target, reconstruct a missing baseline, fabricate a binding, or infer a probe result.
 
 ## Tests
 

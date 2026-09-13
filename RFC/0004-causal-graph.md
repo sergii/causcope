@@ -4,7 +4,7 @@ Status: accepted
 
 ## Summary
 
-Atlerror currently models diagnostic relevance, predictions, evidence, falsification, and non-causal relationships. Those are not enough to express directional mechanism chains without relying on prose. This RFC introduces first-class causal edges as separate semantic records.
+Causcope currently models diagnostic relevance, predictions, evidence, falsification, and non-causal relationships. Those are not enough to express directional mechanism chains without relying on prose. This RFC introduces first-class causal edges as separate semantic records.
 
 The key distinction is:
 
@@ -92,7 +92,7 @@ The semantic validator must ensure:
 
 ## Epistemic versus causal graph
 
-Atlerror intentionally keeps two graph layers.
+Causcope intentionally keeps two graph layers.
 
 ### Epistemic / diagnostic graph
 

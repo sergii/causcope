@@ -224,7 +224,7 @@ class ProbeWorkflowJournalTest(unittest.TestCase):
                 if issue["session_id"] == orphan_id
             )
             reconciled = controller.call(
-                "atlerror.probe.reconcile_partial",
+                "causcope.probe.reconcile_partial",
                 {"sessionId": orphan_id, "fingerprint": issue["fingerprint"]},
             )
             self.assertFalse(reconciled["journal_event"]["already_recorded"])

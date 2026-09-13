@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/opentelemetry-trace-adapter.schema.json",
-  "title": "Atlerror OpenTelemetry trace adapter",
+  "$id": "https://causcope.dev/schema/opentelemetry-trace-adapter.schema.json",
+  "title": "Causcope OpenTelemetry trace adapter",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "kind", "id", "mappings"],

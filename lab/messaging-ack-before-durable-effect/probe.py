@@ -6,7 +6,7 @@ import redis
 
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
-GROUP = "atlerror-consumers"
+GROUP = "causcope-consumers"
 CONSUMER_ONE = "consumer-1"
 CONSUMER_TWO = "consumer-2"
 
@@ -81,7 +81,7 @@ def idempotent_effect(event_id, effect_key):
 
 
 # Baseline: make the business effect durable, then acknowledge the delivery.
-baseline_stream = "atlerror:q22:baseline"
+baseline_stream = "causcope:q22:baseline"
 baseline_effect_key = "effect:q22:baseline"
 r.delete(baseline_effect_key, "processed:q22-baseline-event")
 create_stream(baseline_stream)
@@ -93,7 +93,7 @@ baseline_pending = pending_snapshot(baseline_stream)
 baseline_effect_count = int(r.get(baseline_effect_key) or 0)
 
 # Intervention: acknowledge first, then represent a crash/omission before the effect becomes durable.
-intervention_stream = "atlerror:q22:intervention"
+intervention_stream = "causcope:q22:intervention"
 intervention_effect_key = "effect:q22:intervention"
 r.delete(intervention_effect_key, "processed:q22-intervention-event")
 create_stream(intervention_stream)
@@ -110,7 +110,7 @@ intervention_stream_entry = r.xrange(intervention_stream, min=intervention_entry
 
 # Recovery: make an idempotent effect durable before ACK. Simulate a crash before ACK,
 # accept redelivery, suppress the duplicate effect, then acknowledge.
-recovery_stream = "atlerror:q22:recovery"
+recovery_stream = "causcope:q22:recovery"
 recovery_effect_key = "effect:q22:recovery"
 r.delete(recovery_effect_key, "processed:q22-recovery-event")
 create_stream(recovery_stream)

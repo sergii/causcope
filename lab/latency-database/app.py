@@ -7,9 +7,9 @@ from urllib.parse import parse_qs, urlparse
 
 DB_HOST = os.environ.get("DB_HOST", "db")
 DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_USER = os.environ.get("DB_USER", "atlerror")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "atlerror")
-DB_NAME = os.environ.get("DB_NAME", "atlerror")
+DB_USER = os.environ.get("DB_USER", "causcope")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "causcope")
+DB_NAME = os.environ.get("DB_NAME", "causcope")
 
 
 def run_query(delay_ms: float) -> float:

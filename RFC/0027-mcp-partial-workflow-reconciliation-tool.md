@@ -4,10 +4,10 @@ Status: Accepted
 
 ## Summary
 
-Atlerror exposes one narrowly scoped MCP mutation for recovering from partial persisted probe workflow state:
+Causcope exposes one narrowly scoped MCP mutation for recovering from partial persisted probe workflow state:
 
 ```text
-atlerror.probe.reconcile_partial
+causcope.probe.reconcile_partial
 ```
 
 The tool is available only when the existing opt-in MCP probe-tool boundary is enabled. It can mark one current `orphan_session` or `orphan_binding` state as explicitly discarded, using the exact fingerprint published by the current agent plan.
@@ -18,14 +18,14 @@ This closes the recovery loop introduced by RFC 0025 and RFC 0026:
 partial persisted workflow
   -> workflow_recovery_required
   -> exact session + fingerprint
-  -> atlerror.probe.reconcile_partial
+  -> causcope.probe.reconcile_partial
   -> reconciliation marker
   -> normal agent plan resumes
 ```
 
 ## Motivation
 
-Before this RFC, Atlerror could detect partial workflow state and project it into `atlerror://diagnosis/agent-plan`, but recovery still required an external CLI invocation.
+Before this RFC, Causcope could detect partial workflow state and project it into `causcope://diagnosis/agent-plan`, but recovery still required an external CLI invocation.
 
 That left an agent-native workflow incomplete. An MCP client could understand that recovery was required, but it could not complete the recovery through the same explicitly authorized transport.
 
@@ -65,7 +65,7 @@ reason = partial_probe_workflow_state
 and now also exposes:
 
 ```text
-operation = atlerror.probe.reconcile_partial
+operation = causcope.probe.reconcile_partial
 arguments = { sessionId, fingerprint }
 ```
 
@@ -125,7 +125,7 @@ identity = { session_id }
 
 The claim uses the same POSIX advisory locking layer as active probe workflow operations.
 
-Two cooperating Atlerror processes cannot reconcile the same session concurrently.
+Two cooperating Causcope processes cannot reconcile the same session concurrently.
 
 The reconciliation marker itself remains retry-safe.
 
@@ -164,10 +164,10 @@ Its only mutation is the existing reconciliation marker defined by RFC 0025.
 The tool is included in the existing opt-in tool catalog alongside:
 
 ```text
-atlerror.probe.begin_recommended
-atlerror.probe.finish
-atlerror.probe.abandon
-atlerror.probe.reconcile_partial
+causcope.probe.begin_recommended
+causcope.probe.finish
+causcope.probe.abandon
+causcope.probe.reconcile_partial
 ```
 
 No additional MCP capability family is introduced.

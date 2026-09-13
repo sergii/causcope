@@ -198,7 +198,7 @@ def _evaluate_cpu_utilization(
         "note": (
             "This built-in executor measures aggregate Linux host CPU utilization from /proc/stat. "
             f"The {threshold_pct:g}% observed threshold is executor policy, not a universal "
-            "Atlerror ontology threshold. Preserve host scope when interpreting the result."
+            "Causcope ontology threshold. Preserve host scope when interpreting the result."
         ),
     }
 

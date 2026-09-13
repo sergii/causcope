@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Summary
 
-Atlerror already separates two questions:
+Causcope already separates two questions:
 
 1. Which semantic probe best discriminates the current causal candidates?
 2. Can this host actually execute that probe through a registered safe executor?
@@ -133,7 +133,7 @@ executor: null
 source: null
 ```
 
-A probe can therefore remain the best semantic next step even when Atlerror cannot execute it locally.
+A probe can therefore remain the best semantic next step even when Causcope cannot execute it locally.
 
 ### No semantic next probe
 
@@ -159,7 +159,7 @@ python scripts/probe_execution.py capabilities --pretty
 and by the read-only MCP resource:
 
 ```text
-atlerror://probe-execution/capabilities
+causcope://probe-execution/capabilities
 ```
 
 No second capability model is introduced.
@@ -174,7 +174,7 @@ Therefore existing read-only transports expose it automatically:
 
 ```text
 GET /diagnosis
-atlerror://diagnosis/current
+causcope://diagnosis/current
 ```
 
 Neither HTTP nor MCP recomputes executor availability or ranking.

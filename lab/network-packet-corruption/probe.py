@@ -60,7 +60,7 @@ def parse_drop_count(qdisc: str) -> int:
 
 
 def payload_for(phase: str, sequence: int) -> bytes:
-    header = f"atlerror:{phase}:{sequence}:".encode()
+    header = f"causcope:{phase}:{sequence}:".encode()
     body_length = max(0, PAYLOAD_BYTES - len(header))
     body = bytes((sequence * 17 + offset) % 251 for offset in range(body_length))
     return header + body

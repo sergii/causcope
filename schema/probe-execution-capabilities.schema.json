@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/probe-execution-capabilities.schema.json",
-  "title": "Atlerror probe execution capabilities",
+  "$id": "https://causcope.dev/schema/probe-execution-capabilities.schema.json",
+  "title": "Causcope probe execution capabilities",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "kind", "platform", "executors"],

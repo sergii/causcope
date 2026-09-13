@@ -230,7 +230,7 @@ class ReceiverState:
 
 def make_handler(state: ReceiverState) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "AtlerrorOTLP/0.1"
+        server_version = "CauscopeOTLP/0.1"
 
         def log_message(self, format: str, *args: Any) -> None:
             if state.verbose:
@@ -341,7 +341,7 @@ def make_handler(state: ReceiverState) -> type[BaseHTTPRequestHandler]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Receive OTLP/HTTP JSON traces and expose the latest Atlerror runtime evidence "
+            "Receive OTLP/HTTP JSON traces and expose the latest Causcope runtime evidence "
             "per semantic observation and exact scope."
         )
     )
@@ -400,7 +400,7 @@ def main(root: Path = ROOT) -> int:
 
     host, port = server.server_address[:2]
     print(
-        f"Atlerror OTLP receiver listening on http://{host}:{port}/v1/traces "
+        f"Causcope OTLP receiver listening on http://{host}:{port}/v1/traces "
         f"for incident {args.incident_id}",
         file=sys.stderr,
     )

@@ -356,7 +356,7 @@ def load_payload(path: Path) -> dict[str, Any]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Translate OTLP/HTTP JSON trace payloads into Atlerror runtime evidence.")
+    parser = argparse.ArgumentParser(description="Translate OTLP/HTTP JSON trace payloads into Causcope runtime evidence.")
     parser.add_argument("adapter", type=Path, help="OpenTelemetry trace adapter mapping YAML")
     parser.add_argument("payload", type=Path, help="OTLP/HTTP JSON trace payload")
     parser.add_argument("--incident-id", required=True, help="Runtime evidence incident ID")

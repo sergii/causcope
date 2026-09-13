@@ -65,7 +65,7 @@ class DiagnosisMcpServerTest(unittest.TestCase):
         return {
             PROTOCOL_VERSION_META_KEY: version,
             CLIENT_CAPABILITIES_META_KEY: {},
-            CLIENT_INFO_META_KEY: {"name": "atlerror-test", "version": "1.0.0"},
+            CLIENT_INFO_META_KEY: {"name": "causcope-test", "version": "1.0.0"},
         }
 
     def request(
@@ -105,7 +105,7 @@ class DiagnosisMcpServerTest(unittest.TestCase):
             self.assertEqual(60_000, discovered["ttlMs"])
             self.assertEqual("public", discovered["cacheScope"])
             self.assertEqual(
-                "atlerror-diagnosis",
+                "causcope-diagnosis",
                 discovered["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
             )
 
@@ -170,7 +170,7 @@ class DiagnosisMcpServerTest(unittest.TestCase):
                 server,
                 2,
                 "resources/read",
-                {"uri": "atlerror://diagnosis/unknown"},
+                {"uri": "causcope://diagnosis/unknown"},
             )
             self.assertEqual(INVALID_PARAMS, unknown["error"]["code"])
 
@@ -250,7 +250,7 @@ class DiagnosisMcpServerTest(unittest.TestCase):
                 server,
                 4,
                 "resources/read",
-                {"uri": "atlerror://diagnosis/unknown"},
+                {"uri": "causcope://diagnosis/unknown"},
             )
             self.assertEqual(LEGACY_RESOURCE_NOT_FOUND, missing["error"]["code"])
 

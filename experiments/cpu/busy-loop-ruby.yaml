@@ -7,7 +7,7 @@ claims:
 runner:
   type: docker
   build_context: lab/cpu-busy-loop
-  image: atlerror-cpu-busy-loop
+  image: causcope-cpu-busy-loop
   docker_args:
     - --cpus=1
     - --memory=128m

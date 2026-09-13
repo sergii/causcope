@@ -2,11 +2,11 @@ services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: atlerror
-      POSTGRES_PASSWORD: atlerror
-      POSTGRES_DB: atlerror
+      POSTGRES_USER: causcope
+      POSTGRES_PASSWORD: causcope
+      POSTGRES_DB: causcope
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U atlerror -d atlerror"]
+      test: ["CMD-SHELL", "pg_isready -U causcope -d causcope"]
       interval: 1s
       timeout: 1s
       retries: 30
@@ -17,9 +17,9 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: "5432"
-      DB_USER: atlerror
-      DB_PASSWORD: atlerror
-      DB_NAME: atlerror
+      DB_USER: causcope
+      DB_PASSWORD: causcope
+      DB_NAME: causcope
     depends_on:
       db:
         condition: service_healthy

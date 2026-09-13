@@ -5,7 +5,7 @@
 
 ## Summary
 
-Atlerror's agent plan already projects the next semantic diagnostic action from:
+Causcope's agent plan already projects the next semantic diagnostic action from:
 
 ```text
 diagnosis
@@ -17,7 +17,7 @@ diagnosis
 
 This RFC extends that projection with persisted unfinished read-only probe sessions.
 
-After `atlerror.probe.begin_recommended` captures a baseline, the agent plan must stop suggesting another begin for the same diagnostic step and instead expose that a probe is already in progress and that the next workflow operation is `atlerror.probe.finish`.
+After `causcope.probe.begin_recommended` captures a baseline, the agent plan must stop suggesting another begin for the same diagnostic step and instead expose that a probe is already in progress and that the next workflow operation is `causcope.probe.finish`.
 
 The resulting loop becomes:
 
@@ -42,7 +42,7 @@ Before this RFC, an agent could read:
 
 ```text
 state: actionable
-operation: atlerror.probe.begin_recommended
+operation: causcope.probe.begin_recommended
 ```
 
 call the begin tool successfully, and then read the same agent plan again because the diagnosis snapshot itself does not change until the probe is finished.
@@ -55,7 +55,7 @@ The persisted probe session already represents meaningful workflow state:
 - a concrete executor was pinned;
 - the session is waiting for a controlled external workload and a finish operation.
 
-The planner should expose that state rather than ask agents to remember it outside Atlerror.
+The planner should expose that state rather than ask agents to remember it outside Causcope.
 
 ## Design boundary
 
@@ -120,7 +120,7 @@ A session-backed step contains:
 ```yaml
 state: probe_in_progress
 reason: ready_to_finish_probe
-operation: atlerror.probe.finish
+operation: causcope.probe.finish
 arguments:
   sessionId: probe-session.0123456789abcdef
 allowed: true
@@ -140,7 +140,7 @@ The session object intentionally excludes captured baseline values. An agent nee
 
 A probe session was authorized against the diagnosis revision recorded at begin time. The diagnosis may later change because of independent evidence while that session remains unfinished.
 
-Atlerror therefore keeps two concepts separate:
+Causcope therefore keeps two concepts separate:
 
 ```text
 session.probe_id
@@ -176,7 +176,7 @@ When read-only probe tools are enabled:
 ```yaml
 state: probe_in_progress
 reason: ready_to_finish_probe
-operation: atlerror.probe.finish
+operation: causcope.probe.finish
 allowed: true
 requires_opt_in: false
 ```
@@ -186,7 +186,7 @@ If an active session projection is supplied while execution is disabled:
 ```yaml
 state: probe_in_progress
 reason: probe_in_progress_execution_disabled
-operation: atlerror.probe.finish
+operation: causcope.probe.finish
 allowed: false
 requires_opt_in: true
 fallback: enable_readonly_probe_tools
@@ -202,7 +202,7 @@ finish is authorized
 
 ## MCP behavior
 
-`atlerror://diagnosis/agent-plan` remains the only new consumer-facing projection required for this slice.
+`causcope://diagnosis/agent-plan` remains the only new consumer-facing projection required for this slice.
 
 When the MCP server is configured with the real `RecommendedProbeToolController`, it automatically reads unfinished sessions from that controller's configured session directory and runtime evidence file.
 
@@ -214,7 +214,7 @@ The resource remains read-only and zero-TTL/private because both diagnosis and a
 
 The existing finish tool is retry-safe.
 
-After `atlerror.probe.finish` appends the probe result to runtime evidence, session discovery sees the evidence instance labeled with that session ID and no longer reports the session as active.
+After `causcope.probe.finish` appends the probe result to runtime evidence, session discovery sees the evidence instance labeled with that session ID and no longer reports the session as active.
 
 The next agent-plan read therefore returns to normal diagnosis-derived planning using the recomputed evidence revision.
 
@@ -267,4 +267,4 @@ runtime evidence
   -> next plan
 ```
 
-Atlerror now tells an agent not only what should start next, but also when diagnostic work is already underway and how to complete it safely.
+Causcope now tells an agent not only what should start next, but also when diagnostic work is already underway and how to complete it safely.

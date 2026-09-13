@@ -28,15 +28,15 @@ LEGACY_PROTOCOL_VERSIONS = (
 )
 LATEST_LEGACY_PROTOCOL_VERSION = LEGACY_PROTOCOL_VERSIONS[0]
 
-AGENT_PLAN_URI = "atlerror://diagnosis/agent-plan"
-CURRENT_DIAGNOSIS_URI = "atlerror://diagnosis/current"
-DIAGNOSIS_STATUS_URI = "atlerror://diagnosis/status"
-PROBE_EXECUTION_CAPABILITIES_URI = "atlerror://probe-execution/capabilities"
-PROBE_WORKFLOW_HISTORY_URI = "atlerror://probe-workflow/history"
+AGENT_PLAN_URI = "causcope://diagnosis/agent-plan"
+CURRENT_DIAGNOSIS_URI = "causcope://diagnosis/current"
+DIAGNOSIS_STATUS_URI = "causcope://diagnosis/status"
+PROBE_EXECUTION_CAPABILITIES_URI = "causcope://probe-execution/capabilities"
+PROBE_WORKFLOW_HISTORY_URI = "causcope://probe-workflow/history"
 
 SERVER_INFO = {
-    "name": "atlerror-diagnosis",
-    "title": "Atlerror Diagnosis",
+    "name": "causcope-diagnosis",
+    "title": "Causcope Diagnosis",
     "version": "0.8.0",
 }
 SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo"
@@ -146,7 +146,7 @@ class DiagnosisMcpServer:
                 "uri": CURRENT_DIAGNOSIS_URI,
                 "name": "current_diagnosis",
                 "description": (
-                    "Current validated Atlerror diagnosis snapshot with semantic scope, "
+                    "Current validated Causcope diagnosis snapshot with semantic scope, "
                     "observations, ranked causal hypotheses, paths, factors, and evidence context."
                 ),
                 "mimeType": "application/json",
@@ -189,11 +189,11 @@ class DiagnosisMcpServer:
             )
         if modern:
             titles = {
-                AGENT_PLAN_URI: "Atlerror agent plan",
-                CURRENT_DIAGNOSIS_URI: "Current Atlerror diagnosis",
-                DIAGNOSIS_STATUS_URI: "Atlerror diagnosis status",
-                PROBE_EXECUTION_CAPABILITIES_URI: "Atlerror probe execution capabilities",
-                PROBE_WORKFLOW_HISTORY_URI: "Atlerror probe workflow history",
+                AGENT_PLAN_URI: "Causcope agent plan",
+                CURRENT_DIAGNOSIS_URI: "Current Causcope diagnosis",
+                DIAGNOSIS_STATUS_URI: "Causcope diagnosis status",
+                PROBE_EXECUTION_CAPABILITIES_URI: "Causcope probe execution capabilities",
+                PROBE_WORKFLOW_HISTORY_URI: "Causcope probe workflow history",
             }
             for resource in resources:
                 resource["title"] = titles[resource["uri"]]
@@ -568,14 +568,14 @@ def serve_stdio(
             output_stream.flush()
         if verbose:
             method = message.get("method") if isinstance(message, dict) else None
-            print(f"Atlerror MCP handled {method or 'invalid_message'}", file=error_stream)
+            print(f"Causcope MCP handled {method or 'invalid_message'}", file=error_stream)
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Expose the current Atlerror diagnosis, agent plan, and local probe execution "
+            "Expose the current Causcope diagnosis, agent plan, and local probe execution "
             "capabilities as MCP resources over stdio, with optional explicitly enabled "
             "registered read-only probe tools."
         )
@@ -602,8 +602,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--probe-session-dir",
         type=Path,
-        default=Path("/tmp/atlerror-probe-sessions"),
-        help="Directory for opaque probe sessions, default /tmp/atlerror-probe-sessions",
+        default=Path("/tmp/causcope-probe-sessions"),
+        help="Directory for opaque probe sessions, default /tmp/causcope-probe-sessions",
     )
     parser.add_argument("--verbose", action="store_true", help="Write request diagnostics to stderr")
     return parser

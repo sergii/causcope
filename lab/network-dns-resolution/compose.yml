@@ -21,8 +21,8 @@ services:
     environment:
       DNS_SERVER: "172.31.0.53"
       DNS_PORT: "5353"
-      KNOWN_NAME: "known.atlerror.test"
-      MISSING_NAME: "missing.atlerror.test"
+      KNOWN_NAME: "known.causcope.test"
+      MISSING_NAME: "missing.causcope.test"
       DNS_TIMEOUT_SECONDS: "1.0"
     networks:
       - labnet

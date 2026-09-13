@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Summary
 
-Atlerror can now execute a deliberately narrow class of diagnostic probes instead of only recommending them. The first executor supports:
+Causcope can now execute a deliberately narrow class of diagnostic probes instead of only recommending them. The first executor supports:
 
 ```text
 probe.network.inspect_tcp_integrity_errors
@@ -97,7 +97,7 @@ counter before controlled workload
 
 ### Workload window
 
-Atlerror does not execute the workload. The operator or an external agent performs the intended controlled workload separately.
+Causcope does not execute the workload. The operator or an external agent performs the intended controlled workload separately.
 
 This keeps workload generation outside the first execution trust boundary.
 
@@ -163,7 +163,7 @@ The session scope is copied unchanged onto the evidence instance. This allows th
 
 Linux `Tcp.InErrs` is useful but is not a perfect checksum-only signal.
 
-It can include TCP input errors broader than checksum failures, and checksum offload can affect what is visible to host counters. Atlerror therefore preserves the measurement and caveat instead of treating the counter as definitive proof.
+It can include TCP input errors broader than checksum failures, and checksum offload can affect what is visible to host counters. Causcope therefore preserves the measurement and caveat instead of treating the counter as definitive proof.
 
 This is also why execution does not bypass causal ranking. It produces evidence, not a final diagnosis.
 
@@ -198,18 +198,18 @@ Begin a session:
 python scripts/probe_execution.py begin \
   --incident-id incident.demo.checkout.stripe \
   --probe probe.network.inspect_tcp_integrity_errors \
-  --session /tmp/atlerror-demo/tcp-integrity-probe-session.json \
+  --session /tmp/causcope-demo/tcp-integrity-probe-session.json \
   --scope-boundary boundary.application.external_dependency \
   --scope-attribute service=checkout-api \
   --scope-attribute dependency=stripe
 ```
 
-Run the controlled workload outside Atlerror, then finish:
+Run the controlled workload outside Causcope, then finish:
 
 ```bash
 python scripts/probe_execution.py finish \
-  --session /tmp/atlerror-demo/tcp-integrity-probe-session.json \
-  --output /tmp/atlerror-demo/tcp-integrity-probe-evidence.json \
+  --session /tmp/causcope-demo/tcp-integrity-probe-session.json \
+  --output /tmp/causcope-demo/tcp-integrity-probe-evidence.json \
   --pretty
 ```
 

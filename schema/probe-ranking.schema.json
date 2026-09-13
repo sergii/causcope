@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlerror.dev/schema/probe-ranking.schema.json",
-  "title": "Atlerror probe ranking",
+  "$id": "https://causcope.dev/schema/probe-ranking.schema.json",
+  "title": "Causcope probe ranking",
   "type": "object",
   "additionalProperties": false,
   "required": [
