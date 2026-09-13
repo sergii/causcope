@@ -51,7 +51,7 @@ GET  /orders/{id}
 POST /orders/{id}/pay
 ```
 
-The request log includes request ID, route, status, client platform, app version, and duration. That is ordinary runtime evidence, not a hidden root-cause endpoint.
+The request log includes request ID, route, status, client platform, app version, duration, and observation time. That is ordinary runtime evidence, not a hidden root-cause endpoint.
 
 ## Start and verify the happy path
 
@@ -87,14 +87,35 @@ Start the fault for three minutes:
 
 The public report intentionally does not reveal the root cause.
 
-Now start a real Causcope investigation:
+Start a Causcope investigation:
 
 ```bash
 ./bin/causcope investigate \
   "Some order writes fail intermittently while product reads remain healthy."
 ```
 
-Useful raw surfaces during the investigation include:
+Causcope can now read the normal application log surface without mutating the shop and feed it through the canonical runtime-evidence and diagnosis pipeline:
+
+```bash
+./testbed/shop/testbed causcope --workspace .causcope
+```
+
+That writes:
+
+```text
+.causcope/
+  incident-context.yaml
+  investigation-session.yaml
+  scoping-projection.json
+  source-shop-app.log
+  runtime-evidence.json
+  diagnosis.json
+  diagnosis-summary.json
+```
+
+For this scenario, explicit SQLite lock errors can become `observation.database.lock_wait_event`, and HTTP request outcomes become scoped `observation.http.request_failure` evidence. Causal ranking still happens in the normal Causcope engine; the adapter does not read the oracle or assign the root cause itself.
+
+Useful raw surfaces remain available for manual comparison:
 
 ```bash
 docker compose -f testbed/shop/compose.yaml logs app
@@ -132,13 +153,34 @@ Start repeat traffic from a healthy web cohort and a failing iOS cohort:
 ./testbed/shop/testbed scenario report mobile-bad-payload
 ```
 
-Inspect the app and client logs:
+Let the cohorts produce several comparable requests, then run the evidence bridge:
+
+```bash
+sleep 5
+./testbed/shop/testbed causcope \
+  --incident-id incident.local.mobile-payload \
+  --workspace /tmp/causcope-mobile
+```
+
+The structured-log adapter groups HTTP outcomes by method, path, client platform, and app version. A material failing-versus-working difference becomes:
+
+```text
+observation.http.client_cohort_failure_skew
+```
+
+The intended interpretation remains:
+
+```text
+client cohort difference != root cause
+```
+
+The causal graph can rank `hypothesis.client.payload_contract_mismatch` from this evidence, but source provenance and the distinction between discriminator and cause are preserved.
+
+Inspect the app and client logs directly when useful:
 
 ```bash
 docker compose -f testbed/shop/compose.yaml logs -f app mobile-client
 ```
-
-The intended investigation should discover a failing-versus-working cohort before making a causal claim. Client version is a discriminator first, not automatically the cause.
 
 Verify the observable behavior:
 
@@ -172,19 +214,34 @@ schema/testbed-scenario.schema.json
 schema/testbed-scenario-oracle.schema.json
 ```
 
+## Runtime evidence bridge
+
+The current integrated path is:
+
+```text
+Docker Compose structured logs
+  -> scripts/structured_log_evidence.py
+  -> runtime_evidence
+  -> existing live diagnosis engine
+  -> causal ranking
+  -> recommended discriminating probe
+```
+
+The reusable boundary is the adapter into canonical `runtime_evidence`. Docker Compose is only the first source transport; future adapters can query Loki, Datadog, Elasticsearch, CloudWatch, journald, Kubernetes, or MCP-connected telemetry without creating a second reasoning engine.
+
+The bridge is read-only with respect to the observed system. It reads logs and writes Causcope-local evidence/diagnosis files; it never activates scenarios, issues HTTP writes, modifies SQLite, or reads `oracle.json`.
+
 ## Current boundary
 
-This first slice deliberately does not auto-connect testbed logs to Causcope runtime evidence. Today a human or agent can inspect the running system and record investigation context manually.
-
-The next integration is to let Causcope consume this same testbed through read-only probes and telemetry adapters so that:
+Recommended probes are now produced from real testbed evidence, but most source-specific probes are not yet executable through the generic built-in probe executor registry. The next integration is to bind selected `risk: read_only` probes to source adapters so an agent can close the loop:
 
 ```text
 running system
-  -> scoped observation
-  -> runtime evidence
+  -> evidence
   -> causal ranking
-  -> next discriminating probe
+  -> recommended probe
+  -> safe read-only executor
+  -> new evidence
+  -> updated ranking
   -> verification against the original incident scope
 ```
-
-That step should extend the existing evidence/probe contracts rather than add testbed-specific reasoning.

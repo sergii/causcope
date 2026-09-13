@@ -1,0 +1,11 @@
+id: probe.http.compare_client_cohorts
+kind: probe
+title: Compare HTTP client cohorts
+summary: Query request telemetry for comparable routes and compare success or failure outcomes across client platform and application-version cohorts.
+produces:
+  - observation.http.client_cohort_failure_skew
+requires:
+  - capability.logs.query
+preferred_tools:
+  - tool.structured_logs
+risk: read_only

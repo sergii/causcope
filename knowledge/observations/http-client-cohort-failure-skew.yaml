@@ -1,0 +1,6 @@
+id: observation.http.client_cohort_failure_skew
+kind: observation
+title: HTTP client cohort failure skew
+summary: Comparable request cohorts have materially different failure rates across client platform or application version.
+explanation:
+  short: A failing-versus-working client cohort is a discriminator; it narrows the search space without by itself proving the client is causal.

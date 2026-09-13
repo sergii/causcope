@@ -1,0 +1,12 @@
+id: causal.client.payload_contract_mismatch.http_request_failure
+kind: causal_edge
+source: hypothesis.client.payload_contract_mismatch
+target: observation.http.request_failure
+relation: causes
+strength: moderate
+conditions:
+  - The server validates the incompatible payload before or during request handling.
+  - The observation is scoped to the affected client cohort and request route.
+explanation: A client payload that violates the server request contract causes requests from that cohort to fail validation or handling.
+limitations:
+  - The same HTTP failure outcome can be caused by server, database, dependency, or infrastructure failures; cohort evidence is needed to discriminate.

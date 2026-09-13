@@ -30,6 +30,9 @@ jobs:
       - name: Validate testbed contracts
         run: python scripts/validate_testbed.py
 
+      - name: Validate structured-log evidence adapter
+        run: python scripts/test_structured_log_evidence.py
+
       - name: Validate incident scoping projection
         run: python scripts/test_scoping_projection.py
 

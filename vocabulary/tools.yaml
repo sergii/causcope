@@ -13,6 +13,10 @@ tools:
     title: Datadog
     provides: [capability.metrics.query]
 
+  - id: tool.structured_logs
+    title: Structured application logs
+    provides: [capability.logs.query]
+
   - id: tool.perf
     title: perf
     provides: [capability.cpu.profile, capability.cpu.mode_breakdown]

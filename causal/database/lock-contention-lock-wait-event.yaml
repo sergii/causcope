@@ -1,0 +1,11 @@
+id: causal.database.lock_contention.lock_wait_event
+kind: causal_edge
+source: hypothesis.database.lock_contention
+target: observation.database.lock_wait_event
+relation: causes
+strength: strong
+conditions:
+  - The observation is scoped to an operation or database instance affected by the conflicting lock.
+explanation: A transaction blocked by a conflicting database lock produces lock-wait evidence while the conflict is active or when the database/client reports the lock failure.
+limitations:
+  - Database engines expose lock contention differently; an adapter must preserve the engine-specific provenance of the observation.

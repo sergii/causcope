@@ -1,0 +1,11 @@
+id: causal.client.payload_contract_mismatch.client_cohort_failure_skew
+kind: causal_edge
+source: hypothesis.client.payload_contract_mismatch
+target: observation.http.client_cohort_failure_skew
+relation: causes
+strength: strong
+conditions:
+  - Comparable cohorts exercise the same route while differing in a client attribute relevant to the payload contract.
+explanation: When one client cohort sends an incompatible payload while a compatible cohort sends a valid payload, their request failure rates diverge materially.
+limitations:
+  - Cohort skew localizes the difference but does not by itself distinguish client code from server behavior selectively applied to that cohort.
