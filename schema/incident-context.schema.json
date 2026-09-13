@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlerror.dev/schema/incident-context.schema.json",
+  "title": "Atlerror incident context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "summary",
+    "scope",
+    "time",
+    "impact",
+    "reproduction",
+    "unknowns"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "incident_context"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "reported_at": {"type": "string", "format": "date-time"},
+    "scope": {"$ref": "#/$defs/scope"},
+    "time": {"$ref": "#/$defs/time"},
+    "impact": {"$ref": "#/$defs/impact"},
+    "reproduction": {"$ref": "#/$defs/reproduction"},
+    "changes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/change"}
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/comparison"}
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "enum": ["who", "where", "when", "what", "client", "change", "data", "reproduction", "impact"]
+      },
+      "uniqueItems": true
+    },
+    "notes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "string_list": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subjects": {"$ref": "#/$defs/string_list"},
+        "environments": {"$ref": "#/$defs/string_list"},
+        "regions": {"$ref": "#/$defs/string_list"},
+        "availability_zones": {"$ref": "#/$defs/string_list"},
+        "services": {"$ref": "#/$defs/string_list"},
+        "entities": {"$ref": "#/$defs/string_list"},
+        "boundaries": {"$ref": "#/$defs/string_list"},
+        "features": {"$ref": "#/$defs/string_list"},
+        "operations": {"$ref": "#/$defs/string_list"},
+        "clients": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/client"}
+        },
+        "data": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/data_scope"}
+        }
+      }
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["browser", "mobile", "desktop", "api", "worker", "device", "other"]},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "os": {"type": "string", "minLength": 1},
+        "app_version": {"type": "string", "minLength": 1},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "data_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tenant": {"type": "string", "minLength": 1},
+        "record_type": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "permission": {"type": "string", "minLength": 1},
+        "age": {"enum": ["new", "existing", "mixed", "unknown"]},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern"],
+      "properties": {
+        "onset_at": {"type": "string", "format": "date-time"},
+        "last_known_good_at": {"type": "string", "format": "date-time"},
+        "first_reported_at": {"type": "string", "format": "date-time"},
+        "pattern": {"enum": ["continuous", "intermittent", "periodic", "single_event", "unknown"]},
+        "duration_seconds": {"type": "number", "minimum": 0}
+      }
+    },
+    "affected_population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit"],
+      "properties": {
+        "unit": {"enum": ["users", "accounts", "tenants", "requests", "devices", "jobs", "records", "other"]},
+        "affected": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "percentage": {"type": "number", "minimum": 0, "maximum": 100}
+      }
+    },
+    "impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity"],
+      "properties": {
+        "severity": {"enum": ["unknown", "low", "medium", "high", "critical"]},
+        "populations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/affected_population"}
+        },
+        "user_effect": {"type": "string", "minLength": 1},
+        "business_effect": {"type": "string", "minLength": 1}
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["always", "sometimes", "rare", "not_reproduced", "unknown"]},
+        "conditions": {"$ref": "#/$defs/string_list"},
+        "steps": {"$ref": "#/$defs/string_list"}
+      }
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "description", "timing"],
+      "properties": {
+        "type": {"enum": ["deploy", "feature_flag", "config", "migration", "dependency", "infrastructure", "data", "other"]},
+        "description": {"type": "string", "minLength": 1},
+        "occurred_at": {"type": "string", "format": "date-time"},
+        "timing": {"enum": ["before_onset", "near_onset", "after_onset", "unknown"]},
+        "reference": {"type": "string", "minLength": 1}
+      }
+    },
+    "comparison_case": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {"type": "string", "minLength": 1},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["failing", "working", "differences"],
+      "properties": {
+        "failing": {"$ref": "#/$defs/comparison_case"},
+        "working": {"$ref": "#/$defs/comparison_case"},
+        "differences": {"$ref": "#/$defs/string_list"}
+      }
+    }
+  }
+}

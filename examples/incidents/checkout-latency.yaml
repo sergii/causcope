@@ -1,0 +1,84 @@
+schema_version: "0.1"
+kind: incident_context
+incident_id: incident.checkout.eu.latency
+summary: Checkout requests are timing out for a subset of EU mobile users.
+reported_at: "2026-09-13T14:06:00Z"
+
+scope:
+  subjects:
+    - paid customers
+  environments:
+    - production
+  regions:
+    - eu-central
+  services:
+    - checkout-api
+  boundaries:
+    - boundary.application.external_dependency
+  features:
+    - checkout
+  operations:
+    - POST /checkout
+  clients:
+    - type: mobile
+      os: iOS
+      app_version: 7.42.0
+  data:
+    - record_type: payment
+      age: new
+
+time:
+  onset_at: "2026-09-13T13:52:00Z"
+  last_known_good_at: "2026-09-13T13:45:00Z"
+  first_reported_at: "2026-09-13T14:01:00Z"
+  pattern: intermittent
+
+impact:
+  severity: high
+  populations:
+    - unit: requests
+      affected: 184
+      total: 2510
+      percentage: 7.33
+  user_effect: Checkout sometimes fails before payment confirmation.
+  business_effect: A subset of purchases cannot complete.
+
+reproduction:
+  status: sometimes
+  conditions:
+    - production
+    - eu-central
+    - iOS app 7.42.0
+  steps:
+    - Open cart
+    - Start checkout
+    - Submit payment
+
+changes:
+  - type: deploy
+    description: checkout-api release 2026.09.13.3
+    occurred_at: "2026-09-13T13:48:00Z"
+    timing: near_onset
+    reference: deploy/2026.09.13.3
+
+comparisons:
+  - failing:
+      label: failing
+      attributes:
+        region: eu-central
+        client: iOS
+        app_version: 7.42.0
+    working:
+      label: working
+      attributes:
+        region: us-east
+        client: iOS
+        app_version: 7.42.0
+    differences:
+      - region
+
+unknowns:
+  - who
+
+notes:
+  - The nearby deploy is contextual correlation only. It is not treated as the root cause without evidence.

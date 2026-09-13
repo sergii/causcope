@@ -1,6 +1,6 @@
 # Atlerror Semantic Specification
 
-This document defines the minimal semantic contract used by Atlerror knowledge files.
+This document defines the minimal semantic contract used by Atlerror knowledge files and runtime diagnostic records.
 
 ## Dual-use invariant
 
@@ -8,12 +8,14 @@ This document defines the minimal semantic contract used by Atlerror knowledge f
 
 ## Layers
 
-Atlerror separates four concerns:
+Atlerror separates four semantic concerns:
 
 1. **Vocabulary** - the language: concept kinds, relations, action classes, and semantic constraints.
 2. **Knowledge** - concrete facts expressed using that language, including explicit causal edges.
 3. **Rules** - deterministic inference over observations and hypotheses.
 4. **Projections** - generated views for people and software: docs, website pages, CLI, MCP, HTTP APIs, agent skills, or other adapters.
+
+Runtime records such as incident context and runtime evidence sit beside the canonical semantic source. They describe a particular incident and may reference canonical semantic IDs, but they are not themselves reusable ontology concepts.
 
 The canonical semantic source is machine-readable YAML validated by JSON Schema. Markdown is a human projection and explanatory layer, not the source of truth for executable relations.
 
@@ -49,7 +51,53 @@ The current executable slice uses:
 
 Causal edges are first-class semantic records but are not concept nodes. They connect existing concepts and carry typed causal semantics, conditions, strength, and optional evidence references.
 
+`incident_context` and `runtime_evidence` are runtime record kinds, not concept kinds. They describe one incident and can reference semantic entities, boundaries, and observations without becoming reusable nodes in the canonical knowledge graph.
+
 The broader target model is documented in `RFC/0001-semantic-foundation.md`.
+
+## Diagnostic workflow
+
+The complete workflow starts before evidence collection:
+
+```text
+something is wrong
+  -> incident context / scoping
+  -> blast radius and impact
+  -> failing-vs-working comparison
+  -> runtime evidence
+  -> candidate hypotheses
+  -> predictions
+  -> probes / experiments
+  -> findings
+  -> hypothesis updates
+  -> cause / contributing factors
+  -> mitigation / fix
+  -> verification / prevention
+```
+
+The human-readable workflow is documented in `WORKFLOW.md`. The machine-readable incident-scoping contract is defined by `schema/incident-context.schema.json` and RFC 0022.
+
+Incident context MUST NOT silently become causal evidence. It may guide what to measure next, but only facts represented through the runtime evidence contract can affect deterministic diagnosis.
+
+## Incident context
+
+Incident context captures the earliest triage state before reliable diagnostic evidence is complete.
+
+It covers nine scoping dimensions:
+
+- who is affected;
+- where the problem appears;
+- when it started and how it behaves over time;
+- what feature, operation, or flow fails;
+- which clients or versions correlate with failure;
+- which changes happened near onset;
+- which data shapes, tenants, roles, or permissions are involved;
+- how the issue reproduces;
+- what impact and blast radius exist.
+
+Unknown dimensions are explicit rather than guessed. A dimension can be partially known and still be marked materially incomplete.
+
+Nearby changes and failing-vs-working differences are contextual discriminators, not causal proof. They should become diagnostic evidence only after they can be represented as sourced, time-bounded observations with confidence and applicable scope.
 
 ## Diagnostic semantics
 
@@ -164,15 +212,17 @@ These fields can power documentation, learning paths, SEO pages, and short educa
 
 Machine-facing fields include:
 
-- stable `id`
-- `kind`
-- explicit diagnostic and causal relations
-- predictions
-- probes
-- capabilities
-- deterministic rules
-- causal conditions and evidence provenance
-- risk and approval metadata for actions as the model expands
+- stable semantic `id` values;
+- runtime `incident_id` values;
+- concept `kind` and runtime record `kind`;
+- explicit diagnostic and causal relations;
+- incident scope, impact, reproduction, comparisons, and unknowns;
+- predictions;
+- probes;
+- capabilities;
+- deterministic rules;
+- causal conditions and evidence provenance;
+- risk and approval metadata for actions as the model expands.
 
 ## Integration boundary
 
