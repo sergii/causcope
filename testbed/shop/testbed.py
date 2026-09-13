@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parents[1]
 COMPOSE_FILE = ROOT / "compose.yaml"
 SCENARIOS_DIR = ROOT / "scenarios"
+CAUSCOPE_BRIDGE = ROOT / "causcope_bridge.py"
 DEFAULT_PORT = 18080
 
 
@@ -137,6 +139,17 @@ def cmd_smoke(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_causcope(args: argparse.Namespace) -> int:
+    command = [sys.executable, str(CAUSCOPE_BRIDGE), "--workspace", str(args.workspace)]
+    if args.incident_id:
+        command.extend(["--incident-id", args.incident_id])
+    if args.since:
+        command.extend(["--since", args.since])
+    if args.json:
+        command.append("--json")
+    return subprocess.run(command, cwd=REPO_ROOT, check=True).returncode
+
+
 def cmd_scenario_list(_: argparse.Namespace) -> int:
     for directory in scenario_directories():
         scenario = load_json(directory / "scenario.json")
@@ -238,6 +251,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     smoke = subparsers.add_parser("smoke", help="Verify the happy path")
     smoke.set_defaults(func=cmd_smoke)
+
+    causcope = subparsers.add_parser(
+        "causcope",
+        help="Collect shop logs read-only and run the Causcope evidence/diagnosis pipeline",
+    )
+    causcope.add_argument("--workspace", type=Path, default=REPO_ROOT / ".causcope")
+    causcope.add_argument("--incident-id")
+    causcope.add_argument("--since")
+    causcope.add_argument("--json", action="store_true")
+    causcope.set_defaults(func=cmd_causcope)
 
     scenario = subparsers.add_parser("scenario", help="Manage failure scenarios")
     scenario_subparsers = scenario.add_subparsers(dest="scenario_command", required=True)
