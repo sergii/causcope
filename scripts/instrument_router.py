@@ -81,8 +81,9 @@ class InstrumentRouter:
     Routing is deliberately downstream from semantic probe ranking. It does not
     score evidence quality or change causal/probe ranking. Legacy routing filters
     by exact semantic scope, availability, and execution-mode fit. Target-aware
-    routing additionally requires an exact resource/provider-instance binding and
-    a runner that can reach the selected resource.
+    routing additionally requires an exact observed-resource binding plus a runner
+    that satisfies the provider transport and can reach the provider endpoint.
+    Direct providers omit endpoint_resource, which means endpoint == target.
     """
 
     def __init__(
@@ -259,6 +260,7 @@ class InstrumentRouter:
             projection = self._provider_instance_capabilities.get(instance["id"])
             if projection is None:
                 continue
+            provider_type = self.resource_topology.provider_type(instance["provider_type"])
             provider_scope = normalize_scope(projection.get("scope"), self.concepts)
             for probe_entry in projection.get("probes", []):
                 if probe_entry.get("probe", {}).get("id") != probe_id:
@@ -293,27 +295,43 @@ class InstrumentRouter:
                 runner = self.resource_topology.runner(instance["runner"])
                 if not runner["available"]:
                     reasons.append(f"runner {runner['id']} is unavailable")
-                target = self.resource_topology.resource(instance["target"])
-                network_domain = target.get("network_domain")
+                required_runner_capabilities = set(provider_type.get("runner_capabilities", []))
+                missing_runner_capabilities = sorted(
+                    required_runner_capabilities - set(runner.get("capabilities", []))
+                )
+                if missing_runner_capabilities:
+                    reasons.append(
+                        f"runner {runner['id']} lacks provider capabilities: "
+                        + ", ".join(missing_runner_capabilities)
+                    )
+
+                endpoint_resource_id = instance.get("endpoint_resource", instance["target"])
+                endpoint_resource = self.resource_topology.resource(endpoint_resource_id)
+                network_domain = endpoint_resource.get("network_domain")
                 if network_domain and network_domain not in runner["network_domains"]:
                     reasons.append(
-                        f"runner {runner['id']} cannot reach target network domain {network_domain}"
+                        f"runner {runner['id']} cannot reach provider endpoint network domain "
+                        f"{network_domain}"
                     )
 
                 execution_mode = "direct"
                 if execution_requirement == "direct" and execution_mode != "direct":
                     reasons.append("instrument does not support direct autonomous execution")
 
+                instrument = {
+                    "id": instance["id"],
+                    "kind": "diagnostic_provider",
+                    "execution_mode": execution_mode,
+                    "provider_type": instance["provider_type"],
+                    "target_resource": instance["target"],
+                    "runner": instance["runner"],
+                }
+                if "endpoint_resource" in instance:
+                    instrument["endpoint_resource"] = endpoint_resource_id
+
                 output.append(
                     {
-                        "instrument": {
-                            "id": instance["id"],
-                            "kind": "diagnostic_provider",
-                            "execution_mode": execution_mode,
-                            "provider_type": instance["provider_type"],
-                            "target_resource": instance["target"],
-                            "runner": instance["runner"],
-                        },
+                        "instrument": instrument,
                         "availability": availability,
                         "scope_match": scope_match,
                         "target_match": target_match,
@@ -375,7 +393,7 @@ class InstrumentRouter:
         if selected is not None:
             reason = "instrument is available, exact-scope compatible, execution-mode compatible"
             if target_resource is not None:
-                reason += ", exact-target and runner compatible"
+                reason += ", exact-target, provider-endpoint, and runner compatible"
             reason += ", and wins the stable instrument-identity tie-break"
             selection = {
                 "instrument": copy.deepcopy(selected["instrument"]),
@@ -479,6 +497,8 @@ class InstrumentRouter:
             attributes["routing.execution_mode"] = instrument["execution_mode"]
             if target_resource is not None:
                 attributes["routing.target_resource"] = target_resource
+            if "endpoint_resource" in instrument:
+                attributes["routing.endpoint_resource"] = instrument["endpoint_resource"]
             labels = instance.setdefault("labels", {})
             labels["instrument"] = instrument["id"]
         return evidence

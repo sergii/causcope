@@ -17,6 +17,13 @@ resources:
       database: payments
       dependency: postgresql
       region: eu-central-1
+  - id: observability.prometheus.prod
+    kind: prometheus_server
+    environment: production
+    network_domain: observability.prod.eu-central-1
+    attributes:
+      service: prometheus
+      region: eu-central-1
   - id: service.checkout.prod
     kind: application_service
     environment: production
@@ -35,14 +42,23 @@ runners:
   - id: runner.shop.prod
     kind: edge_runner
     capabilities:
+      - outbound_http
       - outbound_postgresql
     network_domains:
+      - observability.prod.eu-central-1
       - shop.prod.eu-central-1
     available: true
 provider_types:
   - id: provider_type.pgbot.postgresql
     instrument: pgbot
     provider_id: provider.pgbot.postgresql
+    runner_capabilities:
+      - outbound_postgresql
+  - id: provider_type.prometheus.metrics
+    instrument: prometheus
+    provider_id: provider.prometheus.metrics
+    runner_capabilities:
+      - outbound_http
 provider_instances:
   - id: provider.pgbot.orders-prod
     provider_type: provider_type.pgbot.postgresql
@@ -54,3 +70,15 @@ provider_instances:
     target: db.payments.prod
     runner: runner.shop.prod
     credentials_ref: secret.postgresql.payments-prod.readonly
+  - id: provider.prometheus.orders-prod
+    provider_type: provider_type.prometheus.metrics
+    target: db.orders.prod
+    endpoint_resource: observability.prometheus.prod
+    runner: runner.shop.prod
+    credentials_ref: secret.prometheus.shop-prod.readonly
+  - id: provider.prometheus.payments-prod
+    provider_type: provider_type.prometheus.metrics
+    target: db.payments.prod
+    endpoint_resource: observability.prometheus.prod
+    runner: runner.shop.prod
+    credentials_ref: secret.prometheus.shop-prod.readonly

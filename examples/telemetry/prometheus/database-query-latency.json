@@ -1,0 +1,24 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "__name__": "app_database_query_duration_seconds_p95",
+          "causcope_resource": "db.orders.prod",
+          "service": "checkout-api"
+        },
+        "value": [1789428600, "240"]
+      },
+      {
+        "metric": {
+          "__name__": "app_database_query_duration_seconds_p95",
+          "causcope_resource": "db.payments.prod",
+          "service": "checkout-api"
+        },
+        "value": [1789428600, "70"]
+      }
+    ]
+  }
+}

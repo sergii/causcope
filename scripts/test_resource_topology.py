@@ -37,18 +37,34 @@ class ResourceTopologyTest(unittest.TestCase):
 
     def test_provider_instances_are_exactly_target_bound(self) -> None:
         self.assertEqual(
-            ["provider.pgbot.orders-prod"],
+            ["provider.pgbot.orders-prod", "provider.prometheus.orders-prod"],
             [
                 instance["id"]
                 for instance in self.topology.provider_instances_for_target("db.orders.prod")
             ],
         )
         self.assertEqual(
-            ["provider.pgbot.payments-prod"],
+            ["provider.pgbot.payments-prod", "provider.prometheus.payments-prod"],
             [
                 instance["id"]
                 for instance in self.topology.provider_instances_for_target("db.payments.prod")
             ],
+        )
+
+    def test_indirect_provider_has_distinct_endpoint_resource(self) -> None:
+        endpoint = self.topology.provider_endpoint("provider.prometheus.orders-prod")
+        self.assertEqual("observability.prometheus.prod", endpoint["id"])
+        direct_endpoint = self.topology.provider_endpoint("provider.pgbot.orders-prod")
+        self.assertEqual("db.orders.prod", direct_endpoint["id"])
+
+    def test_provider_types_declare_runner_transport_capabilities(self) -> None:
+        self.assertEqual(
+            ["outbound_postgresql"],
+            self.topology.provider_type("provider_type.pgbot.postgresql")["runner_capabilities"],
+        )
+        self.assertEqual(
+            ["outbound_http"],
+            self.topology.provider_type("provider_type.prometheus.metrics")["runner_capabilities"],
         )
 
     def test_canonical_document_is_deterministically_sorted(self) -> None:
@@ -72,6 +88,17 @@ class ResourceTopologyTest(unittest.TestCase):
         document = copy.deepcopy(self.document)
         document["provider_instances"][0]["target"] = "db.unknown.prod"
         with self.assertRaisesRegex(ValueError, "unknown target resource"):
+            ResourceTopology(document)
+
+    def test_dangling_provider_endpoint_fails_closed(self) -> None:
+        document = copy.deepcopy(self.document)
+        prometheus = next(
+            instance
+            for instance in document["provider_instances"]
+            if instance["id"] == "provider.prometheus.orders-prod"
+        )
+        prometheus["endpoint_resource"] = "observability.missing.prod"
+        with self.assertRaisesRegex(ValueError, "unknown endpoint resource"):
             ResourceTopology(document)
 
     def test_unknown_lookup_fails_closed(self) -> None:
