@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import copy
-import hashlib
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from autonomous_investigation import ProbeInsufficientEvidence
 from diagnosis_http_api import DiagnosisSnapshotReader
+from incident_state_commit import (
+    FaultHook,
+    IncidentStateCommitError,
+    canonical_hash,
+    commit_incident_state,
+    default_commit_path,
+    prepare_commit,
+    recover_incident_state_commit,
+)
 from instrument_router import InstrumentRouter
 from live_diagnosis import build_diagnosis_snapshot, normalize_scope, scope_key
 from probe_filesystem_claim import (
@@ -26,18 +33,6 @@ TOOL_NAME = "causcope.instrument.execute_routed"
 
 class RoutedInstrumentInvocationError(ValueError):
     pass
-
-
-def _atomic_write_json(path: Path, document: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
-
-
-def _canonical_hash(document: dict[str, Any]) -> str:
-    raw = json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
 
 
 def _find_diagnosis(snapshot: dict[str, Any], *, target: str, scope: dict[str, Any] | None) -> dict[str, Any]:
@@ -70,6 +65,8 @@ class RoutedInstrumentToolController:
         router_provider: Callable[[], InstrumentRouter],
         mutation_lock_dir: Path,
         clock: Callable[[], datetime] | None = None,
+        commit_path: Path | None = None,
+        commit_fault_hook: FaultHook | None = None,
     ) -> None:
         self.reader = reader
         self.snapshot_path = snapshot_path
@@ -79,6 +76,8 @@ class RoutedInstrumentToolController:
         self.router_provider = router_provider
         self.mutation_lock_dir = mutation_lock_dir
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.commit_path = commit_path or default_commit_path(snapshot_path)
+        self.commit_fault_hook = commit_fault_hook
 
     @staticmethod
     def tool_names() -> set[str]:
@@ -146,10 +145,19 @@ class RoutedInstrumentToolController:
                 identity=incident_mutation_claim_identity(incident_id=args["incidentId"]),
             ):
                 return self._execute_locked(args)
-        except ProbeFilesystemClaimError as exc:
+        except (ProbeFilesystemClaimError, IncidentStateCommitError) as exc:
             raise RoutedInstrumentInvocationError(str(exc)) from exc
 
     def _execute_locked(self, args: dict[str, Any]) -> dict[str, Any]:
+        # A durable pending journal is a committed intent. Complete it before
+        # validating a new caller revision so stale callers cannot observe or
+        # overwrite a half-published evidence/diagnosis pair.
+        recover_incident_state_commit(
+            commit_path=self.commit_path,
+            runtime_evidence_path=self.runtime_evidence_path,
+            snapshot_path=self.snapshot_path,
+        )
+
         snapshot, _etag = self.reader.read()
         if snapshot["incident_id"] != args["incidentId"]:
             raise RoutedInstrumentInvocationError("incidentId does not match current diagnosis")
@@ -199,7 +207,7 @@ class RoutedInstrumentToolController:
         added_ids = sorted(
             instance["id"] for instance in composed["instances"] if instance["id"] not in old_ids
         )
-        if not added_ids or _canonical_hash(composed) == _canonical_hash(evidence):
+        if not added_ids or canonical_hash(composed) == canonical_hash(evidence):
             raise RoutedInstrumentInvocationError("routed instrument produced no new canonical evidence")
 
         next_revision = snapshot["evidence_revision"] + 1
@@ -211,11 +219,19 @@ class RoutedInstrumentToolController:
             as_of=now,
             evidence_revision=next_revision,
         )
-
-        # Evidence is authoritative and the diagnosis snapshot is a deterministic projection.
-        # Each file replacement is atomic and both happen while the incident mutation claim is held.
-        _atomic_write_json(self.runtime_evidence_path, composed)
-        _atomic_write_json(self.snapshot_path, next_snapshot)
+        commit = prepare_commit(
+            incident_id=args["incidentId"],
+            from_evidence_revision=snapshot["evidence_revision"],
+            runtime_evidence=composed,
+            diagnosis_snapshot=next_snapshot,
+        )
+        commit_incident_state(
+            commit_path=self.commit_path,
+            runtime_evidence_path=self.runtime_evidence_path,
+            snapshot_path=self.snapshot_path,
+            commit=commit,
+            fault_hook=self.commit_fault_hook,
+        )
 
         return {
             "kind": "routed_instrument_execution_result",
