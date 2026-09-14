@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "set"
 require "opentelemetry/sdk"
 require "opentelemetry/exporter/otlp"
 
@@ -185,5 +186,4 @@ module Causcope
   end
 end
 
-require "set"
 Causcope::RailsRuntime.install!
