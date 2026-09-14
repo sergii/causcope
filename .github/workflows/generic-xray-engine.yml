@@ -1,0 +1,256 @@
+name: Validate generic Concrete System X-Ray engine
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/xray_engine.py"
+      - "schema/xray-profile.schema.json"
+      - "xray/profiles/**"
+      - "RFC/0053-generic-xray-projection-engine.md"
+      - "scripts/rubydex_concrete_system_facts.rb"
+      - "scripts/rails_concrete_system_enrichment.py"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/postgres_concrete_deadlock_lab.py"
+      - "scripts/d2_2_*.py"
+      - "scripts/duplicate_side_effect_*.py"
+      - "lab/rubydex-concrete-system/**"
+      - "lab/duplicate-side-effect/**"
+      - ".github/workflows/generic-xray-engine.yml"
+  pull_request:
+    paths:
+      - "scripts/xray_engine.py"
+      - "schema/xray-profile.schema.json"
+      - "xray/profiles/**"
+      - "RFC/0053-generic-xray-projection-engine.md"
+      - "scripts/rubydex_concrete_system_facts.rb"
+      - "scripts/rails_concrete_system_enrichment.py"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/postgres_concrete_deadlock_lab.py"
+      - "scripts/d2_2_*.py"
+      - "scripts/duplicate_side_effect_*.py"
+      - "lab/rubydex-concrete-system/**"
+      - "lab/duplicate-side-effect/**"
+      - ".github/workflows/generic-xray-engine.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema "psycopg[binary]"
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+
+      - name: Install Rubydex fixture dependencies
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: bundle install
+
+      - name: Build D2.2 revision-pinned facts and runtime executions
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: |
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/rubydex-concrete-system \
+            --system-id rubydex-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/d2-rubydex.json
+
+          python scripts/rails_concrete_system_enrichment.py \
+            --input /tmp/d2-rubydex.json \
+            --workspace lab/rubydex-concrete-system \
+            --output /tmp/d2-static.json
+
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/d2-static.json \
+            --otlp lab/rubydex-concrete-system/runtime/overlapping-code-paths.otlp.json \
+            --incident-id INC-D2-2-XRAY \
+            --source-uri fixture:overlapping-code-paths \
+            --output /tmp/d2-runtime.json
+
+      - name: Run real PostgreSQL D2.2 proof
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55433/postgres
+        run: |
+          python scripts/postgres_concrete_deadlock_lab.py \
+            --static-facts /tmp/d2-static.json \
+            --runtime-facts /tmp/d2-runtime.json \
+            --correlation-output /tmp/d2-correlation.json \
+            --runtime-evidence-output /tmp/d2-canonical.json
+
+      - name: Run legacy D2.2 projections
+        run: |
+          python scripts/d2_2_xray_projection.py \
+            --static-facts /tmp/d2-static.json \
+            --runtime-facts /tmp/d2-runtime.json \
+            --output /tmp/d2-legacy-xray.json
+
+          AS_OF=$(python -c 'import json; print(json.load(open("/tmp/d2-correlation.json"))["observed_at"])')
+          python scripts/d2_2_database_evidence_projection.py \
+            --xray /tmp/d2-legacy-xray.json \
+            --evidence /tmp/d2-canonical.json \
+            --as-of "$AS_OF" \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --output /tmp/d2-legacy-database.json
+
+          python scripts/d2_2_causal_confirmation.py \
+            --static-facts /tmp/d2-static.json \
+            --runtime-facts /tmp/d2-runtime.json \
+            --database-projection /tmp/d2-legacy-database.json \
+            --correlation-evidence /tmp/d2-correlation.json \
+            --output /tmp/d2-legacy-confirmed.json
+
+      - name: Run declarative D2.2 X-Ray profile
+        run: |
+          python scripts/xray_engine.py \
+            --profile xray/profiles/d2-2.yaml \
+            --input static=/tmp/d2-static.json \
+            --input runtime=/tmp/d2-runtime.json \
+            --input canonical=/tmp/d2-canonical.json \
+            --input correlation=/tmp/d2-correlation.json \
+            --require-state CAUSAL_DIAGNOSIS_CONFIRMED \
+            --output /tmp/d2-generic.json
+
+      - name: Build duplicate-effect revision-pinned facts
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: |
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/duplicate-side-effect \
+            --system-id duplicate-side-effect-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/duplicate-rubydex.json
+
+          python scripts/duplicate_side_effect_enrichment.py \
+            --input /tmp/duplicate-rubydex.json \
+            --workspace lab/duplicate-side-effect \
+            --output /tmp/duplicate-static.json
+
+      - name: Run real Ruby HTTP ambiguous-outcome proof
+        run: |
+          python scripts/duplicate_side_effect_live_lab.py \
+            --static-facts /tmp/duplicate-static.json \
+            --workspace lab/duplicate-side-effect \
+            --otlp-output /tmp/duplicate-runtime.otlp.json \
+            --evidence-output /tmp/duplicate-effect.json \
+            --runtime-evidence-output /tmp/duplicate-canonical.json
+
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/duplicate-static.json \
+            --otlp /tmp/duplicate-runtime.otlp.json \
+            --incident-id INC-DUP-EFFECT-XRAY \
+            --source-uri live:duplicate-side-effect \
+            --output /tmp/duplicate-runtime.json
+
+      - name: Run legacy duplicate-effect projections
+        run: |
+          python scripts/duplicate_side_effect_xray_projection.py \
+            --static-facts /tmp/duplicate-static.json \
+            --output /tmp/duplicate-legacy-xray.json
+
+          python scripts/duplicate_side_effect_causal_confirmation.py \
+            --static-facts /tmp/duplicate-static.json \
+            --runtime-facts /tmp/duplicate-runtime.json \
+            --xray /tmp/duplicate-legacy-xray.json \
+            --effect-evidence /tmp/duplicate-effect.json \
+            --runtime-evidence /tmp/duplicate-canonical.json \
+            --output /tmp/duplicate-legacy-confirmed.json
+
+      - name: Run declarative duplicate-effect X-Ray profile
+        run: |
+          python scripts/xray_engine.py \
+            --profile xray/profiles/duplicate-side-effect.yaml \
+            --input static=/tmp/duplicate-static.json \
+            --input runtime=/tmp/duplicate-runtime.json \
+            --input canonical=/tmp/duplicate-canonical.json \
+            --input effect=/tmp/duplicate-effect.json \
+            --require-state CAUSAL_DIAGNOSIS_CONFIRMED \
+            --output /tmp/duplicate-generic.json
+
+      - name: Verify parity and generic fail-closed behavior
+        run: |
+          python - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+          import yaml
+
+          from scripts.xray_engine import project
+
+          def load(path):
+              return json.loads(Path(path).read_text())
+
+          d2_legacy = load('/tmp/d2-legacy-confirmed.json')
+          d2_generic = load('/tmp/d2-generic.json')
+          duplicate_legacy = load('/tmp/duplicate-legacy-confirmed.json')
+          duplicate_generic = load('/tmp/duplicate-generic.json')
+
+          assert d2_legacy['epistemic_state'] == d2_generic['epistemic_state'] == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+          assert d2_legacy['catalog_code'] == d2_generic['catalog_code'] == 'D2.2'
+          assert d2_legacy['hypothesis'] == d2_generic['hypothesis']
+          assert duplicate_legacy['epistemic_state'] == duplicate_generic['epistemic_state'] == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+          assert duplicate_legacy['catalog_code'] == duplicate_generic['catalog_code'] == 'Q2.1'
+          assert duplicate_legacy['hypothesis'] == duplicate_generic['hypothesis']
+
+          d2_profile = yaml.safe_load(Path('xray/profiles/d2-2.yaml').read_text())
+          d2_documents = {
+              'static': load('/tmp/d2-static.json'),
+              'runtime': load('/tmp/d2-runtime.json'),
+              'canonical': load('/tmp/d2-canonical.json'),
+              'correlation': load('/tmp/d2-correlation.json'),
+          }
+          tampered_d2 = copy.deepcopy(d2_documents)
+          tampered_d2['correlation']['participants'][0]['trace_id'] = '0' * 32
+          assert project(d2_profile, tampered_d2)['epistemic_state'] == 'EVENT_OBSERVED'
+
+          duplicate_profile = yaml.safe_load(Path('xray/profiles/duplicate-side-effect.yaml').read_text())
+          duplicate_documents = {
+              'static': load('/tmp/duplicate-static.json'),
+              'runtime': load('/tmp/duplicate-runtime.json'),
+              'canonical': load('/tmp/duplicate-canonical.json'),
+              'effect': load('/tmp/duplicate-effect.json'),
+          }
+          tampered_duplicate = copy.deepcopy(duplicate_documents)
+          tampered_duplicate['effect']['protected']['attempts'][1]['provider_deduplicated'] = False
+          assert project(duplicate_profile, tampered_duplicate)['epistemic_state'] == 'EVENT_OBSERVED'
+
+          print(json.dumps({
+              'd2_2': d2_generic['epistemic_state'],
+              'duplicate_side_effect': duplicate_generic['epistemic_state'],
+              'd2_tamper': 'rejected_confirmation',
+              'duplicate_tamper': 'rejected_confirmation',
+          }, indent=2, sort_keys=True))
+          PY
