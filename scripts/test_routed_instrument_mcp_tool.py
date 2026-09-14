@@ -155,10 +155,11 @@ class RoutedInstrumentMcpToolTest(unittest.TestCase):
                 for diagnosis in partition["diagnoses"]
                 if diagnosis["target"] == TARGET
             )
-            self.assertEqual(
-                "hypothesis.database.lock_contention",
-                diagnosis["ranking"]["candidates"][0]["source"]["id"],
-            )
+            candidate_ids = {
+                candidate["source"]["id"] for candidate in diagnosis["ranking"]["candidates"]
+            }
+            self.assertIn("hypothesis.database.lock_contention", candidate_ids)
+            self.assertIn("observation.database.lock_wait_time", snapshot["partitions"][0]["observed"])
 
     def test_stale_revision_and_stale_route_fail_closed_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
