@@ -1,0 +1,205 @@
+schema_version: "0.1"
+kind: concrete_system_facts
+system_id: checkout-app
+revision:
+  type: git
+  value: 0123456789abcdef0123456789abcdef01234567
+  repository: example://checkout-app
+generated_at: "2026-09-14T15:15:00Z"
+
+entities:
+  - id: code:CheckoutService#call
+    kind: code_symbol
+    label: CheckoutService#call
+    certainty: direct
+    confidence: high
+    provenance:
+      source_type: static_analysis
+      name: rubydex
+      reference: ruby:CheckoutService#call()
+    source_location:
+      path: app/services/checkout_service.rb
+      start_line: 8
+
+  - id: code:SettlementJob#perform
+    kind: code_symbol
+    label: SettlementJob#perform
+    certainty: direct
+    confidence: high
+    provenance:
+      source_type: static_analysis
+      name: rubydex
+      reference: ruby:SettlementJob#perform()
+    source_location:
+      path: app/jobs/settlement_job.rb
+      start_line: 6
+
+  - id: tx:checkout
+    kind: transaction
+    label: Checkout transaction
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      reference: app/services/checkout_service.rb:9
+      rule: rails.transaction_block.v0
+
+  - id: tx:settlement
+    kind: transaction
+    label: Settlement transaction
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      reference: app/jobs/settlement_job.rb:7
+      rule: rails.transaction_block.v0
+
+  - id: db:public.accounts
+    kind: data_resource
+    label: public.accounts
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      reference: Account
+      rule: rails.model_table_convention.v0
+
+  - id: db:public.ledger_entries
+    kind: data_resource
+    label: public.ledger_entries
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      reference: LedgerEntry
+      rule: rails.model_table_convention.v0
+
+facts:
+  - id: fact.checkout.executes_in_transaction
+    subject: code:CheckoutService#call
+    relation: executes_in
+    object: tx:checkout
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.transaction_membership.v0
+      reference: app/services/checkout_service.rb:9
+
+  - id: fact.checkout.writes_accounts
+    subject: tx:checkout
+    relation: writes
+    object: db:public.accounts
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.active_record_write.v0
+      reference: app/services/checkout_service.rb:10
+    context:
+      code_path: code:CheckoutService#call
+      transaction: tx:checkout
+      boundary: boundary.application.database
+
+  - id: fact.checkout.writes_ledger_entries
+    subject: tx:checkout
+    relation: writes
+    object: db:public.ledger_entries
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.active_record_write.v0
+      reference: app/services/checkout_service.rb:11
+    context:
+      code_path: code:CheckoutService#call
+      transaction: tx:checkout
+      boundary: boundary.application.database
+
+  - id: fact.checkout.accounts_before_ledger
+    subject: db:public.accounts
+    relation: accesses_before
+    object: db:public.ledger_entries
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.transaction_resource_order.v0
+      reference: app/services/checkout_service.rb:10-11
+    context:
+      code_path: code:CheckoutService#call
+      transaction: tx:checkout
+      boundary: boundary.application.database
+
+  - id: fact.settlement.executes_in_transaction
+    subject: code:SettlementJob#perform
+    relation: executes_in
+    object: tx:settlement
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.transaction_membership.v0
+      reference: app/jobs/settlement_job.rb:7
+
+  - id: fact.settlement.writes_ledger_entries
+    subject: tx:settlement
+    relation: writes
+    object: db:public.ledger_entries
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.active_record_write.v0
+      reference: app/jobs/settlement_job.rb:8
+    context:
+      code_path: code:SettlementJob#perform
+      transaction: tx:settlement
+      boundary: boundary.application.database
+
+  - id: fact.settlement.writes_accounts
+    subject: tx:settlement
+    relation: writes
+    object: db:public.accounts
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.active_record_write.v0
+      reference: app/jobs/settlement_job.rb:9
+    context:
+      code_path: code:SettlementJob#perform
+      transaction: tx:settlement
+      boundary: boundary.application.database
+
+  - id: fact.settlement.ledger_before_accounts
+    subject: db:public.ledger_entries
+    relation: accesses_before
+    object: db:public.accounts
+    certainty: inferred
+    confidence: moderate
+    provenance:
+      source_type: generated
+      name: rails-static-enrichment
+      rule: rails.transaction_resource_order.v0
+      reference: app/jobs/settlement_job.rb:8-9
+    context:
+      code_path: code:SettlementJob#perform
+      transaction: tx:settlement
+      boundary: boundary.application.database
+
+limitations:
+  - Static opposing resource order establishes a D2.2 precondition, not an observed deadlock.
+  - Runtime overlap between the two code paths is not established by this document.
+  - Concrete PostgreSQL row locks and wait-for edges require runtime database evidence.
