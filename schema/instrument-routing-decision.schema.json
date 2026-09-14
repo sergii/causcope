@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/instrument-routing-decision.schema.json",
+  "title": "Causcope instrument routing decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "probe",
+    "scope",
+    "execution_requirement",
+    "selection_policy",
+    "candidates",
+    "selection",
+    "stop_reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "instrument_routing_decision"},
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "risk"],
+      "properties": {
+        "id": {"$ref": "#/$defs/concept_id"},
+        "title": {"type": "string", "minLength": 1},
+        "risk": {"const": "read_only"}
+      }
+    },
+    "scope": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/scope"}
+      ]
+    },
+    "execution_requirement": {"enum": ["any", "direct"]},
+    "selection_policy": {"const": "safe_exact_scope_then_stable_identity"},
+    "candidates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate"}
+    },
+    "selection": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/selection"}
+      ]
+    },
+    "stop_reason": {
+      "enum": [null, "no_instrument_for_probe", "no_safe_available_instrument"]
+    }
+  },
+  "$defs": {
+    "concept_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason"],
+      "properties": {
+        "state": {"enum": ["available", "unavailable", "unknown"]},
+        "reason": {"type": ["string", "null"]}
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "execution_mode"],
+      "properties": {
+        "id": {"$ref": "#/$defs/concept_id"},
+        "kind": {"enum": ["host_executor", "diagnostic_provider"]},
+        "execution_mode": {"enum": ["session", "direct"]}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instrument",
+        "availability",
+        "scope_match",
+        "capabilities",
+        "observations",
+        "eligible",
+        "reasons"
+      ],
+      "properties": {
+        "instrument": {"$ref": "#/$defs/instrument"},
+        "availability": {"$ref": "#/$defs/availability"},
+        "scope_match": {"enum": ["exact", "mismatch"]},
+        "capabilities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "eligible": {"type": "boolean"},
+        "reasons": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instrument", "reason"],
+      "properties": {
+        "instrument": {"$ref": "#/$defs/instrument"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
