@@ -3,6 +3,7 @@
 require "json"
 require "net/http"
 require "pg"
+require "time"
 require "uri"
 
 APP_URL = ENV.fetch("APP_URL", "http://127.0.0.1:4567")
@@ -158,37 +159,8 @@ evidence = {
   "limitations" => [
     "ActiveRecord pool statistics are point-in-time observations from the application process.",
     "The independent PostgreSQL control proves only that a separate session was admitted during the measured saturation window.",
-    "The OTLP envelope below preserves identity from a native OpenTelemetry SDK span but is serialized by this bounded test probe rather than sent through an OTLP exporter."
+    "Trace and span identity come from the portable Rails runtime span; the OTLP payload is exported independently by the OpenTelemetry OTLP exporter."
   ]
 }
 
-otlp = {
-  "resourceSpans" => [
-    {
-      "resource" => {
-        "attributes" => [
-          { "key" => "causcope.system_id", "value" => { "stringValue" => SYSTEM_ID } },
-          { "key" => "causcope.revision", "value" => { "stringValue" => REVISION } }
-        ]
-      },
-      "scopeSpans" => [
-        {
-          "spans" => [
-            {
-              "traceId" => measured.fetch("trace_id"),
-              "spanId" => measured.fetch("span_id"),
-              "name" => "PoolController#work",
-              "startTimeUnixNano" => measured.fetch("start_time_unix_nano"),
-              "endTimeUnixNano" => measured.fetch("end_time_unix_nano"),
-              "attributes" => [
-                { "key" => "causcope.code_symbol", "value" => { "stringValue" => measured.fetch("code_symbol") } }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-
-puts JSON.generate({ "evidence" => evidence, "otlp" => otlp })
+puts JSON.generate(evidence)

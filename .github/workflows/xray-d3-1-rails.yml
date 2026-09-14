@@ -4,25 +4,33 @@ on:
   push:
     branches: [main]
     paths:
+      - "integrations/rails/**"
       - "scripts/rails_connection_pool_concrete_facts.rb"
       - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/otlp_concrete_receiver.py"
       - "scripts/xray_engine.py"
       - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
       - "schema/resource-pool-runtime-evidence.schema.json"
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
       - "lab/rails-connection-pool/**"
       - "RFC/0056-rails-active-record-d3-1-provider.md"
+      - "RFC/0058-portable-rails-otlp-runtime.md"
       - ".github/workflows/xray-d3-1-rails.yml"
   pull_request:
     paths:
+      - "integrations/rails/**"
       - "scripts/rails_connection_pool_concrete_facts.rb"
       - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/otlp_concrete_receiver.py"
       - "scripts/xray_engine.py"
       - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
       - "schema/resource-pool-runtime-evidence.schema.json"
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
       - "lab/rails-connection-pool/**"
       - "RFC/0056-rails-active-record-d3-1-provider.md"
+      - "RFC/0058-portable-rails-otlp-runtime.md"
       - ".github/workflows/xray-d3-1-rails.yml"
 
 permissions:
@@ -66,6 +74,10 @@ jobs:
       CAUSCOPE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
       CAUSCOPE_REPOSITORY: https://github.com/sergii/causcope
       CAUSCOPE_INCIDENT_ID: INC-D3-1-RAILS
+      CAUSCOPE_STATIC_FACTS: /tmp/rails-d3-static.json
+      CAUSCOPE_OTEL_SYNC: "1"
+      OTEL_SERVICE_NAME: causcope-rails-connection-pool
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://127.0.0.1:4318/v1/traces
 
     steps:
       - name: Checkout
@@ -77,13 +89,16 @@ jobs:
           python-version: "3.13"
 
       - name: Install Python dependencies
-        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema opentelemetry-proto
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.4.8"
           bundler-cache: true
+
+      - name: Validate portable Rails runtime syntax
+        run: ruby -c integrations/rails/causcope_runtime.rb
 
       - name: Extract revision-bound ActiveRecord pool facts
         run: |
@@ -98,7 +113,27 @@ jobs:
 
           python scripts/concrete_system_facts.py /tmp/rails-d3-static.json --pretty
 
-      - name: Start Rails application
+      - name: Start concrete OTLP receiver
+        run: |
+          python scripts/otlp_concrete_receiver.py \
+            --static-facts /tmp/rails-d3-static.json \
+            --incident-id "$CAUSCOPE_INCIDENT_ID" \
+            --snapshot /tmp/rails-d3-runtime.json \
+            --source-uri otlp:http:rails-active-record \
+            > /tmp/rails-d3-otlp.log 2>&1 &
+          echo $! > /tmp/rails-d3-otlp.pid
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4318/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat /tmp/rails-d3-otlp.log
+          exit 1
+
+      - name: Start Rails application with portable runtime integration
         run: |
           pushd lab/rails-connection-pool
           bundle exec puma -C config/puma.rb > /tmp/rails-d3-puma.log 2>&1 &
@@ -115,21 +150,11 @@ jobs:
           cat /tmp/rails-d3-puma.log
           exit 1
 
-      - name: Capture ActiveRecord pool and native OTel identity
+      - name: Capture ActiveRecord pool evidence
         env:
           APP_URL: http://127.0.0.1:4567
           HOLD_MS: "2000"
-        run: |
-          bundle exec ruby lab/rails-connection-pool/concrete_probe.rb > /tmp/rails-d3-envelope.json
-
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          payload = json.loads(Path('/tmp/rails-d3-envelope.json').read_text())
-          Path('/tmp/rails-d3-pool.json').write_text(json.dumps(payload['evidence'], indent=2, sort_keys=True) + '\n')
-          Path('/tmp/rails-d3-otlp.json').write_text(json.dumps(payload['otlp'], indent=2, sort_keys=True) + '\n')
-          PY
+        run: bundle exec ruby lab/rails-connection-pool/concrete_probe.rb > /tmp/rails-d3-pool.json
 
       - name: Validate ActiveRecord resource-pool evidence
         run: |
@@ -151,14 +176,37 @@ jobs:
           print(json.dumps(evidence['assertions'], indent=2, sort_keys=True))
           PY
 
-      - name: Project native Rails request span into concrete runtime facts
+      - name: Verify official OTLP exporter reached Causcope receiver
         run: |
-          python scripts/otel_concrete_runtime_facts.py \
-            --static-facts /tmp/rails-d3-static.json \
-            --otlp /tmp/rails-d3-otlp.json \
-            --incident-id "$CAUSCOPE_INCIDENT_ID" \
-            --source-uri live:rails-active-record \
-            --output /tmp/rails-d3-runtime.json
+          for attempt in $(seq 1 30); do
+            if [ -s /tmp/rails-d3-runtime.json ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          pool = json.loads(Path('/tmp/rails-d3-pool.json').read_text())
+          runtime = json.loads(Path('/tmp/rails-d3-runtime.json').read_text())
+          request = pool['request']
+          matches = [
+              execution for execution in runtime['executions']
+              if execution['code_symbol'] == request['code_symbol']
+              and execution['trace_id'] == request['trace_id']
+              and execution['span_id'] == request['span_id']
+          ]
+          assert len(matches) == 1, (request, runtime['executions'])
+          assert matches[0]['source']['uri'] == 'otlp:http:rails-active-record'
+          assert runtime['system_id'] == pool['system_id']
+          assert runtime['revision']['value'] == pool['revision']['value']
+          assert runtime['incident_id'] == pool['incident_id']
+          print(json.dumps(matches[0], indent=2, sort_keys=True))
+          PY
+
+          curl --fail --silent http://127.0.0.1:4318/status
 
       - name: Run unchanged generic D3.1 concrete profile
         run: |
@@ -218,10 +266,14 @@ jobs:
               raise AssertionError('revision mismatch must fail closed')
           PY
 
-      - name: Stop Rails application
+      - name: Stop services
         if: always()
         run: |
           if [ -f /tmp/rails-d3-puma.pid ]; then
             kill "$(cat /tmp/rails-d3-puma.pid)" || true
           fi
+          if [ -f /tmp/rails-d3-otlp.pid ]; then
+            kill "$(cat /tmp/rails-d3-otlp.pid)" || true
+          fi
           cat /tmp/rails-d3-puma.log || true
+          cat /tmp/rails-d3-otlp.log || true
