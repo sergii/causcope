@@ -51,7 +51,7 @@ GET  /orders/{id}
 POST /orders/{id}/pay
 ```
 
-The request log includes request ID, route, status, client platform, app version, duration, and observation time. That is ordinary runtime evidence, not a hidden root-cause endpoint.
+The request log includes request ID, route, status, client platform, app version, duration, and observation time. SQLite operational errors inherit the same request metadata so diagnostic evidence can be correlated to an exact request scope instead of guessed from timing alone.
 
 ## Start and verify the happy path
 
@@ -76,6 +76,62 @@ Stop everything and delete the test database:
 ./testbed/shop/testbed down
 ```
 
+## Autonomous read-only mode
+
+The most complete dogfood path is now:
+
+```text
+passive runtime evidence
+  -> causal ranking
+  -> ranked discriminating probe
+  -> statically allowlisted read-only executor
+  -> new runtime evidence
+  -> re-rank
+  -> next read-only probe or bounded stop
+```
+
+Run it with:
+
+```bash
+./testbed/shop/testbed causcope \
+  --autonomous \
+  --workspace .causcope
+```
+
+Autonomous mode is deliberately bounded. It executes only canonical probes that are both `risk: read_only` and statically registered by the Shop adapter. It does not run arbitrary shell commands, mutate the observed system, activate scenarios, apply remediation, or read scenario oracles.
+
+The Shop adapter currently supports:
+
+```text
+probe.http.compare_client_cohorts
+probe.database.inspect_lock_error_events
+```
+
+If a probe cannot make a justified `observed` or `absent` claim, the run records `insufficient_evidence` and tries the next ranked eligible probe. It does not invent an `absent` result.
+
+Autonomous mode writes an explicit audit trail:
+
+```text
+.causcope/
+  incident-context.yaml             # when started through investigator CLI
+  investigation-session.yaml        # when started through investigator CLI
+  scoping-projection.json           # when started through investigator CLI
+  source-shop-app.log
+  initial-runtime-evidence.json
+  initial-diagnosis.json
+  autonomous-run.json
+  runtime-evidence.json
+  diagnosis.json
+  diagnosis-summary.json
+```
+
+Inspect the reasoning transition with:
+
+```bash
+cat .causcope/autonomous-run.json
+cat .causcope/diagnosis-summary.json
+```
+
 ## Scenario 1: SQLite write lock
 
 Start the fault for three minutes:
@@ -83,37 +139,41 @@ Start the fault for three minutes:
 ```bash
 ./testbed/shop/testbed scenario start sqlite-write-lock --duration 180
 ./testbed/shop/testbed scenario report sqlite-write-lock
+./testbed/shop/testbed scenario verify sqlite-write-lock
 ```
 
 The public report intentionally does not reveal the root cause.
 
-Start a Causcope investigation:
+Start a Causcope investigation if you want the normal incident workspace:
 
 ```bash
 ./bin/causcope investigate \
   "Some order writes fail intermittently while product reads remain healthy."
 ```
 
-Causcope can now read the normal application log surface without mutating the shop and feed it through the canonical runtime-evidence and diagnosis pipeline:
+Then run the bounded autonomous loop:
 
 ```bash
-./testbed/shop/testbed causcope --workspace .causcope
+./testbed/shop/testbed causcope \
+  --autonomous \
+  --workspace .causcope
 ```
 
-That writes:
+The initial autonomous evidence contains direct request outcomes only. Causcope must choose a discriminating probe before the stronger diagnostic finding appears.
+
+With only one comparable order client cohort, `probe.http.compare_client_cohorts` may legitimately report insufficient evidence. The loop can then execute:
 
 ```text
-.causcope/
-  incident-context.yaml
-  investigation-session.yaml
-  scoping-projection.json
-  source-shop-app.log
-  runtime-evidence.json
-  diagnosis.json
-  diagnosis-summary.json
+probe.database.inspect_lock_error_events
 ```
 
-For this scenario, explicit SQLite lock errors can become `observation.database.lock_wait_event`, and HTTP request outcomes become scoped `observation.http.request_failure` evidence. Causal ranking still happens in the normal Causcope engine; the adapter does not read the oracle or assign the root cause itself.
+against the same request scope. A correlated SQLite `database is locked` event becomes:
+
+```text
+observation.database.lock_error_event
+```
+
+with probe provenance. The existing causal engine then re-ranks `hypothesis.database.lock_contention`; the adapter itself does not assign the cause.
 
 Useful raw surfaces remain available for manual comparison:
 
@@ -126,21 +186,10 @@ curl -i \
   http://127.0.0.1:18080/orders
 ```
 
-The scenario contract can check only the externally observable surface:
-
-```bash
-./testbed/shop/testbed scenario verify sqlite-write-lock
-```
-
-After the investigation, reveal the ground truth:
+After the investigation, reveal benchmark ground truth only for scoring or manual comparison:
 
 ```bash
 ./testbed/shop/testbed scenario reveal sqlite-write-lock
-```
-
-Then stop the helper:
-
-```bash
 ./testbed/shop/testbed scenario stop sqlite-write-lock
 ```
 
@@ -151,41 +200,45 @@ Start repeat traffic from a healthy web cohort and a failing iOS cohort:
 ```bash
 ./testbed/shop/testbed scenario start mobile-bad-payload
 ./testbed/shop/testbed scenario report mobile-bad-payload
+./testbed/shop/testbed scenario verify mobile-bad-payload
+sleep 5
 ```
 
-Let the cohorts produce several comparable requests, then run the evidence bridge:
+Run the autonomous investigation:
 
 ```bash
-sleep 5
 ./testbed/shop/testbed causcope \
+  --autonomous \
   --incident-id incident.local.mobile-payload \
   --workspace /tmp/causcope-mobile
 ```
 
-The structured-log adapter groups HTTP outcomes by method, path, client platform, and app version. A material failing-versus-working difference becomes:
+The initial evidence shows the iOS order requests failing and the web order requests succeeding, but autonomous mode does not precompute the higher-order cohort finding.
+
+Causcope can choose:
+
+```text
+probe.http.compare_client_cohorts
+```
+
+which compares the same method/path across platform/version cohorts and emits:
 
 ```text
 observation.http.client_cohort_failure_skew
 ```
 
-The intended interpretation remains:
+into the selected failing iOS diagnosis scope. The interpretation remains:
 
 ```text
 client cohort difference != root cause
 ```
 
-The causal graph can rank `hypothesis.client.payload_contract_mismatch` from this evidence, but source provenance and the distinction between discriminator and cause are preserved.
+The lock-error probe can also produce an explicit `absent` result for that same iOS request scope when matching requests are present but no correlated lock error exists. Together those observations change the normal causal ranking toward `hypothesis.client.payload_contract_mismatch` without granting either probe direct authority over the diagnosis.
 
-Inspect the app and client logs directly when useful:
+Inspect raw traffic when useful:
 
 ```bash
 docker compose -f testbed/shop/compose.yaml logs -f app mobile-client
-```
-
-Verify the observable behavior:
-
-```bash
-./testbed/shop/testbed scenario verify mobile-bad-payload
 ```
 
 Reveal the oracle only after the investigation:
@@ -216,7 +269,13 @@ schema/testbed-scenario-oracle.schema.json
 
 ## Runtime evidence bridge
 
-The current integrated path is:
+The non-autonomous bridge remains available for direct telemetry ingestion:
+
+```bash
+./testbed/shop/testbed causcope --workspace .causcope
+```
+
+Its path is:
 
 ```text
 Docker Compose structured logs
@@ -227,21 +286,37 @@ Docker Compose structured logs
   -> recommended discriminating probe
 ```
 
-The reusable boundary is the adapter into canonical `runtime_evidence`. Docker Compose is only the first source transport; future adapters can query Loki, Datadog, Elasticsearch, CloudWatch, journald, Kubernetes, or MCP-connected telemetry without creating a second reasoning engine.
+For backward compatibility this mode can derive supported higher-order log findings during ingestion.
 
-The bridge is read-only with respect to the observed system. It reads logs and writes Causcope-local evidence/diagnosis files; it never activates scenarios, issues HTTP writes, modifies SQLite, or reads `oracle.json`.
-
-## Current boundary
-
-Recommended probes are now produced from real testbed evidence, but most source-specific probes are not yet executable through the generic built-in probe executor registry. The next integration is to bind selected `risk: read_only` probes to source adapters so an agent can close the loop:
+Autonomous mode instead uses the same adapter in passive-only form first, then lets the normal probe ranking decide whether a higher-order observation should be collected:
 
 ```text
-running system
-  -> evidence
-  -> causal ranking
-  -> recommended probe
-  -> safe read-only executor
-  -> new evidence
-  -> updated ranking
-  -> verification against the original incident scope
+structured logs
+  -> passive request evidence
+  -> diagnosis
+  -> probe ranking
+  -> read-only Shop probe adapter
+  -> additional canonical evidence
+  -> updated diagnosis
 ```
+
+The reusable boundary remains canonical `runtime_evidence`. Docker Compose is only the first source transport; future providers can query Loki, Datadog, Elasticsearch, CloudWatch, journald, Kubernetes, or deterministic MCP-connected diagnostic tools without creating a second reasoning engine.
+
+## Safety boundary
+
+The autonomous Shop loop enforces all of these constraints before evidence can affect a re-ranking:
+
+```text
+recommended by deterministic probe ranking
+AND statically supported by the adapter
+AND canonical risk == read_only
+AND emitted observation is declared by probe.produces
+AND source.type == probe
+AND source.name == probe id
+AND evidence scope == selected diagnosis scope
+AND bounded max_steps
+```
+
+A source that cannot justify the requested scope must fail closed as insufficient evidence.
+
+The loop performs no remediation. Verification after a future fix remains a separate phase tied back to the original incident scope.

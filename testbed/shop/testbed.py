@@ -145,6 +145,8 @@ def cmd_causcope(args: argparse.Namespace) -> int:
         command.extend(["--incident-id", args.incident_id])
     if args.since:
         command.extend(["--since", args.since])
+    if args.autonomous:
+        command.extend(["--autonomous", "--max-steps", str(args.max_steps)])
     if args.json:
         command.append("--json")
     return subprocess.run(command, cwd=REPO_ROOT, check=True).returncode
@@ -259,6 +261,12 @@ def build_parser() -> argparse.ArgumentParser:
     causcope.add_argument("--workspace", type=Path, default=REPO_ROOT / ".causcope")
     causcope.add_argument("--incident-id")
     causcope.add_argument("--since")
+    causcope.add_argument(
+        "--autonomous",
+        action="store_true",
+        help="Execute only statically allowlisted read-only next probes and re-rank automatically.",
+    )
+    causcope.add_argument("--max-steps", type=int, default=4)
     causcope.add_argument("--json", action="store_true")
     causcope.set_defaults(func=cmd_causcope)
 

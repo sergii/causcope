@@ -67,6 +67,17 @@ noise before json
     assert len(lock_wait) == 1
     assert lock_wait[0]["state"] == "observed"
 
+    passive = build_runtime_evidence_from_logs(
+        events,
+        incident_id="incident.test.passive-logs",
+        source_name="test-log",
+        collected_at="2026-09-14T00:00:06Z",
+        include_derived_findings=False,
+    )
+    validate_runtime_references(passive, concepts)
+    assert {item["observation"] for item in passive["instances"]} == {REQUEST_FAILURE}
+    assert len(passive["instances"]) == 2
+
     snapshot = build_diagnosis_snapshot(
         evidence,
         concepts,

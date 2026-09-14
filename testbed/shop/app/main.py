@@ -6,6 +6,7 @@ import os
 import sqlite3
 import time
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ BUSY_TIMEOUT_MS = int(os.environ.get("SQLITE_BUSY_TIMEOUT_MS", "150"))
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 LOGGER = logging.getLogger("causcope.shop")
+REQUEST_CONTEXT: ContextVar[dict[str, str]] = ContextVar("request_context", default={})
 
 app = FastAPI(title="Causcope Shop Testbed", version="0.1.0")
 
@@ -112,6 +114,14 @@ async def log_request(request: Request, call_next: Any) -> Response:
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
     client_platform = request.headers.get("x-client-platform", "unknown")
     app_version = request.headers.get("x-app-version", "unknown")
+    context = {
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "client_platform": client_platform,
+        "app_version": app_version,
+    }
+    token = REQUEST_CONTEXT.set(context)
     status_code = 500
     try:
         response = await call_next(request)
@@ -124,17 +134,14 @@ async def log_request(request: Request, call_next: Any) -> Response:
                 {
                     "event": "http_request",
                     "observed_at": utc_now(),
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": request.url.path,
+                    **context,
                     "status": status_code,
-                    "client_platform": client_platform,
-                    "app_version": app_version,
                     "duration_ms": round((time.perf_counter() - started) * 1000, 2),
                 },
                 sort_keys=True,
             )
         )
+        REQUEST_CONTEXT.reset(token)
 
 
 def locked_error(exc: sqlite3.OperationalError) -> HTTPException:
@@ -145,6 +152,7 @@ def locked_error(exc: sqlite3.OperationalError) -> HTTPException:
                 "observed_at": utc_now(),
                 "error": str(exc),
                 "db_path": str(DB_PATH),
+                **REQUEST_CONTEXT.get(),
             },
             sort_keys=True,
         )
