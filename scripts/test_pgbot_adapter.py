@@ -51,7 +51,7 @@ class PgbotAdapterTest(unittest.TestCase):
             self.assertEqual("other", instance["source"]["type"])
             self.assertEqual(
                 {
-                    "boundaries": ["boundary.application.external_dependency"],
+                    "boundaries": ["boundary.application.database"],
                     "attributes": {
                         "dependency": "postgresql",
                         "service": "checkout-api",
