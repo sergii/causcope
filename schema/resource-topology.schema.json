@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/resource-topology.schema.json",
+  "title": "Causcope resource topology",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "resources", "relationships", "runners", "provider_types", "provider_instances"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "resource_topology"},
+    "resources": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/resource"}
+    },
+    "relationships": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/relationship"}
+    },
+    "runners": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/runner"}
+    },
+    "provider_types": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/provider_type"}
+    },
+    "provider_instances": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/provider_instance"}
+    }
+  },
+  "$defs": {
+    "topology_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"
+    },
+    "scalar": {
+      "type": ["string", "number", "boolean"]
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": {"$ref": "#/$defs/topology_id"},
+        "kind": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "environment": {"type": "string", "minLength": 1},
+        "network_domain": {"type": "string", "minLength": 1},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/scalar"}
+        }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "relation", "to"],
+      "properties": {
+        "from": {"$ref": "#/$defs/topology_id"},
+        "relation": {"const": "depends_on"},
+        "to": {"$ref": "#/$defs/topology_id"}
+      }
+    },
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "capabilities", "network_domains", "available"],
+      "properties": {
+        "id": {"$ref": "#/$defs/topology_id"},
+        "kind": {"const": "edge_runner"},
+        "capabilities": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "uniqueItems": true
+        },
+        "network_domains": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "available": {"type": "boolean"}
+      }
+    },
+    "provider_type": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "instrument", "provider_id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/topology_id"},
+        "instrument": {"type": "string", "minLength": 1},
+        "provider_id": {"$ref": "#/$defs/topology_id"}
+      }
+    },
+    "provider_instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provider_type", "target", "runner"],
+      "properties": {
+        "id": {"$ref": "#/$defs/topology_id"},
+        "provider_type": {"$ref": "#/$defs/topology_id"},
+        "target": {"$ref": "#/$defs/topology_id"},
+        "runner": {"$ref": "#/$defs/topology_id"},
+        "credentials_ref": {"$ref": "#/$defs/topology_id"}
+      }
+    }
+  }
+}
