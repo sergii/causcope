@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/concrete-system-facts.schema.json",
+  "title": "Causcope concrete system facts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "entities",
+    "facts"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "concrete_system_facts"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {"$ref": "#/$defs/revision"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/entity"}
+    },
+    "facts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/fact"}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "local_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*:[^\\s]+$"
+    },
+    "fact_id": {
+      "type": "string",
+      "pattern": "^fact\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)+$"
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "name"],
+      "properties": {
+        "source_type": {
+          "enum": [
+            "static_analysis",
+            "source",
+            "declared_config",
+            "generated"
+          ]
+        },
+        "name": {"type": "string", "minLength": 1},
+        "reference": {"type": "string", "minLength": 1},
+        "query": {"type": "string", "minLength": 1},
+        "rule": {"type": "string", "minLength": 1}
+      }
+    },
+    "source_location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "start_line": {"type": "integer", "minimum": 1},
+        "start_column": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1},
+        "end_column": {"type": "integer", "minimum": 1}
+      }
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "certainty",
+        "provenance"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/local_id"},
+        "kind": {
+          "enum": [
+            "code_symbol",
+            "transaction",
+            "data_resource",
+            "service",
+            "job",
+            "external_dependency"
+          ]
+        },
+        "label": {"type": "string", "minLength": 1},
+        "certainty": {"enum": ["direct", "inferred"]},
+        "confidence": {"enum": ["low", "moderate", "high"]},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "source_location": {"$ref": "#/$defs/source_location"},
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "transaction": {"$ref": "#/$defs/local_id"},
+        "code_path": {"$ref": "#/$defs/local_id"},
+        "boundary": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "subject",
+        "relation",
+        "object",
+        "certainty",
+        "provenance"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/fact_id"},
+        "subject": {"$ref": "#/$defs/local_id"},
+        "relation": {
+          "enum": [
+            "calls",
+            "contains",
+            "executes_in",
+            "reads",
+            "writes",
+            "maps_to",
+            "accesses_before",
+            "depends_on"
+          ]
+        },
+        "object": {"$ref": "#/$defs/local_id"},
+        "certainty": {"enum": ["direct", "inferred"]},
+        "confidence": {"enum": ["low", "moderate", "high"]},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "context": {"$ref": "#/$defs/context"},
+        "note": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"certainty": {"const": "inferred"}},
+            "required": ["certainty"]
+          },
+          "then": {
+            "properties": {
+              "provenance": {"required": ["rule"]}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"relation": {"const": "accesses_before"}},
+            "required": ["relation"]
+          },
+          "then": {
+            "required": ["context"],
+            "properties": {
+              "context": {"required": ["transaction", "code_path"]}
+            }
+          }
+        }
+      ]
+    }
+  }
+}
