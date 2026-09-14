@@ -21,7 +21,7 @@
               "attributes": [
                 {"key": "db.system", "value": {"stringValue": "postgresql"}},
                 {"key": "peer.service", "value": {"stringValue": "postgresql"}},
-                {"key": "causcope.boundary", "value": {"stringValue": "boundary.application.external_dependency"}}
+                {"key": "causcope.boundary", "value": {"stringValue": "boundary.application.database"}}
               ]
             }
           ]

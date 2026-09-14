@@ -25,7 +25,7 @@ TRACE_ADAPTER = (
 )
 INCIDENT_ID = "incident.live.postgresql"
 EXPECTED_SCOPE = {
-    "boundaries": ["boundary.application.external_dependency"],
+    "boundaries": ["boundary.application.database"],
     "attributes": {
         "dependency": "postgresql",
         "service": "checkout-api",

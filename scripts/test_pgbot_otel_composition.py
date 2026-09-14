@@ -89,7 +89,7 @@ class PgbotOtelCompositionTest(unittest.TestCase):
         partition = snapshot["partitions"][0]
         self.assertEqual(
             {
-                "boundaries": ["boundary.application.external_dependency"],
+                "boundaries": ["boundary.application.database"],
                 "attributes": {
                     "dependency": "postgresql",
                     "service": "checkout-api",

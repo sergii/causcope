@@ -24,7 +24,7 @@ PROVIDER_ID = "provider.test.verification"
 FIXED_AT = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
 NOW = datetime(2026, 9, 14, 12, 5, tzinfo=timezone.utc)
 SCOPE = {
-    "boundaries": ["boundary.application.external_dependency"],
+    "boundaries": ["boundary.application.database"],
     "attributes": {"service": "checkout-api", "dependency": "postgresql"},
 }
 
