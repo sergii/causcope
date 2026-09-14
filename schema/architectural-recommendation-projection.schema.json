@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/architectural-recommendation-projection.schema.json",
+  "title": "Causcope architectural recommendation projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "recommendation_id",
+    "subject_resource",
+    "provider_instance",
+    "state",
+    "human_approval_required",
+    "causal_basis",
+    "problem",
+    "missing_assumptions",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "architectural_recommendation_projection"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "recommendation_id": {"const": "recommendation.database.denormalize_read_model"},
+    "subject_resource": {"type": "string", "minLength": 1},
+    "provider_instance": {"type": "string", "minLength": 1},
+    "state": {
+      "enum": [
+        "NO_PROBLEM_EVIDENCE",
+        "INSUFFICIENT_CONTEXT",
+        "EXPERIMENT_REQUIRED",
+        "BENEFIT_NOT_DEMONSTRATED",
+        "ESTIMATED_BENEFIT",
+        "READY_FOR_HUMAN_REVIEW"
+      ]
+    },
+    "human_approval_required": {"const": true},
+    "causal_basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation", "query_object"],
+      "properties": {
+        "observation": {"const": "observation.database.query_latency"},
+        "evidence_id": {"type": "string", "minLength": 1},
+        "query_object": {"type": "string", "minLength": 1},
+        "source_name": {"type": "string", "minLength": 1},
+        "source_uri": {"type": "string", "minLength": 1}
+      }
+    },
+    "problem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query_object", "request_path", "read_frequency_per_minute", "query_contribution"],
+      "properties": {
+        "query_object": {"type": "string", "minLength": 1},
+        "request_path": {"type": "string", "minLength": 1},
+        "read_frequency_per_minute": {"type": "number", "minimum": 0},
+        "query_contribution": {"enum": ["dominant", "material", "unknown"]}
+      }
+    },
+    "proposed_change": {"type": "object"},
+    "benefit": {"type": "object"},
+    "consistency": {"type": "object"},
+    "cost": {"type": "object"},
+    "verification": {"type": "object"},
+    "missing_assumptions": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  }
+}
