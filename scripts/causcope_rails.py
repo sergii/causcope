@@ -231,7 +231,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--revision", help="Explicit running revision; defaults to git HEAD")
     run_parser.add_argument("--otel-endpoint", help=f"Override OTLP traces endpoint; defaults to existing env or {DEFAULT_OTLP_ENDPOINT}")
     run_parser.add_argument("--sync-export", action="store_true", help="Use synchronous span export for deterministic local tests")
-    run_parser.add_argument("command", nargs=argparse.REMAINDER)
+    run_parser.add_argument("command", nargs="+", help="Application command; place it after `--`")
     run_parser.set_defaults(handler=run_rails)
     return parser
 
