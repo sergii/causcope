@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/verification-result.schema.json",
+  "title": "Causcope verification result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "target",
+    "baseline_evidence_revision",
+    "original_scope",
+    "fix_applied_at",
+    "evaluated_at",
+    "outcome",
+    "criteria"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "verification_result"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "target": {"type": "string", "minLength": 1},
+    "baseline_evidence_revision": {"type": "integer", "minimum": 0},
+    "original_scope": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "runtime-evidence.schema.json#/$defs/scope"}
+      ]
+    },
+    "fix_applied_at": {"type": "string", "format": "date-time"},
+    "evaluated_at": {"type": "string", "format": "date-time"},
+    "outcome": {"enum": ["resolved", "regressed", "inconclusive"]},
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["observation", "expected_state", "status", "evidence_instance_ids", "reason"],
+        "properties": {
+          "observation": {"type": "string", "minLength": 1},
+          "expected_state": {"const": "absent"},
+          "status": {"enum": ["resolved", "regressed", "inconclusive"]},
+          "evidence_instance_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
