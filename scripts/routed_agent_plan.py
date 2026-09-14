@@ -39,6 +39,8 @@ def build_routed_agent_plan(
     snapshot: dict[str, Any],
     base_plan: dict[str, Any],
     router: InstrumentRouter,
+    *,
+    external_mcp_execution_enabled: bool = False,
 ) -> dict[str, Any]:
     validate_agent_plan(base_plan)
     if base_plan.get("incident_id") != snapshot.get("incident_id"):
@@ -46,7 +48,11 @@ def build_routed_agent_plan(
     if base_plan.get("evidence_revision") != snapshot.get("evidence_revision"):
         raise ValueError("agent plan and diagnosis snapshot evidence_revision differ")
 
-    routing = build_instrument_routing_projection(snapshot, router)
+    routing = build_instrument_routing_projection(
+        snapshot,
+        router,
+        external_mcp_execution_enabled=external_mcp_execution_enabled,
+    )
     validate_instrument_routing_projection(routing)
     document = {
         "schema_version": "0.1",
