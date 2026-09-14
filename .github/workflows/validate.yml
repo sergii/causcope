@@ -90,6 +90,9 @@ jobs:
       - name: Validate routed instrument MCP execution
         run: python scripts/test_routed_instrument_mcp_tool.py
 
+      - name: Validate original-scope verification protocol
+        run: python scripts/test_verification_protocol.py
+
       - name: Validate pgbot and OpenTelemetry composition
         run: python scripts/test_pgbot_otel_composition.py
 
