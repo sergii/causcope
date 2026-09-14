@@ -1,8 +1,10 @@
 class ApplicationRecord < ActiveRecord::Base
   primary_abstract_class
 
-  connects_to database: {
-    writing: :primary,
-    reading: :replica
-  }
+  if Rails.env.multi_database?
+    connects_to database: {
+      writing: :primary,
+      reading: :replica
+    }
+  end
 end
