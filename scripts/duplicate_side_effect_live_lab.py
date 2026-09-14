@@ -168,8 +168,6 @@ def run_ruby_attempt(
         "start_time_unix_nano": started,
         "end_time_unix_nano": ended,
         "client_outcome": outcome,
-        "stdout": completed.stdout.strip(),
-        "stderr": completed.stderr.strip(),
     }
 
 
