@@ -97,6 +97,9 @@ jobs:
           ruby-version: "3.4.8"
           bundler-cache: true
 
+      - name: Validate portable Rails runtime syntax
+        run: ruby -c integrations/rails/causcope_runtime.rb
+
       - name: Extract revision-bound ActiveRecord pool facts
         run: |
           ruby scripts/rails_connection_pool_concrete_facts.rb \
