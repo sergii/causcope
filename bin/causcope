@@ -1,4 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if [ "${1:-}" = "scan" ]; then
+  shift
+  exec python3 "$ROOT/scripts/causcope_scan.py" "$@"
+fi
+
 exec python3 "$ROOT/scripts/causcope_cli.py" "$@"
