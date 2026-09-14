@@ -12,14 +12,20 @@ from causal_projection import load_concepts
 from instrument_router import InstrumentRouter, validate_instrument_routing_decision
 from pgbot_adapter import load_adapter
 from pgbot_autonomous_provider import PGBOT_PROVIDER_ID, PgbotAutonomousProbeProvider, file_context_supplier
+from resource_topology import load_resource_topology
 
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER_PATH = ROOT / "examples" / "adapters" / "pgbot" / "postgresql.yaml"
 CONTEXT_PATH = ROOT / "examples" / "telemetry" / "pgbot" / "postgresql-findings.json"
+SHOP_TOPOLOGY_PATH = ROOT / "examples" / "topology" / "shop.yaml"
 INCIDENT_ID = "incident.test.instrument-router"
 CPU_PROBE = "probe.cpu.inspect_utilization"
 CPU_EXECUTOR = "executor.linux.proc_stat.cpu_utilization"
 LOCK_PROBE = "probe.database.inspect_lock_waits"
+ORDERS_RESOURCE = "db.orders.prod"
+PAYMENTS_RESOURCE = "db.payments.prod"
+ORDERS_PROVIDER = "provider.pgbot.orders-prod"
+PAYMENTS_PROVIDER = "provider.pgbot.payments-prod"
 
 
 def host_capabilities(*, available: bool = True) -> dict[str, Any]:
@@ -65,6 +71,7 @@ class InstrumentRouterTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.concepts = load_concepts(ROOT)
         cls.adapter = load_adapter(ADAPTER_PATH)
+        cls.shop_topology = load_resource_topology(SHOP_TOPOLOGY_PATH)
 
     def pgbot_provider(
         self,
@@ -84,6 +91,21 @@ class InstrumentRouterTest(unittest.TestCase):
             context_supplier=supplier,
             source_uri="pgbot://test/instrument-router",
         )
+
+    def target_router(self) -> tuple[InstrumentRouter, PgbotAutonomousProbeProvider]:
+        orders_provider = self.pgbot_provider()
+        payments_provider = self.pgbot_provider()
+        router = InstrumentRouter(
+            concepts=self.concepts,
+            host_capabilities=host_capabilities(),
+            providers=[],
+            resource_topology=self.shop_topology,
+            provider_instance_bindings={
+                ORDERS_PROVIDER: orders_provider,
+                PAYMENTS_PROVIDER: payments_provider,
+            },
+        )
+        return router, orders_provider
 
     def test_routes_exact_scope_direct_probe_to_available_pgbot(self) -> None:
         provider = self.pgbot_provider()
@@ -216,6 +238,83 @@ class InstrumentRouterTest(unittest.TestCase):
             ["provider.aaa.postgresql", "provider.zzz.postgresql"],
             [candidate["instrument"]["id"] for candidate in decision["candidates"]],
         )
+
+    def test_target_aware_routing_selects_only_exact_database_provider_instance(self) -> None:
+        router, provider = self.target_router()
+        decision = router.route(
+            LOCK_PROBE,
+            copy.deepcopy(provider.adapter_scope),
+            execution_requirement="direct",
+            target_resource=ORDERS_RESOURCE,
+        )
+        validate_instrument_routing_decision(decision)
+        self.assertEqual(ORDERS_RESOURCE, decision["target_resource"])
+        self.assertEqual(
+            "safe_exact_scope_and_target_then_stable_identity",
+            decision["selection_policy"],
+        )
+        self.assertEqual(ORDERS_PROVIDER, decision["selection"]["instrument"]["id"])
+
+        candidates = {
+            candidate["instrument"]["id"]: candidate
+            for candidate in decision["candidates"]
+            if candidate["instrument"]["kind"] == "diagnostic_provider"
+        }
+        self.assertEqual("exact", candidates[ORDERS_PROVIDER]["target_match"])
+        self.assertTrue(candidates[ORDERS_PROVIDER]["eligible"])
+        self.assertEqual("mismatch", candidates[PAYMENTS_PROVIDER]["target_match"])
+        self.assertFalse(candidates[PAYMENTS_PROVIDER]["eligible"])
+
+    def test_two_targets_route_to_two_distinct_pgbot_instances(self) -> None:
+        router, provider = self.target_router()
+        orders = router.route(
+            LOCK_PROBE,
+            copy.deepcopy(provider.adapter_scope),
+            execution_requirement="direct",
+            target_resource=ORDERS_RESOURCE,
+        )
+        payments = router.route(
+            LOCK_PROBE,
+            copy.deepcopy(provider.adapter_scope),
+            execution_requirement="direct",
+            target_resource=PAYMENTS_RESOURCE,
+        )
+        self.assertEqual(ORDERS_PROVIDER, orders["selection"]["instrument"]["id"])
+        self.assertEqual(PAYMENTS_PROVIDER, payments["selection"]["instrument"]["id"])
+        self.assertNotEqual(
+            orders["selection"]["instrument"]["target_resource"],
+            payments["selection"]["instrument"]["target_resource"],
+        )
+
+    def test_target_aware_execution_records_resource_provenance(self) -> None:
+        router, provider = self.target_router()
+        evidence = router.execute(
+            LOCK_PROBE,
+            "observation.http.request_failure",
+            copy.deepcopy(provider.adapter_scope),
+            target_resource=ORDERS_RESOURCE,
+        )
+        instance = evidence["instances"][0]
+        self.assertEqual(ORDERS_PROVIDER, instance["labels"]["instrument"])
+        self.assertEqual(
+            ORDERS_RESOURCE,
+            instance["source"]["attributes"]["routing.target_resource"],
+        )
+
+    def test_target_resource_requires_topology(self) -> None:
+        provider = self.pgbot_provider()
+        router = InstrumentRouter(
+            concepts=self.concepts,
+            host_capabilities=host_capabilities(),
+            providers=[provider],
+        )
+        with self.assertRaisesRegex(ValueError, "requires resource_topology"):
+            router.route(
+                LOCK_PROBE,
+                copy.deepcopy(provider.adapter_scope),
+                execution_requirement="direct",
+                target_resource=ORDERS_RESOURCE,
+            )
 
 
 if __name__ == "__main__":
