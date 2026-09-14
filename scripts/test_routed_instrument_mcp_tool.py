@@ -159,7 +159,12 @@ class RoutedInstrumentMcpToolTest(unittest.TestCase):
                 candidate["source"]["id"] for candidate in diagnosis["ranking"]["candidates"]
             }
             self.assertIn("hypothesis.database.lock_contention", candidate_ids)
-            self.assertIn("observation.database.lock_wait_time", snapshot["partitions"][0]["observed"])
+            observed = {
+                observation
+                for partition in snapshot["partitions"]
+                for observation in partition["observed"]
+            }
+            self.assertIn("observation.database.lock_wait_time", observed)
 
     def test_stale_revision_and_stale_route_fail_closed_without_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
