@@ -5,7 +5,8 @@ on:
     branches: [main]
     paths:
       - "integrations/rails/**"
-      - "scripts/rails_connection_pool_concrete_facts.rb"
+      - "scripts/causcope_scan.py"
+      - "scripts/rails_repository_scan.rb"
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/otlp_concrete_receiver.py"
       - "scripts/xray_engine.py"
@@ -16,11 +17,13 @@ on:
       - "lab/rails-connection-pool/**"
       - "RFC/0056-rails-active-record-d3-1-provider.md"
       - "RFC/0058-portable-rails-otlp-runtime.md"
+      - "RFC/0061-exact-resource-pool-runtime-binding.md"
       - ".github/workflows/xray-d3-1-rails.yml"
   pull_request:
     paths:
       - "integrations/rails/**"
-      - "scripts/rails_connection_pool_concrete_facts.rb"
+      - "scripts/causcope_scan.py"
+      - "scripts/rails_repository_scan.rb"
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/otlp_concrete_receiver.py"
       - "scripts/xray_engine.py"
@@ -31,6 +34,7 @@ on:
       - "lab/rails-connection-pool/**"
       - "RFC/0056-rails-active-record-d3-1-provider.md"
       - "RFC/0058-portable-rails-otlp-runtime.md"
+      - "RFC/0061-exact-resource-pool-runtime-binding.md"
       - ".github/workflows/xray-d3-1-rails.yml"
 
 permissions:
@@ -100,18 +104,39 @@ jobs:
       - name: Validate portable Rails runtime syntax
         run: ruby -c integrations/rails/causcope_runtime.rb
 
-      - name: Extract revision-bound ActiveRecord pool facts
+      - name: Scan revision-bound Rails pool facts through product provider
         run: |
-          ruby scripts/rails_connection_pool_concrete_facts.rb \
-            --controller lab/rails-connection-pool/app/controllers/pool_controller.rb \
-            --database lab/rails-connection-pool/config/database.yml \
-            --deployment lab/rails-connection-pool/deployment.yml \
+          ./bin/causcope scan lab/rails-connection-pool \
+            --provider rails \
+            --environment production \
+            --env-file deployment.yml \
             --system-id "$CAUSCOPE_SYSTEM_ID" \
             --revision "$CAUSCOPE_REVISION" \
             --repository "$CAUSCOPE_REPOSITORY" \
             --output /tmp/rails-d3-static.json
 
           python scripts/concrete_system_facts.py /tmp/rails-d3-static.json --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          document = json.loads(Path('/tmp/rails-d3-static.json').read_text())
+          pools = [entity for entity in document['entities'] if entity['kind'] == 'resource_pool']
+          assert len(pools) == 1, pools
+          pool = pools[0]
+          assert pool['id'] == 'pool:active_record.primary'
+          assert pool['attributes']['technology'] == 'active_record'
+          assert pool['attributes']['adapter'] == 'postgresql'
+          assert pool['attributes']['config_name'] == 'primary'
+          assert pool['attributes']['configured_capacity'] == 1
+          assert any(
+              fact['subject'] == 'code:PoolController#work()'
+              and fact['relation'] == 'depends_on'
+              and fact['object'] == pool['id']
+              for fact in document['facts']
+          )
+          PY
 
       - name: Start concrete OTLP receiver
         run: |
@@ -176,7 +201,7 @@ jobs:
           print(json.dumps(evidence['assertions'], indent=2, sort_keys=True))
           PY
 
-      - name: Verify official OTLP exporter reached Causcope receiver
+      - name: Verify official OTLP exporter reached Causcope receiver with exact pool identity
         run: |
           for attempt in $(seq 1 30); do
             if [ -s /tmp/rails-d3-runtime.json ]; then
@@ -199,16 +224,32 @@ jobs:
               and execution['span_id'] == request['span_id']
           ]
           assert len(matches) == 1, (request, runtime['executions'])
-          assert matches[0]['source']['uri'] == 'otlp:http:rails-active-record'
+          execution = matches[0]
+          assert execution['source']['uri'] == 'otlp:http:rails-active-record'
+
+          interactions = [
+              interaction for interaction in runtime['pool_interactions']
+              if interaction['execution_id'] == execution['id']
+              and interaction['pool_id'] == pool['pool']['id']
+              and interaction['technology'] == 'active_record'
+              and interaction['trace_id'] == request['trace_id']
+              and interaction['span_id'] == request['span_id']
+          ]
+          assert len(interactions) == 1, runtime['pool_interactions']
+          interaction = interactions[0]
+          assert interaction['config_name'] == 'primary'
+          assert interaction['role'] == 'writing'
+          assert interaction['shard'] == 'default'
+          assert interaction['checkout_wait_ms'] >= 0
           assert runtime['system_id'] == pool['system_id']
           assert runtime['revision']['value'] == pool['revision']['value']
           assert runtime['incident_id'] == pool['incident_id']
-          print(json.dumps(matches[0], indent=2, sort_keys=True))
+          print(json.dumps({'execution': execution, 'pool_interaction': interaction}, indent=2, sort_keys=True))
           PY
 
           curl --fail --silent http://127.0.0.1:4318/status
 
-      - name: Run unchanged generic D3.1 concrete profile
+      - name: Run generic D3.1 concrete profile with exact runtime pool binding
         run: |
           python scripts/xray_engine.py \
             --profile xray/profiles/d3-1-concrete-connection-pool.yaml \
@@ -239,6 +280,14 @@ jobs:
               return project(profile, {'static': static_document, 'runtime': runtime_document, 'pool': pool_document})['epistemic_state']
 
           assert state() == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+
+          missing_pool_interaction = copy.deepcopy(runtime)
+          missing_pool_interaction['pool_interactions'] = []
+          assert state(runtime_document=missing_pool_interaction) == 'PRECONDITIONS_PRESENT'
+
+          wrong_runtime_pool = copy.deepcopy(runtime)
+          wrong_runtime_pool['pool_interactions'][0]['pool_id'] = 'pool:active_record.unknown'
+          assert state(runtime_document=wrong_runtime_pool) == 'PRECONDITIONS_PRESENT'
 
           wrong_technology = copy.deepcopy(pool)
           wrong_technology['pool']['technology'] = 'psycopg_pool'
