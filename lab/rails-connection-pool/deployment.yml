@@ -1,0 +1,10 @@
+environment:
+  RAILS_ENV: production
+  RAILS_MAX_THREADS: "5"
+  DB_HOST: "127.0.0.1"
+  DB_PORT: "5432"
+  DB_USER: causcope
+  DB_PASSWORD: causcope
+  DB_NAME: causcope
+  DB_POOL: "1"
+  DB_CHECKOUT_TIMEOUT: "5"

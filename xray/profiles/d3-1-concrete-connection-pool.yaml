@@ -39,9 +39,9 @@ stages:
         path: entities
         where:
           kind: resource_pool
-          attributes.technology: psycopg_pool
         bind:
           pool_id: id
+          pool_technology: attributes.technology
           configured_capacity: attributes.configured_capacity
       - source: static
         path: facts
@@ -74,7 +74,7 @@ stages:
           attributes.dbms: postgresql
 
   - id: RUNTIME_EXECUTION_OBSERVED
-    description: A concrete request span for the pinned code symbol is exactly joined to the resource-pool evidence by trace and span identity.
+    description: A concrete request span for the pinned code symbol is exactly joined to resource-pool evidence from the same pool technology by trace and span identity.
     clauses:
       - source: runtime
         path: executions
@@ -103,12 +103,18 @@ stages:
             var: pool_id
         bind:
           observed_capacity: observed_capacity
+          observed_pool_technology: technology
     constraints:
       - op: eq
         left:
           var: configured_capacity
         right:
           var: observed_capacity
+      - op: eq
+        left:
+          var: pool_technology
+        right:
+          var: observed_pool_technology
 
   - id: POOL_SATURATED
     description: The exact configured pool is observed at capacity while the traced request competes for checkout.
