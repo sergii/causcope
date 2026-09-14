@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:17-alpine
+    command:
+      - postgres
+      - -c
+      - max_connections=24
+      - -c
+      - superuser_reserved_connections=1
+    environment:
+      POSTGRES_USER: causcope_admin
+      POSTGRES_PASSWORD: causcope
+      POSTGRES_DB: causcope
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/10-pgbot-live.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U causcope_admin -d causcope"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  holders:
+    image: postgres:17-alpine
+    environment:
+      PGPASSWORD: causcope_app
+    command:
+      - sh
+      - -ec
+      - |
+        for i in $$(seq 1 20); do
+          PGAPPNAME="causcope-holder-$$i" psql \
+            -h db \
+            -U causcope_app \
+            -d causcope \
+            -v ON_ERROR_STOP=1 \
+            -c "SELECT pg_sleep(300)" &
+        done
+        wait
+    depends_on:
+      db:
+        condition: service_healthy
