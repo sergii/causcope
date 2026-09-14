@@ -279,14 +279,31 @@ jobs:
           def state(static_document=static, runtime_document=runtime, pool_document=pool):
               return project(profile, {'static': static_document, 'runtime': runtime_document, 'pool': pool_document})['epistemic_state']
 
+          def exact_interaction(interactions):
+              request = pool['request']
+              matches = [
+                  item for item in interactions
+                  if item['code_symbol'] == request['code_symbol']
+                  and item['trace_id'] == request['trace_id']
+                  and item['span_id'] == request['span_id']
+                  and item['pool_id'] == pool['pool']['id']
+              ]
+              assert len(matches) == 1, matches
+              return matches[0]
+
           assert state() == 'CAUSAL_DIAGNOSIS_CONFIRMED'
 
+          target_id = exact_interaction(runtime['pool_interactions'])['id']
           missing_pool_interaction = copy.deepcopy(runtime)
-          missing_pool_interaction['pool_interactions'] = []
+          missing_pool_interaction['pool_interactions'] = [
+              item for item in missing_pool_interaction['pool_interactions']
+              if item['id'] != target_id
+          ]
           assert state(runtime_document=missing_pool_interaction) == 'PRECONDITIONS_PRESENT'
 
           wrong_runtime_pool = copy.deepcopy(runtime)
-          wrong_runtime_pool['pool_interactions'][0]['pool_id'] = 'pool:active_record.unknown'
+          target = next(item for item in wrong_runtime_pool['pool_interactions'] if item['id'] == target_id)
+          target['pool_id'] = 'pool:active_record.unknown'
           assert state(runtime_document=wrong_runtime_pool) == 'PRECONDITIONS_PRESENT'
 
           wrong_technology = copy.deepcopy(pool)
