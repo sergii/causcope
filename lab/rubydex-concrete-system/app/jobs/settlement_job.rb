@@ -1,5 +1,8 @@
 class SettlementJob
   def perform
-    :ok
+    ApplicationRecord.transaction do
+      LedgerEntry.create!(event: "settlement")
+      Account.update_all(active: true)
+    end
   end
 end

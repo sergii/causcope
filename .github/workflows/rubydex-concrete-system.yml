@@ -6,19 +6,25 @@ on:
     paths:
       - "scripts/rubydex_concrete_system_facts.rb"
       - "scripts/verify_rubydex_concrete_system_extractor.py"
+      - "scripts/rails_concrete_system_enrichment.py"
+      - "scripts/verify_rails_deadlock_enrichment.py"
       - "schema/concrete-system-facts.schema.json"
       - "scripts/concrete_system_facts.py"
       - "lab/rubydex-concrete-system/**"
       - "RFC/0047-rubydex-concrete-system-extractor.md"
+      - "RFC/0048-rails-deadlock-static-enrichment.md"
       - ".github/workflows/rubydex-concrete-system.yml"
   pull_request:
     paths:
       - "scripts/rubydex_concrete_system_facts.rb"
       - "scripts/verify_rubydex_concrete_system_extractor.py"
+      - "scripts/rails_concrete_system_enrichment.py"
+      - "scripts/verify_rails_deadlock_enrichment.py"
       - "schema/concrete-system-facts.schema.json"
       - "scripts/concrete_system_facts.py"
       - "lab/rubydex-concrete-system/**"
       - "RFC/0047-rubydex-concrete-system-extractor.md"
+      - "RFC/0048-rails-deadlock-static-enrichment.md"
       - ".github/workflows/rubydex-concrete-system.yml"
 
 permissions:
@@ -71,5 +77,22 @@ jobs:
 
           diff -u /tmp/rubydex-facts-a.json /tmp/rubydex-facts-b.json
 
-      - name: Validate Causcope contract and semantic boundary
+      - name: Validate direct Rubydex semantic boundary
         run: python scripts/verify_rubydex_concrete_system_extractor.py /tmp/rubydex-facts-a.json
+
+      - name: Add conservative Rails static enrichment twice
+        run: |
+          python scripts/rails_concrete_system_enrichment.py \
+            --input /tmp/rubydex-facts-a.json \
+            --workspace lab/rubydex-concrete-system \
+            --output /tmp/rails-facts-a.json
+
+          python scripts/rails_concrete_system_enrichment.py \
+            --input /tmp/rubydex-facts-a.json \
+            --workspace lab/rubydex-concrete-system \
+            --output /tmp/rails-facts-b.json
+
+          diff -u /tmp/rails-facts-a.json /tmp/rails-facts-b.json
+
+      - name: Verify D2.2 structural precondition without runtime overclaim
+        run: python scripts/verify_rails_deadlock_enrichment.py /tmp/rails-facts-a.json
