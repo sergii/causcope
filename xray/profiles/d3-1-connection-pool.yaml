@@ -1,0 +1,59 @@
+schema_version: "0.1"
+kind: xray_profile
+id: xray.d3_1.connection_pool_exhaustion
+catalog_code: D3.1
+hypothesis: hypothesis.database.connection_pool_exhaustion
+symptom: symptom.latency.high
+observation: observation.database.connection_pool_wait_time
+max_emitted_bindings: 10
+inputs:
+  evidence:
+    kind: empirical_evidence
+    required: true
+stages:
+  - id: PRECONDITIONS_PRESENT
+    description: A controlled experiment targets application-side database connection pool exhaustion and the canonical checkout-wait claim.
+    clauses:
+      - source: evidence
+        path: $
+        where:
+          experiment: experiment.database.connection_pool_exhaustion.python_postgres
+          claims:
+            - claim.database.connection_pool_exhaustion.checkout_wait_drives_latency
+  - id: POOL_SATURATED
+    description: The intervention occupies all application pool capacity while a measured request competes for checkout.
+    clauses:
+      - source: evidence
+        path: $
+        where:
+          intervention.action: occupy_all_application_database_pool_slots
+          assertions.application_pool_was_at_capacity: true
+        bind:
+          pool_wait_delta_ms: observations.derived.pool_wait_delta_ms
+          request_latency_delta_ms: observations.derived.request_latency_delta_ms
+  - id: CHECKOUT_WAIT_OBSERVED
+    description: Connection checkout wait and end-to-end request latency both increase during the saturated-pool intervention.
+    clauses:
+      - source: evidence
+        path: $
+        where:
+          assertions.pool_checkout_wait_increased: true
+          assertions.request_latency_increased: true
+  - id: DATABASE_CAPACITY_DISTINGUISHED
+    description: The SQL query remains near baseline and PostgreSQL still accepts an independent direct connection, distinguishing application pool exhaustion from slow-query or database-wide admission exhaustion.
+    clauses:
+      - source: evidence
+        path: $
+        where:
+          assertions.query_latency_stayed_near_baseline: true
+          assertions.database_still_accepts_direct_connections: true
+  - id: CAUSAL_DIAGNOSIS_CONFIRMED
+    description: The added checkout wait explains the request-latency increase and both checkout wait and request latency return toward baseline after the holder releases the pool slot.
+    clauses:
+      - source: evidence
+        path: $
+        where:
+          result: supports
+          assertions.checkout_wait_explains_request_delta: true
+          assertions.recovery_checkout_wait_returned_to_baseline: true
+          assertions.recovery_request_latency_returned_to_baseline: true
