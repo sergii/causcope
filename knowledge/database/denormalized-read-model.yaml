@@ -1,0 +1,32 @@
+id: recommendation.database.denormalize_read_model
+kind: architectural_recommendation
+title: Introduce a denormalized read model
+summary: Materialize a read-optimized projection when repeated relational assembly is a causally supported contributor to a dominant read path and the synchronization cost is acceptable.
+recommendation_domain: data_model
+supported_by:
+  - hypothesis.latency.database
+  - observation.database.query_latency
+tradeoffs:
+  - dimension: read_latency
+    direction: improves
+    note: A projection can remove repeated joins or aggregation work from a latency-sensitive read path.
+  - dimension: read_complexity
+    direction: improves
+    note: Consumers can query a shape aligned with the access pattern instead of rebuilding it on every request.
+  - dimension: write_complexity
+    direction: worsens
+    note: The system must maintain the projection when source data changes.
+  - dimension: consistency_risk
+    direction: worsens
+    note: Duplicated state introduces synchronization and freshness semantics that must be explicit.
+human_approval_required: true
+why_it_matters: Denormalization is an architectural trade-off, not a generic database best practice. It should be proposed only after evidence connects the current data access pattern to the observed system outcome.
+common_misconceptions:
+  - A slow query alone proves that the database schema should be denormalized.
+  - Denormalization is always faster once write amplification, freshness, and invalidation are included.
+search_terms:
+  - denormalization
+  - read model
+  - materialized projection
+  - database normalization
+  - query latency

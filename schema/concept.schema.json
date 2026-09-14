@@ -6,7 +6,7 @@
   "required": ["id", "kind", "title", "summary"],
   "properties": {
     "id": {"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"},
-    "kind": {"type":"string","enum":["symptom","hypothesis","observation","probe","system_entity","boundary"]},
+    "kind": {"type":"string","enum":["symptom","hypothesis","observation","probe","system_entity","boundary","architectural_recommendation"]},
     "title": {"type":"string","minLength":1},
     "summary": {"type":"string","minLength":1},
     "entity_type": {"type":"string","enum":["application_service","external_service","database","cache","queue","worker","client","process","host","resolver"]},
@@ -25,12 +25,30 @@
     "risk": {"type":"string","enum":["read_only","low","state_changing","high"]},
     "prerequisites": {"type":"array","items":{"$ref":"#/$defs/conceptId"},"uniqueItems":true},
     "related_to": {"type":"array","items":{"$ref":"#/$defs/conceptId"},"uniqueItems":true},
+    "recommendation_domain": {"type":"string","enum":["data_model","storage","availability","scalability","observability","deployment","integration"]},
+    "supported_by": {"type":"array","minItems":1,"items":{"$ref":"#/$defs/conceptId"},"uniqueItems":true},
+    "tradeoffs": {
+      "type":"array",
+      "minItems":1,
+      "items": {
+        "type":"object",
+        "required":["dimension","direction","note"],
+        "properties": {
+          "dimension":{"type":"string","pattern":"^[a-z][a-z0-9_]*$"},
+          "direction":{"type":"string","enum":["improves","worsens","mixed"]},
+          "note":{"type":"string","minLength":1}
+        },
+        "additionalProperties":false
+      }
+    },
+    "human_approval_required": {"type":"boolean"},
     "common_misconceptions": {"type":"array","items":{"type":"string"}},
     "search_terms": {"type":"array","items":{"type":"string"},"uniqueItems":true}
   },
   "allOf": [
     {"if":{"properties":{"kind":{"const":"system_entity"}},"required":["kind"]},"then":{"required":["entity_type"]}},
-    {"if":{"properties":{"kind":{"const":"boundary"}},"required":["kind"]},"then":{"required":["source","target","protocol"]}}
+    {"if":{"properties":{"kind":{"const":"boundary"}},"required":["kind"]},"then":{"required":["source","target","protocol"]}},
+    {"if":{"properties":{"kind":{"const":"architectural_recommendation"}},"required":["kind"]},"then":{"required":["recommendation_domain","supported_by","tradeoffs","human_approval_required"],"properties":{"human_approval_required":{"const":true}}}}
   ],
   "additionalProperties": false,
   "$defs": {"conceptId":{"type":"string","pattern":"^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"}}

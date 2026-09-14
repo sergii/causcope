@@ -34,8 +34,19 @@
         {"$ref": "#/$defs/scope"}
       ]
     },
+    "target_resource": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/topology_id"}
+      ]
+    },
     "execution_requirement": {"enum": ["any", "direct"]},
-    "selection_policy": {"const": "safe_exact_scope_then_stable_identity"},
+    "selection_policy": {
+      "enum": [
+        "safe_exact_scope_then_stable_identity",
+        "safe_exact_scope_and_target_then_stable_identity"
+      ]
+    },
     "candidates": {
       "type": "array",
       "items": {"$ref": "#/$defs/candidate"}
@@ -54,6 +65,10 @@
     "concept_id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "topology_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"
     },
     "scope": {
       "type": "object",
@@ -90,9 +105,12 @@
       "additionalProperties": false,
       "required": ["id", "kind", "execution_mode"],
       "properties": {
-        "id": {"$ref": "#/$defs/concept_id"},
+        "id": {"$ref": "#/$defs/topology_id"},
         "kind": {"enum": ["host_executor", "diagnostic_provider"]},
-        "execution_mode": {"enum": ["session", "direct"]}
+        "execution_mode": {"enum": ["session", "direct"]},
+        "provider_type": {"$ref": "#/$defs/topology_id"},
+        "target_resource": {"$ref": "#/$defs/topology_id"},
+        "runner": {"$ref": "#/$defs/topology_id"}
       }
     },
     "candidate": {
@@ -111,6 +129,7 @@
         "instrument": {"$ref": "#/$defs/instrument"},
         "availability": {"$ref": "#/$defs/availability"},
         "scope_match": {"enum": ["exact", "mismatch"]},
+        "target_match": {"enum": ["exact", "mismatch", "unbound"]},
         "capabilities": {
           "type": "array",
           "items": {"$ref": "#/$defs/concept_id"},
