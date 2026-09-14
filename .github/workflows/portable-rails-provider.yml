@@ -5,22 +5,36 @@ on:
     branches: [main]
     paths:
       - "bin/causcope"
+      - "integrations/rails/**"
       - "scripts/causcope_scan.py"
+      - "scripts/causcope_rails.py"
+      - "scripts/causcope_runtime.py"
       - "scripts/rails_repository_scan.rb"
+      - "scripts/otlp_concrete_receiver.py"
       - "scripts/test_portable_rails_scan.py"
+      - "scripts/test_rails_product_cli.py"
       - "schema/concrete-system-facts.schema.json"
       - "lab/rails-connection-pool/**"
       - "RFC/0057-portable-rails-provider.md"
+      - "RFC/0058-portable-rails-otlp-runtime.md"
+      - "RFC/0059-rails-product-cli.md"
       - ".github/workflows/portable-rails-provider.yml"
   pull_request:
     paths:
       - "bin/causcope"
+      - "integrations/rails/**"
       - "scripts/causcope_scan.py"
+      - "scripts/causcope_rails.py"
+      - "scripts/causcope_runtime.py"
       - "scripts/rails_repository_scan.rb"
+      - "scripts/otlp_concrete_receiver.py"
       - "scripts/test_portable_rails_scan.py"
+      - "scripts/test_rails_product_cli.py"
       - "schema/concrete-system-facts.schema.json"
       - "lab/rails-connection-pool/**"
       - "RFC/0057-portable-rails-provider.md"
+      - "RFC/0058-portable-rails-otlp-runtime.md"
+      - "RFC/0059-rails-product-cli.md"
       - ".github/workflows/portable-rails-provider.yml"
 
 permissions:
@@ -51,8 +65,16 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install --disable-pip-version-check jsonschema PyYAML
 
+      - name: Validate product CLI syntax
+        run: |
+          python -m py_compile scripts/causcope_scan.py scripts/causcope_rails.py scripts/causcope_runtime.py
+          ruby -c integrations/rails/causcope_runtime.rb
+
       - name: Validate portable Rails repository scan
         run: python scripts/test_portable_rails_scan.py
+
+      - name: Validate Rails product CLI lifecycle
+        run: python scripts/test_rails_product_cli.py
 
       - name: Validate emitted concrete facts with canonical validator
         run: |
