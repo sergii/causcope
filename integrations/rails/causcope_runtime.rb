@@ -123,9 +123,9 @@ module Causcope
         @pool_entity = pools.first
         @pool_id = @pool_entity.fetch("id")
       rescue Errno::ENOENT => error
-        raise ConfigurationError, "static facts not found: #{error.message}" from error
+        raise ConfigurationError, "static facts not found: #{error.message}"
       rescue JSON::ParserError => error
-        raise ConfigurationError, "static facts are not valid JSON: #{error.message}" from error
+        raise ConfigurationError, "static facts are not valid JSON: #{error.message}"
       end
 
       def configure_opentelemetry!
