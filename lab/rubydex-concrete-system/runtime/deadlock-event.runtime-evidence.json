@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.1",
+  "kind": "runtime_evidence",
+  "incident_id": "INC-D2-2-XRAY",
+  "description": "Synthetic canonical evidence for the database-event stage of the D2.2 X-Ray progression.",
+  "instances": [
+    {
+      "id": "evidence.fixture.postgresql.deadlock.40p01",
+      "observation": "observation.database.deadlock_error",
+      "state": "observed",
+      "observed_at": "2026-09-14T12:01:03.700Z",
+      "expires_at": "2026-09-14T12:06:03.700Z",
+      "confidence": "high",
+      "source": {
+        "type": "experiment",
+        "name": "fixture.postgresql.deadlock",
+        "attributes": {
+          "sqlstate": "40P01",
+          "database": "postgresql"
+        }
+      },
+      "scope": {
+        "boundaries": [
+          "boundary.application.database"
+        ],
+        "attributes": {
+          "service": "checkout-api",
+          "dependency": "postgresql"
+        }
+      },
+      "measurement": {
+        "value": "40P01",
+        "comparison": "present"
+      },
+      "labels": {
+        "fixture": "d2-2-xray",
+        "event": "deadlock_detected"
+      },
+      "note": "Fixture evidence says PostgreSQL detected a deadlock. It does not identify which concrete code paths formed the wait-for cycle."
+    }
+  ]
+}

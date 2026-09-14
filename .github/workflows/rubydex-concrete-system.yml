@@ -11,13 +11,19 @@ on:
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/d2_2_xray_projection.py"
       - "scripts/verify_d2_2_runtime_projection.py"
+      - "scripts/d2_2_database_evidence_projection.py"
+      - "scripts/verify_d2_2_database_evidence_progression.py"
+      - "scripts/pgbot_adapter.py"
       - "schema/concrete-system-facts.schema.json"
       - "schema/concrete-runtime-facts.schema.json"
+      - "schema/runtime-evidence.schema.json"
       - "scripts/concrete_system_facts.py"
+      - "examples/adapters/pgbot/postgresql.yaml"
       - "lab/rubydex-concrete-system/**"
       - "RFC/0047-rubydex-concrete-system-extractor.md"
       - "RFC/0048-rails-deadlock-static-enrichment.md"
       - "RFC/0049-concrete-runtime-execution-projection.md"
+      - "RFC/0050-d2-2-database-evidence-progression.md"
       - ".github/workflows/rubydex-concrete-system.yml"
   pull_request:
     paths:
@@ -28,13 +34,19 @@ on:
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/d2_2_xray_projection.py"
       - "scripts/verify_d2_2_runtime_projection.py"
+      - "scripts/d2_2_database_evidence_projection.py"
+      - "scripts/verify_d2_2_database_evidence_progression.py"
+      - "scripts/pgbot_adapter.py"
       - "schema/concrete-system-facts.schema.json"
       - "schema/concrete-runtime-facts.schema.json"
+      - "schema/runtime-evidence.schema.json"
       - "scripts/concrete_system_facts.py"
+      - "examples/adapters/pgbot/postgresql.yaml"
       - "lab/rubydex-concrete-system/**"
       - "RFC/0047-rubydex-concrete-system-extractor.md"
       - "RFC/0048-rails-deadlock-static-enrichment.md"
       - "RFC/0049-concrete-runtime-execution-projection.md"
+      - "RFC/0050-d2-2-database-evidence-progression.md"
       - ".github/workflows/rubydex-concrete-system.yml"
 
 permissions:
@@ -146,3 +158,63 @@ jobs:
             --runtime-facts /tmp/runtime-facts-a.json \
             --projection /tmp/d2-2-xray-a.json \
             --otlp lab/rubydex-concrete-system/runtime/overlapping-code-paths.otlp.json
+
+      - name: Normalize pgBot lock contention
+        run: |
+          python scripts/pgbot_adapter.py \
+            examples/adapters/pgbot/postgresql.yaml \
+            lab/rubydex-concrete-system/runtime/pgbot-lock-contention.json \
+            --incident-id INC-D2-2-XRAY \
+            --source-uri fixture:pgbot-lock-contention \
+            --pretty > /tmp/pgbot-lock-evidence.json
+
+      - name: Derive D2.2 database contention stage twice
+        run: |
+          python scripts/d2_2_database_evidence_projection.py \
+            --xray /tmp/d2-2-xray-a.json \
+            --evidence /tmp/pgbot-lock-evidence.json \
+            --as-of 2026-09-14T12:01:04Z \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --output /tmp/d2-2-contention-a.json
+
+          python scripts/d2_2_database_evidence_projection.py \
+            --xray /tmp/d2-2-xray-a.json \
+            --evidence /tmp/pgbot-lock-evidence.json \
+            --as-of 2026-09-14T12:01:04Z \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --output /tmp/d2-2-contention-b.json
+
+          diff -u /tmp/d2-2-contention-a.json /tmp/d2-2-contention-b.json
+
+      - name: Derive D2.2 deadlock event stage twice
+        run: |
+          python scripts/d2_2_database_evidence_projection.py \
+            --xray /tmp/d2-2-xray-a.json \
+            --evidence /tmp/pgbot-lock-evidence.json \
+            --evidence lab/rubydex-concrete-system/runtime/deadlock-event.runtime-evidence.json \
+            --as-of 2026-09-14T12:01:04Z \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --output /tmp/d2-2-event-a.json
+
+          python scripts/d2_2_database_evidence_projection.py \
+            --xray /tmp/d2-2-xray-a.json \
+            --evidence /tmp/pgbot-lock-evidence.json \
+            --evidence lab/rubydex-concrete-system/runtime/deadlock-event.runtime-evidence.json \
+            --as-of 2026-09-14T12:01:04Z \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --output /tmp/d2-2-event-b.json
+
+          diff -u /tmp/d2-2-event-a.json /tmp/d2-2-event-b.json
+
+      - name: Verify D2.2 database evidence progression
+        run: |
+          python scripts/verify_d2_2_database_evidence_progression.py \
+            --xray /tmp/d2-2-xray-a.json \
+            --pgbot-evidence /tmp/pgbot-lock-evidence.json \
+            --deadlock-evidence lab/rubydex-concrete-system/runtime/deadlock-event.runtime-evidence.json \
+            --contention-projection /tmp/d2-2-contention-a.json \
+            --event-projection /tmp/d2-2-event-a.json
