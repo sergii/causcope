@@ -78,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dependency", default="postgresql")
     parser.add_argument(
         "--boundary",
-        default="boundary.application.external_dependency",
+        default="boundary.application.database",
     )
     return parser
 
