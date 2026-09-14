@@ -1,0 +1,153 @@
+name: Validate live pgbot PostgreSQL bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lab/pgbot-live/**"
+      - "scripts/pgbot_adapter.py"
+      - "scripts/live_postgresql_trace.py"
+      - "scripts/verify_pgbot_live_integration.py"
+      - "scripts/opentelemetry_trace_adapter.py"
+      - "scripts/runtime_evidence_composition.py"
+      - "scripts/live_diagnosis.py"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
+      - "schema/pgbot-adapter.schema.json"
+      - "RFC/0036-pgbot-live-postgresql-integration.md"
+      - ".github/workflows/pgbot-live.yml"
+  pull_request:
+    paths:
+      - "lab/pgbot-live/**"
+      - "scripts/pgbot_adapter.py"
+      - "scripts/live_postgresql_trace.py"
+      - "scripts/verify_pgbot_live_integration.py"
+      - "scripts/opentelemetry_trace_adapter.py"
+      - "scripts/runtime_evidence_composition.py"
+      - "scripts/live_diagnosis.py"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
+      - "schema/pgbot-adapter.schema.json"
+      - "RFC/0036-pgbot-live-postgresql-integration.md"
+      - ".github/workflows/pgbot-live.yml"
+
+concurrency:
+  group: pgbot-live-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install integration dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema 'psycopg[binary]'
+
+      - name: Start saturated PostgreSQL lab
+        run: |
+          docker compose -f lab/pgbot-live/compose.yml up -d db holders
+
+          count=0
+          for attempt in $(seq 1 30); do
+            count="$(docker compose -f lab/pgbot-live/compose.yml exec -T db \
+              psql -U causcope_admin -d causcope -Atc \
+              "SELECT count(*) FROM pg_stat_activity WHERE usename = 'causcope_app';")"
+            if [ "$count" -ge 20 ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          echo "live holder connections: $count"
+          if [ "$count" -lt 20 ]; then
+            docker compose -f lab/pgbot-live/compose.yml logs
+            exit 1
+          fi
+
+      - name: Run real pgbot against live PostgreSQL
+        uses: pgrundev/pgbot@e3834c11d75e81eeeb4140b5e06d396071fa166a
+        with:
+          dsn: "postgres://pgbot_ro:pgbot_ro@127.0.0.1:55432/causcope?sslmode=disable"
+          fail-on: none
+          format: json
+          version: v0.8.1
+          upload-sarif: "false"
+
+      - name: Assert live pgbot observed connection saturation
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("pgbot-report.json").read_text(encoding="utf-8"))
+          findings = {
+              item.get("id")
+              for item in report.get("findings", [])
+              if isinstance(item, dict) and item.get("suppressed") is not True
+          }
+          if report.get("schema_version") != "1.2.0":
+              raise SystemExit(
+                  f"unexpected live pgbot schema: {report.get('schema_version')}"
+              )
+          if "connection_saturation" not in findings:
+              raise SystemExit(
+                  f"connection_saturation missing from live pgbot findings: {sorted(findings)}"
+              )
+          print("pgbot live finding verified: connection_saturation")
+          PY
+
+      - name: Release saturation workload
+        run: |
+          docker compose -f lab/pgbot-live/compose.yml stop -t 1 holders
+
+          count=20
+          for attempt in $(seq 1 20); do
+            count="$(docker compose -f lab/pgbot-live/compose.yml exec -T db \
+              psql -U causcope_admin -d causcope -Atc \
+              "SELECT count(*) FROM pg_stat_activity WHERE usename = 'causcope_app';")"
+            if [ "$count" -eq 0 ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          echo "remaining holder connections: $count"
+          test "$count" -eq 0
+
+      - name: Generate trace from a real PostgreSQL query
+        run: |
+          python scripts/live_postgresql_trace.py \
+            --dsn "postgres://causcope_app:causcope_app@127.0.0.1:55432/causcope?sslmode=disable" \
+            --sleep-ms 180 \
+            --output live-postgresql-trace.json
+
+      - name: Compose live evidence and build diagnosis
+        run: |
+          python scripts/verify_pgbot_live_integration.py \
+            --pgbot-report pgbot-report.json \
+            --trace live-postgresql-trace.json \
+            --pretty | tee pgbot-live-summary.json
+
+      - name: Upload live evidence artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pgbot-live-evidence
+          path: |
+            pgbot-report.json
+            live-postgresql-trace.json
+            pgbot-live-summary.json
+          if-no-files-found: warn
+
+      - name: Stop PostgreSQL lab
+        if: always()
+        run: docker compose -f lab/pgbot-live/compose.yml down -v --remove-orphans
