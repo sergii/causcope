@@ -85,6 +85,7 @@ class Handler(BaseHTTPRequestHandler):
             request_started = time.monotonic()
             checkout_started = time.monotonic()
             with pool.connection(timeout=5) as connection:
+                checkout_completed_wall_ns = time.time_ns()
                 checkout_wait_ms = (time.monotonic() - checkout_started) * 1000.0
                 query_started = time.monotonic()
                 with connection.cursor() as cursor:
@@ -110,6 +111,7 @@ class Handler(BaseHTTPRequestHandler):
                     "trace_id": trace_id,
                     "span_id": span_id,
                     "start_time_unix_nano": str(request_started_wall_ns),
+                    "checkout_time_unix_nano": str(checkout_completed_wall_ns),
                     "end_time_unix_nano": str(request_ended_wall_ns),
                 }
             json_response(self, payload)
