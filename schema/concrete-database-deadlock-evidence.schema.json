@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/concrete-database-deadlock-evidence.schema.json",
+  "title": "Causcope concrete database deadlock evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "observed_at",
+    "participants",
+    "wait_edges",
+    "cycle",
+    "deadlock_event",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "concrete_database_deadlock_evidence"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "participants": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/participant"}
+    },
+    "wait_edges": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/wait_edge"}
+    },
+    "cycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "backend_pids", "execution_ids"],
+      "properties": {
+        "state": {"const": "observed"},
+        "backend_pids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "execution_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"}
+        }
+      }
+    },
+    "deadlock_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "sqlstate", "victim_backend_pid", "victim_execution_id"],
+      "properties": {
+        "state": {"const": "observed"},
+        "sqlstate": {"const": "40P01"},
+        "victim_backend_pid": {"type": "integer", "minimum": 1},
+        "victim_execution_id": {"type": "string", "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": {"const": "probe"},
+        "name": {"const": "postgresql_concrete_deadlock_correlation"},
+        "database_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend_pid",
+        "application_name",
+        "execution_id",
+        "trace_id",
+        "span_id",
+        "code_symbol",
+        "transaction",
+        "resource_order",
+        "outcome"
+      ],
+      "properties": {
+        "backend_pid": {"type": "integer", "minimum": 1},
+        "application_name": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"},
+        "trace_id": {"type": "string", "minLength": 1},
+        "span_id": {"type": "string", "minLength": 1},
+        "code_symbol": {"type": "string", "pattern": "^code:[^\\s]+$"},
+        "transaction": {"type": "string", "pattern": "^tx:[^\\s]+$"},
+        "resource_order": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "string", "pattern": "^db:public\\.[A-Za-z_][A-Za-z0-9_]*$"}
+        },
+        "outcome": {"enum": ["committed", "deadlock_aborted"]},
+        "sqlstate": {"type": ["string", "null"]}
+      }
+    },
+    "wait_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "waiter_backend_pid",
+        "blocker_backend_pid",
+        "waiter_execution_id",
+        "blocker_execution_id",
+        "wait_event_type",
+        "wait_event",
+        "waiting_on_resource"
+      ],
+      "properties": {
+        "waiter_backend_pid": {"type": "integer", "minimum": 1},
+        "blocker_backend_pid": {"type": "integer", "minimum": 1},
+        "waiter_execution_id": {"type": "string", "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"},
+        "blocker_execution_id": {"type": "string", "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"},
+        "wait_event_type": {"type": "string", "minLength": 1},
+        "wait_event": {"type": "string", "minLength": 1},
+        "waiting_on_resource": {"type": "string", "pattern": "^db:public\\.[A-Za-z_][A-Za-z0-9_]*$"}
+      }
+    }
+  }
+}
