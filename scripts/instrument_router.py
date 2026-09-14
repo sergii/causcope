@@ -18,11 +18,13 @@ from pgbot_adapter import load_adapter
 from pgbot_autonomous_provider import PgbotAutonomousProbeProvider, file_context_supplier
 from probe_executor_registry import CAPABILITIES_SCHEMA_PATH
 from probe_executor_runtime import build_probe_execution_capabilities
+from resource_topology import ResourceTopology
 from runtime_evidence import build_scope_query
 
 SCHEMA_PATH = ROOT / "schema" / "instrument-routing-decision.schema.json"
 ROUTER_ID = "instrument_router.v0"
 SELECTION_POLICY = "safe_exact_scope_then_stable_identity"
+TARGET_SELECTION_POLICY = "safe_exact_scope_and_target_then_stable_identity"
 
 
 class RoutedProvider(Protocol):
@@ -76,10 +78,11 @@ def _candidate_sort_key(candidate: dict[str, Any]) -> tuple[str, str]:
 class InstrumentRouter:
     """Route a canonical read-only probe to a currently safe configured instrument.
 
-    Routing is deliberately downstream from semantic probe ranking.  v0 does not
-    score evidence quality or change causal/probe ranking.  It filters by exact
-    scope, availability, and execution-mode fit, then uses stable identity as the
-    deterministic tie-breaker.
+    Routing is deliberately downstream from semantic probe ranking. It does not
+    score evidence quality or change causal/probe ranking. Legacy routing filters
+    by exact semantic scope, availability, and execution-mode fit. Target-aware
+    routing additionally requires an exact resource/provider-instance binding and
+    a runner that can reach the selected resource.
     """
 
     def __init__(
@@ -88,18 +91,46 @@ class InstrumentRouter:
         concepts: dict[str, dict[str, Any]],
         host_capabilities: dict[str, Any],
         providers: list[RoutedProvider],
+        resource_topology: ResourceTopology | None = None,
+        provider_instance_bindings: dict[str, RoutedProvider] | None = None,
     ) -> None:
-        _validate(host_capabilities, CAPABILITIES_SCHEMA_PATH, "host probe execution capabilities")
+        _validate(
+            host_capabilities,
+            CAPABILITIES_SCHEMA_PATH,
+            "host probe execution capabilities",
+        )
         self.concepts = concepts
         self.host_capabilities = copy.deepcopy(host_capabilities)
         self.providers = list(providers)
         self.provider_capabilities = build_provider_capabilities(self.providers)
+        self.resource_topology = resource_topology
+        self.provider_instance_bindings = dict(provider_instance_bindings or {})
+        if self.provider_instance_bindings and self.resource_topology is None:
+            raise ValueError("provider_instance_bindings require resource_topology")
+
         self._providers_by_id: dict[str, RoutedProvider] = {}
         for provider in self.providers:
             provider_id = provider.capability_projection()["id"]
             if provider_id in self._providers_by_id:
                 raise ValueError(f"duplicate routed provider id: {provider_id}")
             self._providers_by_id[provider_id] = provider
+
+        self._provider_instance_capabilities: dict[str, dict[str, Any]] = {}
+        if self.resource_topology is not None:
+            for instance_id, provider in sorted(self.provider_instance_bindings.items()):
+                instance = self.resource_topology.provider_instance(instance_id)
+                provider_type = self.resource_topology.provider_type(instance["provider_type"])
+                projection = provider.capability_projection()
+                provider_id = projection.get("id")
+                if provider_id != provider_type["provider_id"]:
+                    raise ValueError(
+                        f"provider instance {instance_id} expects {provider_type['provider_id']} "
+                        f"but runtime binding exposes {provider_id}"
+                    )
+                if instance_id in self._providers_by_id:
+                    raise ValueError(f"duplicate routed provider id: {instance_id}")
+                self._providers_by_id[instance_id] = provider
+                self._provider_instance_capabilities[instance_id] = copy.deepcopy(projection)
 
     def _canonical_probe(self, probe_id: str) -> dict[str, Any]:
         probe = self.concepts.get(probe_id)
@@ -117,6 +148,7 @@ class InstrumentRouter:
         normalized_scope: dict[str, Any] | None,
         *,
         execution_requirement: str,
+        target_resource: str | None = None,
     ) -> list[dict[str, Any]]:
         output: list[dict[str, Any]] = []
         for entry in self.host_capabilities.get("executors", []):
@@ -138,24 +170,29 @@ class InstrumentRouter:
             if execution_requirement == "direct":
                 reasons.append("host executor requires the existing begin/finish session lifecycle")
 
-            output.append(
-                {
-                    "instrument": {
-                        "id": entry["executor"]["id"],
-                        "kind": "host_executor",
-                        "execution_mode": "session",
-                    },
-                    "availability": availability,
-                    "scope_match": scope_match,
-                    "capabilities": [entry["capability"]],
-                    "observations": [entry["observation"]],
-                    "eligible": not reasons,
-                    "reasons": reasons,
-                }
-            )
+            candidate: dict[str, Any] = {
+                "instrument": {
+                    "id": entry["executor"]["id"],
+                    "kind": "host_executor",
+                    "execution_mode": "session",
+                },
+                "availability": availability,
+                "scope_match": scope_match,
+                "capabilities": [entry["capability"]],
+                "observations": [entry["observation"]],
+                "eligible": False,
+                "reasons": reasons,
+            }
+            if target_resource is not None:
+                candidate["target_match"] = "unbound"
+                candidate["reasons"].append(
+                    "host executor has no explicit resource target binding"
+                )
+            candidate["eligible"] = not candidate["reasons"]
+            output.append(candidate)
         return output
 
-    def _provider_candidates(
+    def _legacy_provider_candidates(
         self,
         probe_id: str,
         normalized_scope: dict[str, Any] | None,
@@ -184,8 +221,6 @@ class InstrumentRouter:
                         f"instrument availability is {availability['state']}: "
                         f"{availability['reason'] or 'no reason supplied'}"
                     )
-                # External providers in the v0 contract expose a one-shot execute()
-                # surface to the bounded autonomous loop.
                 execution_mode = "direct"
                 if execution_requirement == "direct" and execution_mode != "direct":
                     reasons.append("instrument does not support direct autonomous execution")
@@ -207,12 +242,96 @@ class InstrumentRouter:
                 )
         return output
 
+    def _target_provider_candidates(
+        self,
+        probe_id: str,
+        normalized_scope: dict[str, Any] | None,
+        *,
+        execution_requirement: str,
+        target_resource: str,
+    ) -> list[dict[str, Any]]:
+        if self.resource_topology is None:
+            raise ValueError("target_resource routing requires resource_topology")
+        self.resource_topology.resource(target_resource)
+
+        output: list[dict[str, Any]] = []
+        for instance in self.resource_topology.provider_instances:
+            projection = self._provider_instance_capabilities.get(instance["id"])
+            if projection is None:
+                continue
+            provider_scope = normalize_scope(projection.get("scope"), self.concepts)
+            for probe_entry in projection.get("probes", []):
+                if probe_entry.get("probe", {}).get("id") != probe_id:
+                    continue
+
+                reasons: list[str] = []
+                scope_match = (
+                    "exact"
+                    if scope_key(provider_scope) == scope_key(normalized_scope)
+                    else "mismatch"
+                )
+                if scope_match == "mismatch":
+                    reasons.append(
+                        "provider fixed_exact scope does not match the selected diagnosis scope"
+                    )
+
+                target_match = (
+                    "exact" if instance["target"] == target_resource else "mismatch"
+                )
+                if target_match == "mismatch":
+                    reasons.append(
+                        f"provider instance targets {instance['target']} instead of {target_resource}"
+                    )
+
+                availability = copy.deepcopy(projection["availability"])
+                if availability["state"] != "available":
+                    reasons.append(
+                        f"instrument availability is {availability['state']}: "
+                        f"{availability['reason'] or 'no reason supplied'}"
+                    )
+
+                runner = self.resource_topology.runner(instance["runner"])
+                if not runner["available"]:
+                    reasons.append(f"runner {runner['id']} is unavailable")
+                target = self.resource_topology.resource(instance["target"])
+                network_domain = target.get("network_domain")
+                if network_domain and network_domain not in runner["network_domains"]:
+                    reasons.append(
+                        f"runner {runner['id']} cannot reach target network domain {network_domain}"
+                    )
+
+                execution_mode = "direct"
+                if execution_requirement == "direct" and execution_mode != "direct":
+                    reasons.append("instrument does not support direct autonomous execution")
+
+                output.append(
+                    {
+                        "instrument": {
+                            "id": instance["id"],
+                            "kind": "diagnostic_provider",
+                            "execution_mode": execution_mode,
+                            "provider_type": instance["provider_type"],
+                            "target_resource": instance["target"],
+                            "runner": instance["runner"],
+                        },
+                        "availability": availability,
+                        "scope_match": scope_match,
+                        "target_match": target_match,
+                        "capabilities": sorted(probe_entry.get("requires", [])),
+                        "observations": sorted(probe_entry.get("mapped_observations", [])),
+                        "eligible": not reasons,
+                        "reasons": reasons,
+                    }
+                )
+        return output
+
     def route(
         self,
         probe_id: str,
         scope: dict[str, Any] | None,
         *,
         execution_requirement: str = "any",
+        target_resource: str | None = None,
     ) -> dict[str, Any]:
         if execution_requirement not in {"any", "direct"}:
             raise ValueError("execution_requirement must be 'any' or 'direct'")
@@ -224,11 +343,23 @@ class InstrumentRouter:
             probe_id,
             normalized_scope,
             execution_requirement=execution_requirement,
-        ) + self._provider_candidates(
-            probe_id,
-            normalized_scope,
-            execution_requirement=execution_requirement,
+            target_resource=target_resource,
         )
+        if target_resource is None:
+            candidates += self._legacy_provider_candidates(
+                probe_id,
+                normalized_scope,
+                execution_requirement=execution_requirement,
+            )
+            selection_policy = SELECTION_POLICY
+        else:
+            candidates += self._target_provider_candidates(
+                probe_id,
+                normalized_scope,
+                execution_requirement=execution_requirement,
+                target_resource=target_resource,
+            )
+            selection_policy = TARGET_SELECTION_POLICY
         candidates.sort(key=_candidate_sort_key)
 
         for candidate in candidates:
@@ -242,12 +373,13 @@ class InstrumentRouter:
         eligible = [candidate for candidate in candidates if candidate["eligible"]]
         selected = min(eligible, key=_candidate_sort_key) if eligible else None
         if selected is not None:
+            reason = "instrument is available, exact-scope compatible, execution-mode compatible"
+            if target_resource is not None:
+                reason += ", exact-target and runner compatible"
+            reason += ", and wins the stable instrument-identity tie-break"
             selection = {
                 "instrument": copy.deepcopy(selected["instrument"]),
-                "reason": (
-                    "instrument is available, exact-scope compatible, execution-mode compatible, "
-                    "and wins the stable instrument-identity tie-break"
-                ),
+                "reason": reason,
             }
             stop_reason = None
         else:
@@ -256,7 +388,7 @@ class InstrumentRouter:
                 "no_instrument_for_probe" if not candidates else "no_safe_available_instrument"
             )
 
-        document = {
+        document: dict[str, Any] = {
             "schema_version": "0.1",
             "kind": "instrument_routing_decision",
             "probe": {
@@ -266,11 +398,13 @@ class InstrumentRouter:
             },
             "scope": copy.deepcopy(normalized_scope),
             "execution_requirement": execution_requirement,
-            "selection_policy": SELECTION_POLICY,
+            "selection_policy": selection_policy,
             "candidates": candidates,
             "selection": selection,
             "stop_reason": stop_reason,
         }
+        if target_resource is not None:
+            document["target_resource"] = target_resource
         validate_instrument_routing_decision(document)
         return document
 
@@ -281,7 +415,9 @@ class InstrumentRouter:
             for entry in self.host_capabilities.get("executors", [])
             if isinstance(entry, dict) and isinstance(entry.get("probe"), dict)
         }
-        for provider in self.provider_capabilities.get("providers", []):
+        provider_projections = list(self.provider_capabilities.get("providers", []))
+        provider_projections += list(self._provider_instance_capabilities.values())
+        for provider in provider_projections:
             for entry in provider.get("probes", []):
                 probe_id = entry.get("probe", {}).get("id")
                 if isinstance(probe_id, str):
@@ -291,7 +427,9 @@ class InstrumentRouter:
     @property
     def autonomous_probe_ids(self) -> set[str]:
         output: set[str] = set()
-        for provider in self.provider_capabilities.get("providers", []):
+        provider_projections = list(self.provider_capabilities.get("providers", []))
+        provider_projections += list(self._provider_instance_capabilities.values())
+        for provider in provider_projections:
             if provider.get("availability", {}).get("state") != "available":
                 continue
             for entry in provider.get("probes", []):
@@ -305,8 +443,15 @@ class InstrumentRouter:
         probe_id: str,
         target: str,
         scope: dict[str, Any] | None,
+        *,
+        target_resource: str | None = None,
     ) -> dict[str, Any]:
-        decision = self.route(probe_id, scope, execution_requirement="direct")
+        decision = self.route(
+            probe_id,
+            scope,
+            execution_requirement="direct",
+            target_resource=target_resource,
+        )
         selection = decision["selection"]
         if selection is None:
             raise ProbeInsufficientEvidence(
@@ -320,7 +465,7 @@ class InstrumentRouter:
         provider = self._providers_by_id.get(instrument["id"])
         if provider is None:
             raise ProbeInsufficientEvidence(
-                f"selected diagnostic provider is discovery-only and has no execution binding: "
+                "selected diagnostic provider is discovery-only and has no execution binding: "
                 f"{instrument['id']}"
             )
 
@@ -332,6 +477,8 @@ class InstrumentRouter:
             attributes["routing.instrument_id"] = instrument["id"]
             attributes["routing.instrument_kind"] = instrument["kind"]
             attributes["routing.execution_mode"] = instrument["execution_mode"]
+            if target_resource is not None:
+                attributes["routing.target_resource"] = target_resource
             labels = instance.setdefault("labels", {})
             labels["instrument"] = instrument["id"]
         return evidence
