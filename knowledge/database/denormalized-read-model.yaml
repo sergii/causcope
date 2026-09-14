@@ -1,7 +1,7 @@
 id: recommendation.database.denormalize_read_model
 kind: architectural_recommendation
 title: Introduce a denormalized read model
-summary: Materialize a read-optimized projection when repeated relational assembly is a causally supported contributor to a dominant read path and the synchronization cost is acceptable.
+summary: Materialize a read-optimized projection when repeated relational assembly is a causally supported contributor to a dominant read path, the expected or measured read benefit is meaningful, and the consistency-maintenance cost is acceptable.
 recommendation_domain: data_model
 supported_by:
   - hypothesis.latency.database
@@ -15,15 +15,17 @@ tradeoffs:
     note: Consumers can query a shape aligned with the access pattern instead of rebuilding it on every request.
   - dimension: write_complexity
     direction: worsens
-    note: The system must maintain the projection when source data changes.
+    note: The system must maintain the projection when source data changes, including retry and partial-failure behavior.
   - dimension: consistency_risk
     direction: worsens
-    note: Duplicated state introduces synchronization and freshness semantics that must be explicit.
+    note: Duplicated state introduces synchronization, freshness, reconciliation, and drift semantics that must be explicit.
 human_approval_required: true
-why_it_matters: Denormalization is an architectural trade-off, not a generic database best practice. It should be proposed only after evidence connects the current data access pattern to the observed system outcome.
+why_it_matters: Denormalization is an architectural trade-off, not a generic database best practice. A concrete recommendation should connect the problematic workload to the proposed structure, state the expected or measured benefit, make the update strategy and staleness budget explicit, expose write and operational cost, and define a verification experiment.
 common_misconceptions:
   - A slow query alone proves that the database schema should be denormalized.
-  - Denormalization is always faster once write amplification, freshness, and invalidation are included.
+  - A planner estimate is the same as a measured production improvement.
+  - Denormalization is always faster once write amplification, freshness, invalidation, reconciliation, and repair are included.
+  - Missing evidence about synchronization means consistency maintenance is cheap.
 search_terms:
   - denormalization
   - read model
