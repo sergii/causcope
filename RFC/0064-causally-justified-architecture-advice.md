@@ -109,6 +109,10 @@ those conditions are proven in this system
 
 pgbot can be an excellent deterministic PostgreSQL evidence provider, but it is not the authority for business semantics or architectural trade-offs.
 
+As of pgbot v0.8.1, its documented scope is PostgreSQL diagnostics and performance: `inspect` produces findings-first health analysis, `lint` performs schema-only checks, `advise` proposes planner-validated missing indexes with HypoPG, and `ask` / `explain` add an AI interpretation layer over deterministic findings. The v0.8.1 documentation does not claim a dedicated normalization or denormalization analyzer. Therefore normalization and denormalization remain Causcope-level architectural reasoning rather than pgbot capabilities.
+
+Reference: [pgbot v0.8.1 documentation](https://github.com/pgrundev/pgbot/blob/v0.8.1/README.md).
+
 Useful pgbot evidence can include:
 
 ```text
