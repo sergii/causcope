@@ -1,0 +1,56 @@
+schema_version: "0.1"
+kind: resource_topology
+resources:
+  - id: db.orders.prod
+    kind: postgresql_database
+    environment: production
+    network_domain: shop.prod.eu-central-1
+    attributes:
+      database: orders
+      dependency: postgresql
+      region: eu-central-1
+  - id: db.payments.prod
+    kind: postgresql_database
+    environment: production
+    network_domain: shop.prod.eu-central-1
+    attributes:
+      database: payments
+      dependency: postgresql
+      region: eu-central-1
+  - id: service.checkout.prod
+    kind: application_service
+    environment: production
+    network_domain: shop.prod.eu-central-1
+    attributes:
+      service: checkout-api
+      region: eu-central-1
+relationships:
+  - from: service.checkout.prod
+    relation: depends_on
+    to: db.orders.prod
+  - from: service.checkout.prod
+    relation: depends_on
+    to: db.payments.prod
+runners:
+  - id: runner.shop.prod
+    kind: edge_runner
+    capabilities:
+      - outbound_postgresql
+    network_domains:
+      - shop.prod.eu-central-1
+    available: true
+provider_types:
+  - id: provider_type.pgbot.postgresql
+    instrument: pgbot
+    provider_id: provider.pgbot.postgresql
+provider_instances:
+  - id: provider.pgbot.orders-prod
+    provider_type: provider_type.pgbot.postgresql
+    target: db.orders.prod
+    runner: runner.shop.prod
+    credentials_ref: secret.postgresql.orders-prod.readonly
+  - id: provider.pgbot.payments-prod
+    provider_type: provider_type.pgbot.postgresql
+    target: db.payments.prod
+    runner: runner.shop.prod
+    credentials_ref: secret.postgresql.payments-prod.readonly
