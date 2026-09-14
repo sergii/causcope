@@ -1,0 +1,197 @@
+name: Validate concrete D3.1 connection-pool X-Ray
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "schema/concrete-system-facts.schema.json"
+      - "schema/resource-pool-runtime-evidence.schema.json"
+      - "scripts/python_connection_pool_concrete_facts.py"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/xray_engine.py"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "lab/database-connection-pool/**"
+      - "RFC/0055-concrete-d3-1-connection-pool.md"
+      - ".github/workflows/xray-d3-1-concrete.yml"
+  pull_request:
+    paths:
+      - "schema/concrete-system-facts.schema.json"
+      - "schema/resource-pool-runtime-evidence.schema.json"
+      - "scripts/python_connection_pool_concrete_facts.py"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/xray_engine.py"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "lab/database-connection-pool/**"
+      - "RFC/0055-concrete-d3-1-connection-pool.md"
+      - ".github/workflows/xray-d3-1-concrete.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: concrete-d3-1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CAUSCOPE_SYSTEM_ID: database-connection-pool-app
+      CAUSCOPE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      CAUSCOPE_REPOSITORY: https://github.com/sergii/causcope
+      CAUSCOPE_INCIDENT_ID: INC-D3-1-CONCRETE
+      COMPOSE_PROJECT_NAME: causcope-d3-1-concrete
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Extract revision-bound pool facts
+        run: |
+          python scripts/python_connection_pool_concrete_facts.py \
+            --app lab/database-connection-pool/app.py \
+            --compose lab/database-connection-pool/compose.yml \
+            --system-id "$CAUSCOPE_SYSTEM_ID" \
+            --revision "$CAUSCOPE_REVISION" \
+            --repository "$CAUSCOPE_REPOSITORY" \
+            --output /tmp/d3-static.json
+
+          python scripts/concrete_system_facts.py /tmp/d3-static.json --pretty
+
+      - name: Start concrete application revision
+        run: |
+          docker compose -f lab/database-connection-pool/compose.yml up -d --build --wait app
+
+      - name: Capture traced pool and PostgreSQL evidence
+        run: |
+          docker compose -f lab/database-connection-pool/compose.yml run --rm --no-deps concrete-probe \
+            > /tmp/d3-concrete-envelope.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('/tmp/d3-concrete-envelope.json')
+          lines = [line for line in path.read_text().splitlines() if line.strip()]
+          payload = json.loads(lines[-1])
+          Path('/tmp/d3-pool-evidence.json').write_text(
+              json.dumps(payload['evidence'], indent=2, sort_keys=True) + '\n'
+          )
+          Path('/tmp/d3-otlp.json').write_text(
+              json.dumps(payload['otlp'], indent=2, sort_keys=True) + '\n'
+          )
+          PY
+
+      - name: Validate concrete resource-pool evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import jsonschema
+
+          schema = json.loads(Path('schema/resource-pool-runtime-evidence.schema.json').read_text())
+          evidence = json.loads(Path('/tmp/d3-pool-evidence.json').read_text())
+          jsonschema.Draft202012Validator(
+              schema,
+              format_checker=jsonschema.FormatChecker(),
+          ).validate(evidence)
+
+          assert evidence['revision']['value'] == '${{ github.event.pull_request.head.sha || github.sha }}'
+          assert evidence['pool']['configured_capacity'] == 1
+          assert evidence['pool']['observed_capacity'] == 1
+          assert evidence['dependency_control']['reachable'] is True
+          assert evidence['request']['dependency_backend_id'] != evidence['dependency_control']['backend_id']
+          print(json.dumps(evidence['assertions'], indent=2, sort_keys=True))
+          PY
+
+      - name: Project exact request span into concrete runtime facts
+        run: |
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/d3-static.json \
+            --otlp /tmp/d3-otlp.json \
+            --incident-id "$CAUSCOPE_INCIDENT_ID" \
+            --source-uri live:database-connection-pool \
+            --output /tmp/d3-runtime.json
+
+      - name: Run concrete D3.1 declarative X-Ray profile
+        run: |
+          python scripts/xray_engine.py \
+            --profile xray/profiles/d3-1-concrete-connection-pool.yaml \
+            --input static=/tmp/d3-static.json \
+            --input runtime=/tmp/d3-runtime.json \
+            --input pool=/tmp/d3-pool-evidence.json \
+            --require-state CAUSAL_DIAGNOSIS_CONFIRMED \
+            --output /tmp/d3-concrete-xray.json
+
+          cat /tmp/d3-concrete-xray.json
+
+      - name: Verify exact identity and fail-closed progression
+        run: |
+          python - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+          import yaml
+
+          from scripts.xray_engine import project
+
+          profile = yaml.safe_load(Path('xray/profiles/d3-1-concrete-connection-pool.yaml').read_text())
+          static = json.loads(Path('/tmp/d3-static.json').read_text())
+          runtime = json.loads(Path('/tmp/d3-runtime.json').read_text())
+          pool = json.loads(Path('/tmp/d3-pool-evidence.json').read_text())
+
+          def state(pool_document, runtime_document=runtime):
+              return project(
+                  profile,
+                  {'static': static, 'runtime': runtime_document, 'pool': pool_document},
+              )['epistemic_state']
+
+          assert state(pool) == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+
+          wrong_trace = copy.deepcopy(pool)
+          wrong_trace['request']['trace_id'] = '0' * 32
+          assert state(wrong_trace) == 'PRECONDITIONS_PRESENT'
+
+          wrong_capacity = copy.deepcopy(pool)
+          wrong_capacity['pool']['observed_capacity'] = 2
+          assert state(wrong_capacity) == 'PRECONDITIONS_PRESENT'
+
+          unavailable_database_control = copy.deepcopy(pool)
+          unavailable_database_control['assertions']['database_still_accepts_direct_connections'] = False
+          assert state(unavailable_database_control) == 'CHECKOUT_WAIT_OBSERVED'
+
+          unexplained_latency = copy.deepcopy(pool)
+          unexplained_latency['assertions']['checkout_wait_explains_request_delta'] = False
+          assert state(unexplained_latency) == 'DATABASE_CAPACITY_DISTINGUISHED'
+
+          wrong_revision = copy.deepcopy(runtime)
+          wrong_revision['revision']['value'] = 'different-revision'
+          try:
+              state(pool, wrong_revision)
+          except ValueError as exc:
+              assert 'identity group revision' in str(exc)
+          else:
+              raise AssertionError('revision mismatch must fail closed')
+
+          print(json.dumps({
+              'confirmed': 'CAUSAL_DIAGNOSIS_CONFIRMED',
+              'wrong_trace': 'PRECONDITIONS_PRESENT',
+              'wrong_capacity': 'PRECONDITIONS_PRESENT',
+              'database_control_removed': 'CHECKOUT_WAIT_OBSERVED',
+              'causal_explanation_removed': 'DATABASE_CAPACITY_DISTINGUISHED',
+              'revision_mismatch': 'rejected',
+          }, indent=2, sort_keys=True))
+          PY
+
+      - name: Stop concrete application
+        if: always()
+        run: docker compose -f lab/database-connection-pool/compose.yml down -v --remove-orphans
