@@ -11,3 +11,12 @@ default: &default
 production:
   <<: *default
   database: <%= ENV.fetch("DB_NAME", "causcope") %>
+
+multi_database:
+  primary:
+    <<: *default
+    database: <%= ENV.fetch("DB_NAME", "causcope") %>
+  replica:
+    <<: *default
+    database: <%= ENV.fetch("REPLICA_DB_NAME", "causcope") %>
+    replica: true
