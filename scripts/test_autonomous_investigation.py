@@ -68,6 +68,19 @@ def observed_scope(evidence: dict) -> dict:
     return matches[0]["scope"]
 
 
+def assert_revision_transitions(report: dict) -> None:
+    revision = report["initial_evidence_revision"]
+    for step in report["steps"]:
+        if step["status"] == "completed":
+            revision += 1
+            assert step["evidence_revision"] == revision
+        else:
+            assert step["status"] == "insufficient_evidence"
+            assert step["evidence_revision"] == revision
+            assert step["evidence_instance_ids"] == []
+    assert report["final_evidence_revision"] == revision
+
+
 def run_case(log_text: str, incident_id: str) -> tuple[dict, dict, dict, dict]:
     concepts = load_concepts(ROOT)
     edges = load_edges(ROOT)
@@ -94,6 +107,7 @@ def run_case(log_text: str, incident_id: str) -> tuple[dict, dict, dict, dict]:
         max_steps=4,
         clock=clock,
     )
+    assert_revision_transitions(report)
     return final_evidence, final_snapshot, report, concepts
 
 
@@ -144,7 +158,6 @@ def test_sqlite_lock_converges_after_insufficient_cohort_probe() -> None:
     insufficient = [step for step in report["steps"] if step["status"] == "insufficient_evidence"]
     assert any(step["probe_id"] == COMPARE_CLIENT_COHORTS for step in insufficient)
     assert report["final_evidence_revision"] == 2
-    assert all(step["evidence_revision"] == 1 for step in insufficient)
 
 
 def main() -> int:
