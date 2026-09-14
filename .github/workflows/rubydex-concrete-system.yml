@@ -1,0 +1,75 @@
+name: Validate Rubydex concrete-system bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/rubydex_concrete_system_facts.rb"
+      - "scripts/verify_rubydex_concrete_system_extractor.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "scripts/concrete_system_facts.py"
+      - "lab/rubydex-concrete-system/**"
+      - "RFC/0047-rubydex-concrete-system-extractor.md"
+      - ".github/workflows/rubydex-concrete-system.yml"
+  pull_request:
+    paths:
+      - "scripts/rubydex_concrete_system_facts.rb"
+      - "scripts/verify_rubydex_concrete_system_extractor.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "scripts/concrete_system_facts.py"
+      - "lab/rubydex-concrete-system/**"
+      - "RFC/0047-rubydex-concrete-system-extractor.md"
+      - ".github/workflows/rubydex-concrete-system.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python validator dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+
+      - name: Install Rubydex fixture dependencies
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: bundle install
+
+      - name: Export concrete system facts twice
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: |
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/rubydex-concrete-system \
+            --system-id rubydex-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/rubydex-facts-a.json
+
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/rubydex-concrete-system \
+            --system-id rubydex-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/rubydex-facts-b.json
+
+          diff -u /tmp/rubydex-facts-a.json /tmp/rubydex-facts-b.json
+
+      - name: Validate Causcope contract and semantic boundary
+        run: python scripts/verify_rubydex_concrete_system_extractor.py /tmp/rubydex-facts-a.json
