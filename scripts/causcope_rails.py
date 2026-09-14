@@ -66,20 +66,22 @@ def load_facts(path: Path) -> dict[str, Any]:
     return document
 
 
-def write_managed_file(path: Path, content: str, *, force: bool) -> str:
-    if path.exists():
-        current = path.read_text(encoding="utf-8")
-        if current == content:
-            return "unchanged"
-        if not force:
-            raise ValueError(f"refusing to overwrite existing file: {path}; pass --force to replace it")
-        action = "replaced"
-    else:
-        action = "created"
+def managed_file_action(path: Path, content: str, *, force: bool) -> str:
+    if not path.exists():
+        return "created"
+    current = path.read_text(encoding="utf-8")
+    if current == content:
+        return "unchanged"
+    if not force:
+        raise ValueError(f"refusing to overwrite existing file: {path}; pass --force to replace it")
+    return "replaced"
 
+
+def write_managed_file(path: Path, content: str, action: str) -> None:
+    if action == "unchanged":
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
-    return action
 
 
 def gem_declared(gemfile: str, name: str) -> bool:
@@ -87,16 +89,16 @@ def gem_declared(gemfile: str, name: str) -> bool:
     return re.search(pattern, gemfile) is not None
 
 
-def ensure_runtime_gems(gemfile_path: Path) -> list[str]:
+def prepare_runtime_gems(gemfile_path: Path) -> tuple[str, list[str]]:
     content = gemfile_path.read_text(encoding="utf-8")
-    missing = [line for name, line in GEMS if not gem_declared(content, name)]
-    if not missing:
-        return []
+    missing_names = [name for name, _line in GEMS if not gem_declared(content, name)]
+    if not missing_names:
+        return content, []
 
-    suffix = "\n" if content.endswith("\n") else "\n\n"
-    block = "# Causcope runtime instrumentation\n" + "\n".join(missing) + "\n"
-    gemfile_path.write_text(content + suffix + block, encoding="utf-8")
-    return missing
+    missing_lines = [line for name, line in GEMS if name in missing_names]
+    separator = "\n" if content.endswith("\n") else "\n\n"
+    block = "# Causcope runtime instrumentation\n" + "\n".join(missing_lines) + "\n"
+    return content + separator + block, missing_names
 
 
 def run_command(command: list[str], cwd: Path) -> str | None:
@@ -129,22 +131,34 @@ def install(args: argparse.Namespace) -> int:
     document = load_facts(static_path)
 
     runtime_content = RUNTIME_SOURCE.read_text(encoding="utf-8")
-    runtime_action = write_managed_file(root / RUNTIME_TARGET, runtime_content, force=args.force)
-    initializer_action = write_managed_file(root / INITIALIZER_TARGET, INITIALIZER, force=args.force)
+    runtime_path = root / RUNTIME_TARGET
+    initializer_path = root / INITIALIZER_TARGET
 
+    # Preflight every managed file before mutating the target repository so a conflict
+    # cannot leave a half-installed integration behind.
+    runtime_action = managed_file_action(runtime_path, runtime_content, force=args.force)
+    initializer_action = managed_file_action(initializer_path, INITIALIZER, force=args.force)
+
+    gemfile_path = root / "Gemfile"
+    gemfile_content = gemfile_path.read_text(encoding="utf-8")
     added_gems: list[str] = []
     if not args.no_gemfile:
-        added_gems = ensure_runtime_gems(root / "Gemfile")
+        gemfile_content, added_gems = prepare_runtime_gems(gemfile_path)
+
+    write_managed_file(runtime_path, runtime_content, runtime_action)
+    write_managed_file(initializer_path, INITIALIZER, initializer_action)
+    if not args.no_gemfile and added_gems:
+        gemfile_path.write_text(gemfile_content, encoding="utf-8")
 
     print(f"Rails root: {root}")
     print(f"System: {document['system_id']}")
     print(f"Scanned revision: {document['revision']['value']}")
-    print(f"{runtime_action.capitalize()}: {root / RUNTIME_TARGET}")
-    print(f"{initializer_action.capitalize()}: {root / INITIALIZER_TARGET}")
+    print(f"{runtime_action.capitalize()}: {runtime_path}")
+    print(f"{initializer_action.capitalize()}: {initializer_path}")
     if args.no_gemfile:
         print("Gemfile: unchanged (--no-gemfile)")
     elif added_gems:
-        print("Gemfile: added " + ", ".join(line.split()[1].strip('"') for line in added_gems))
+        print("Gemfile: added " + ", ".join(added_gems))
         print("Next: run bundle install in the Rails application")
     else:
         print("Gemfile: OpenTelemetry runtime dependencies already declared")
@@ -182,7 +196,10 @@ def run_rails(args: argparse.Namespace) -> int:
     bind_identity_env(env, "CAUSCOPE_SYSTEM_ID", document["system_id"])
     bind_identity_env(env, "CAUSCOPE_REVISION", expected_revision)
     env["CAUSCOPE_STATIC_FACTS"] = str(static_path)
-    env.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", args.otel_endpoint)
+    if args.otel_endpoint:
+        env["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] = args.otel_endpoint
+    else:
+        env.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", DEFAULT_OTLP_ENDPOINT)
     if args.sync_export:
         env["CAUSCOPE_OTEL_SYNC"] = "1"
 
@@ -212,7 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("path", type=Path)
     run_parser.add_argument("--static-facts", type=Path)
     run_parser.add_argument("--revision", help="Explicit running revision; defaults to git HEAD")
-    run_parser.add_argument("--otel-endpoint", default=DEFAULT_OTLP_ENDPOINT)
+    run_parser.add_argument("--otel-endpoint", help=f"Override OTLP traces endpoint; defaults to existing env or {DEFAULT_OTLP_ENDPOINT}")
     run_parser.add_argument("--sync-export", action="store_true", help="Use synchronous span export for deterministic local tests")
     run_parser.add_argument("command", nargs=argparse.REMAINDER)
     run_parser.set_defaults(handler=run_rails)
