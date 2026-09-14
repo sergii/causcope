@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 from autonomous_investigation import run_autonomous_read_only_loop
 from causal_projection import ROOT, load_concepts, load_edges
@@ -123,8 +122,8 @@ def test_mobile_cohort_converges_to_client_mismatch() -> None:
 
 def test_sqlite_lock_converges_after_insufficient_cohort_probe() -> None:
     log_text = """
-{"event":"sqlite_operational_error","observed_at":"2026-09-14T00:09:03Z","error":"database is locked","db_path":"/data/shop.db"}
-{"event":"http_request","observed_at":"2026-09-14T00:09:04Z","method":"POST","path":"/orders","status":503,"client_platform":"web","app_version":"2026.09"}
+{"event":"sqlite_operational_error","observed_at":"2026-09-14T00:09:03Z","error":"database is locked","db_path":"/data/shop.db","method":"POST","path":"/orders","client_platform":"web","app_version":"2026.09","request_id":"lock-request"}
+{"event":"http_request","observed_at":"2026-09-14T00:09:04Z","method":"POST","path":"/orders","status":503,"client_platform":"web","app_version":"2026.09","request_id":"lock-request"}
 """
     evidence, snapshot, report, concepts = run_case(log_text, "incident.test.autonomous-lock")
     scope = observed_scope(evidence)
