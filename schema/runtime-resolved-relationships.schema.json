@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/runtime-resolved-relationships.schema.json",
+  "title": "Causcope runtime-resolved relationships",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "relationships"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "runtime_resolved_relationships"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "relationships": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/relationship"}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "execution_id": {
+      "type": "string",
+      "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"
+    },
+    "relationship_id": {
+      "type": "string",
+      "pattern": "^runtime_relationship\\.opentelemetry\\.[a-f0-9]{16}$"
+    },
+    "interaction_id": {
+      "type": "string",
+      "pattern": "^pool_interaction\\.opentelemetry\\.[a-f0-9]{16}$"
+    },
+    "code_symbol": {
+      "type": "string",
+      "pattern": "^code:[^\\s]+$"
+    },
+    "resource_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*:[^\\s]+$"
+    },
+    "trace_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": {"const": "trace"},
+        "name": {"const": "opentelemetry"},
+        "uri": {"type": "string", "minLength": 1}
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "subject_execution",
+        "code_symbol",
+        "relation",
+        "object_resource",
+        "object_kind",
+        "interaction_kind",
+        "evidence_ref",
+        "trace_id",
+        "span_id",
+        "observed_at",
+        "source"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/relationship_id"},
+        "subject_execution": {"$ref": "#/$defs/execution_id"},
+        "code_symbol": {"$ref": "#/$defs/code_symbol"},
+        "relation": {"const": "used_resource"},
+        "object_resource": {"$ref": "#/$defs/resource_id"},
+        "object_kind": {"const": "resource_pool"},
+        "interaction_kind": {"const": "resource_pool_checkout"},
+        "evidence_ref": {"$ref": "#/$defs/interaction_id"},
+        "trace_id": {"type": "string", "minLength": 1},
+        "span_id": {"type": "string", "minLength": 1},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "source": {"$ref": "#/$defs/trace_source"}
+      }
+    }
+  }
+}
