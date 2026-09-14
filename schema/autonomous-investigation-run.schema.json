@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/autonomous-investigation-run.schema.json",
+  "title": "Causcope autonomous read-only investigation run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "started_at",
+    "finished_at",
+    "max_steps",
+    "initial_evidence_revision",
+    "final_evidence_revision",
+    "stop_reason",
+    "steps"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "autonomous_investigation_run"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "max_steps": {"type": "integer", "minimum": 1, "maximum": 16},
+    "initial_evidence_revision": {"type": "integer", "minimum": 0},
+    "final_evidence_revision": {"type": "integer", "minimum": 0},
+    "stop_reason": {
+      "enum": [
+        "max_steps",
+        "repeated_recommendation",
+        "no_executable_recommendation",
+        "no_new_evidence"
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/step"}
+    }
+  },
+  "$defs": {
+    "concept_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "scope": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "status",
+        "target",
+        "scope",
+        "probe_id",
+        "probe_rank",
+        "before_top_hypothesis",
+        "after_top_hypothesis",
+        "next_probe_after",
+        "evidence_instance_ids",
+        "evidence_revision",
+        "reason"
+      ],
+      "properties": {
+        "index": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["completed", "insufficient_evidence"]},
+        "target": {"$ref": "#/$defs/concept_id"},
+        "scope": {"$ref": "#/$defs/scope"},
+        "probe_id": {"$ref": "#/$defs/concept_id"},
+        "probe_rank": {"type": "integer", "minimum": 1},
+        "before_top_hypothesis": {
+          "anyOf": [{"$ref": "#/$defs/concept_id"}, {"type": "null"}]
+        },
+        "after_top_hypothesis": {
+          "anyOf": [{"$ref": "#/$defs/concept_id"}, {"type": "null"}]
+        },
+        "next_probe_after": {
+          "anyOf": [{"$ref": "#/$defs/concept_id"}, {"type": "null"}]
+        },
+        "evidence_instance_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "evidence_revision": {"type": "integer", "minimum": 0},
+        "reason": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
