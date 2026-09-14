@@ -74,7 +74,7 @@ stages:
           attributes.dbms: postgresql
 
   - id: RUNTIME_EXECUTION_OBSERVED
-    description: A concrete request span for the pinned code symbol is exactly joined to resource-pool evidence from the same pool technology by trace and span identity.
+    description: The concrete request span contains an exact runtime checkout interaction for the same static pool and is joined to resource-pool evidence by trace and span identity.
     clauses:
       - source: runtime
         path: executions
@@ -85,6 +85,23 @@ stages:
           execution_id: id
           trace_id: trace_id
           span_id: span_id
+      - source: runtime
+        path: pool_interactions
+        where:
+          execution_id:
+            var: execution_id
+          code_symbol:
+            var: code_symbol
+          pool_id:
+            var: pool_id
+          technology:
+            var: pool_technology
+          trace_id:
+            var: trace_id
+          span_id:
+            var: span_id
+        bind:
+          runtime_pool_config_name: config_name
       - source: pool
         path: request
         where:
