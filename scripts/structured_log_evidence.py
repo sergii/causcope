@@ -74,6 +74,7 @@ def build_runtime_evidence_from_logs(
     source_name: str = "structured-application-log",
     collected_at: str | None = None,
     cohort_skew_threshold_pct: float = 50.0,
+    include_derived_findings: bool = True,
 ) -> dict[str, Any]:
     if not incident_id:
         raise ValueError("incident_id must not be empty")
@@ -139,86 +140,92 @@ def build_runtime_evidence_from_logs(
             }
         )
 
-    by_route: dict[tuple[str, str], list[tuple[tuple[str, str], dict[str, Any]]]] = defaultdict(list)
-    for (method, path, platform, version), bucket in grouped.items():
-        by_route[(method, path)].append(((platform, version), bucket))
+    if include_derived_findings:
+        by_route: dict[tuple[str, str], list[tuple[tuple[str, str], dict[str, Any]]]] = defaultdict(list)
+        for (method, path, platform, version), bucket in grouped.items():
+            by_route[(method, path)].append(((platform, version), bucket))
 
-    for (method, path), cohorts in sorted(by_route.items()):
-        usable = [item for item in cohorts if int(item[1]["total"]) > 0]
-        if len(usable) < 2:
-            continue
+        for (method, path), cohorts in sorted(by_route.items()):
+            usable = [item for item in cohorts if int(item[1]["total"]) > 0]
+            if len(usable) < 2:
+                continue
 
-        def failure_pct(item: tuple[tuple[str, str], dict[str, Any]]) -> float:
-            bucket = item[1]
-            return (int(bucket["failures"]) / int(bucket["total"])) * 100.0
+            def failure_pct(item: tuple[tuple[str, str], dict[str, Any]]) -> float:
+                bucket = item[1]
+                return (int(bucket["failures"]) / int(bucket["total"])) * 100.0
 
-        highest = max(usable, key=lambda item: (failure_pct(item), item[0]))
-        lowest = min(usable, key=lambda item: (failure_pct(item), item[0]))
-        high_pct = failure_pct(highest)
-        low_pct = failure_pct(lowest)
-        delta = round(high_pct - low_pct, 3)
-        if highest[0] == lowest[0] or delta < cohort_skew_threshold_pct:
-            continue
+            highest = max(usable, key=lambda item: (failure_pct(item), item[0]))
+            lowest = min(usable, key=lambda item: (failure_pct(item), item[0]))
+            high_pct = failure_pct(highest)
+            low_pct = failure_pct(lowest)
+            delta = round(high_pct - low_pct, 3)
+            if highest[0] == lowest[0] or delta < cohort_skew_threshold_pct:
+                continue
 
-        high_platform, high_version = highest[0]
-        low_platform, low_version = lowest[0]
-        latest = max(str(item[1]["latest"]) for item in usable)
-        instances.append(
-            {
-                "id": _instance_id(
-                    "http_client_cohort_failure_skew",
-                    [incident_id, method, path, high_platform, high_version, low_platform, low_version],
-                ),
-                "observation": CLIENT_COHORT_SKEW,
-                "state": "observed",
-                "observed_at": latest,
-                "confidence": "high",
-                "source": source,
-                "scope": {"attributes": {"method": method, "path": path}},
-                "measurement": {
-                    "value": round(high_pct, 3),
-                    "baseline": round(low_pct, 3),
-                    "delta": delta,
-                    "unit": "percentage_points",
-                    "comparison": "above_baseline",
-                },
-                "labels": {
-                    "failing_cohort": f"{high_platform}@{high_version}",
-                    "working_cohort": f"{low_platform}@{low_version}",
-                },
-                "note": "Cohort skew is a discriminator; it does not by itself prove the client is causal.",
-            }
-        )
+            high_platform, high_version = highest[0]
+            low_platform, low_version = lowest[0]
+            latest = max(str(item[1]["latest"]) for item in usable)
+            instances.append(
+                {
+                    "id": _instance_id(
+                        "http_client_cohort_failure_skew",
+                        [incident_id, method, path, high_platform, high_version, low_platform, low_version],
+                    ),
+                    "observation": CLIENT_COHORT_SKEW,
+                    "state": "observed",
+                    "observed_at": latest,
+                    "confidence": "high",
+                    "source": source,
+                    "scope": {"attributes": {"method": method, "path": path}},
+                    "measurement": {
+                        "value": round(high_pct, 3),
+                        "baseline": round(low_pct, 3),
+                        "delta": delta,
+                        "unit": "percentage_points",
+                        "comparison": "above_baseline",
+                    },
+                    "labels": {
+                        "failing_cohort": f"{high_platform}@{high_version}",
+                        "working_cohort": f"{low_platform}@{low_version}",
+                    },
+                    "note": "Cohort skew is a discriminator; it does not by itself prove the client is causal.",
+                }
+            )
 
-    if lock_events:
-        latest_event = max(lock_events, key=lambda event: _safe_timestamp(event, fallback_time))
-        instances.append(
-            {
-                "id": _instance_id("database_lock_wait", [incident_id, "sqlite"]),
-                "observation": DATABASE_LOCK_WAIT,
-                "state": "observed",
-                "observed_at": _safe_timestamp(latest_event, fallback_time),
-                "confidence": "high",
-                "source": source,
-                "scope": {"attributes": {"database_engine": "sqlite"}},
-                "measurement": {
-                    "value": len(lock_events),
-                    "unit": "events",
-                    "comparison": "present",
-                },
-                "labels": {"error": "database is locked"},
-                "note": "SQLite operational-error logs report lock acquisition failure; provenance is preserved as log evidence.",
-            }
-        )
+        if lock_events:
+            latest_event = max(lock_events, key=lambda event: _safe_timestamp(event, fallback_time))
+            instances.append(
+                {
+                    "id": _instance_id("database_lock_wait", [incident_id, "sqlite"]),
+                    "observation": DATABASE_LOCK_WAIT,
+                    "state": "observed",
+                    "observed_at": _safe_timestamp(latest_event, fallback_time),
+                    "confidence": "high",
+                    "source": source,
+                    "scope": {"attributes": {"database_engine": "sqlite"}},
+                    "measurement": {
+                        "value": len(lock_events),
+                        "unit": "events",
+                        "comparison": "present",
+                    },
+                    "labels": {"error": "database is locked"},
+                    "note": "SQLite operational-error logs report lock acquisition failure; provenance is preserved as log evidence.",
+                }
+            )
 
     if not instances:
         raise ValueError("structured log input did not contain any supported diagnostic events")
 
+    description = (
+        "Runtime evidence derived from structured application logs by read-only aggregation."
+        if include_derived_findings
+        else "Passive runtime evidence derived from structured application request logs before active diagnostic probes."
+    )
     return {
         "schema_version": "0.1",
         "kind": "runtime_evidence",
         "incident_id": incident_id,
-        "description": "Runtime evidence derived from structured application logs by read-only aggregation.",
+        "description": description,
         "instances": sorted(instances, key=lambda item: item["id"]),
     }
 
@@ -234,6 +241,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", type=Path, required=True, help="Text log file containing JSON events")
     parser.add_argument("--output", type=Path, help="Write runtime evidence JSON to this path")
     parser.add_argument("--source-name", default="structured-application-log")
+    parser.add_argument(
+        "--passive-only",
+        action="store_true",
+        help="Emit only directly observed request outcomes; leave higher-order findings for explicit probes.",
+    )
     parser.add_argument("--pretty", action="store_true")
     return parser
 
@@ -245,6 +257,7 @@ def main() -> int:
         parse_structured_events(text),
         incident_id=args.incident_id,
         source_name=args.source_name,
+        include_derived_findings=not args.passive_only,
     )
     validate_document(document)
     encoded = json.dumps(document, indent=2 if args.pretty or args.output else None, sort_keys=True) + "\n"
