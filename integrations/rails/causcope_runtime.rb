@@ -12,6 +12,29 @@ module Causcope
 
     class ConfigurationError < StandardError; end
 
+    # SimpleSpanProcessor may invoke one exporter concurrently when request spans
+    # finish on different application threads. Sync mode exists for deterministic
+    # local proofs, so serialize that exporter explicitly instead of relying on the
+    # HTTP exporter's connection object to be safe for concurrent use.
+    class SynchronizedExporter
+      def initialize(exporter)
+        @exporter = exporter
+        @mutex = Mutex.new
+      end
+
+      def export(span_data, timeout: nil)
+        @mutex.synchronize { @exporter.export(span_data, timeout: timeout) }
+      end
+
+      def force_flush(timeout: nil)
+        @mutex.synchronize { @exporter.force_flush(timeout: timeout) }
+      end
+
+      def shutdown(timeout: nil)
+        @mutex.synchronize { @exporter.shutdown(timeout: timeout) }
+      end
+    end
+
     module CheckoutInstrumentation
       def checkout(*args, **kwargs, &block)
         context = Thread.current[THREAD_CONTEXT_KEY]
@@ -235,7 +258,7 @@ module Causcope
       def configure_opentelemetry!
         if ENV["CAUSCOPE_OTEL_SYNC"] == "1"
           ENV["OTEL_TRACES_EXPORTER"] = "none"
-          exporter = OpenTelemetry::Exporter::OTLP::Exporter.new
+          exporter = SynchronizedExporter.new(OpenTelemetry::Exporter::OTLP::Exporter.new)
           processor = OpenTelemetry::SDK::Trace::Export::SimpleSpanProcessor.new(exporter)
           OpenTelemetry::SDK.configure do |config|
             config.service_name = ENV.fetch("OTEL_SERVICE_NAME", @system_id)
