@@ -204,6 +204,31 @@ effect:
 
 The initial rule model intentionally avoids a global numeric probability system. Early rules use qualitative effects such as `increase`, `decrease`, and `reject`.
 
+## Deterministic diagnostic boundary
+
+Causcope separates measured or deterministically derived diagnostic facts from higher-level reasoning.
+
+Where a source can compute an observation or first-order finding deterministically, that computation SHOULD happen before model reasoning. An LLM may explain, connect, prioritize, or propose a next probe, but it MUST NOT silently replace measurements or deterministic findings with unsupported generated claims.
+
+Preferred flow:
+
+```text
+raw signals
+  -> deterministic observations / findings
+  -> typed runtime evidence
+  -> scope + freshness + contradiction resolution
+  -> causal and hypothesis reasoning
+  -> next probe / explanation
+```
+
+Specialized domain analyzers MAY participate as evidence instruments through explicit adapters. Their findings enter the same runtime evidence pipeline as native telemetry and probes. Source identity, severity, recommendation text, or domain expertise MUST NOT grant automatic causal authority or privileged ranking.
+
+Unavailable, stale, reset, sampled, cold-window, permission-limited, or otherwise unreliable source state MUST remain explicit. `insufficient_evidence` is preferable to converting unknown state into `absent` or fabricating a conclusion.
+
+Adapters SHOULD preserve source provenance, measured values, baseline or comparison window, exactness, scope, timestamps, caveats, verification guidance, suppression state, and limitations when available. They MUST NOT infer a broader scope than the source actually observed or create canonical causal edges merely because a source describes something as a cause.
+
+The external diagnostic adapter architecture is defined in `RFC/0033-external-diagnostic-adapters.md`.
+
 ## Human-facing fields
 
 Concepts may include explanatory fields such as:
@@ -256,8 +281,9 @@ Expected consumers include:
 - Run Witness-like local runtime instrumentation
 - RunDiff/Plywo-style regression analysis
 - incident and observability integrations
+- external deterministic diagnostic adapters
 
-MCP, HTTP, CLI, SaaS, and harnesses are adapters or projections, not the ontology itself.
+MCP, HTTP, CLI, SaaS, harnesses, and external diagnostic providers are adapters or projections, not the ontology itself.
 
 ## Versioning
 
