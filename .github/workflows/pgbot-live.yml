@@ -8,6 +8,7 @@ on:
       - "scripts/pgbot_adapter.py"
       - "scripts/pgbot_autonomous_provider.py"
       - "scripts/diagnostic_provider_capabilities.py"
+      - "scripts/instrument_router.py"
       - "scripts/verify_pgbot_autonomous_live.py"
       - "scripts/autonomous_investigation.py"
       - "scripts/live_postgresql_trace.py"
@@ -19,9 +20,11 @@ on:
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
       - "schema/pgbot-adapter.schema.json"
       - "schema/diagnostic-provider-capabilities.schema.json"
+      - "schema/instrument-routing-decision.schema.json"
       - "RFC/0036-pgbot-live-postgresql-integration.md"
       - "RFC/0037-pgbot-autonomous-probe-provider.md"
       - "RFC/0038-diagnostic-provider-capability-discovery.md"
+      - "RFC/0039-instrument-router-v0.md"
       - ".github/workflows/pgbot-live.yml"
   pull_request:
     paths:
@@ -29,6 +32,7 @@ on:
       - "scripts/pgbot_adapter.py"
       - "scripts/pgbot_autonomous_provider.py"
       - "scripts/diagnostic_provider_capabilities.py"
+      - "scripts/instrument_router.py"
       - "scripts/verify_pgbot_autonomous_live.py"
       - "scripts/autonomous_investigation.py"
       - "scripts/live_postgresql_trace.py"
@@ -40,9 +44,11 @@ on:
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
       - "schema/pgbot-adapter.schema.json"
       - "schema/diagnostic-provider-capabilities.schema.json"
+      - "schema/instrument-routing-decision.schema.json"
       - "RFC/0036-pgbot-live-postgresql-integration.md"
       - "RFC/0037-pgbot-autonomous-probe-provider.md"
       - "RFC/0038-diagnostic-provider-capability-discovery.md"
+      - "RFC/0039-instrument-router-v0.md"
       - ".github/workflows/pgbot-live.yml"
 
 concurrency:
@@ -146,7 +152,35 @@ jobs:
           print("pgbot provider capability discovery verified")
           PY
 
-      - name: Run autonomous Causcope loop over real pgbot evidence
+      - name: Route live lock probe to a safe instrument
+        run: |
+          python scripts/instrument_router.py \
+            --probe probe.database.inspect_lock_waits \
+            --execution-requirement direct \
+            --scope-boundary boundary.application.external_dependency \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --pgbot-adapter examples/adapters/pgbot/postgresql.yaml \
+            --pgbot-report pgbot-report.json \
+            --pretty | tee pgbot-instrument-route.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          route = json.loads(Path("pgbot-instrument-route.json").read_text(encoding="utf-8"))
+          selection = route.get("selection")
+          if selection is None:
+              raise SystemExit(f"router selected no instrument: {route}")
+          instrument = selection["instrument"]
+          if instrument["id"] != "provider.pgbot.postgresql":
+              raise SystemExit(f"unexpected routed instrument: {instrument}")
+          if instrument["execution_mode"] != "direct":
+              raise SystemExit(f"unexpected routed execution mode: {instrument}")
+          print("instrument router selected live pgbot provider")
+          PY
+
+      - name: Run autonomous Causcope loop through the instrument router
         run: |
           python scripts/verify_pgbot_autonomous_live.py \
             --pgbot-report pgbot-report.json \
@@ -196,6 +230,7 @@ jobs:
           path: |
             pgbot-report.json
             pgbot-provider-capabilities.json
+            pgbot-instrument-route.json
             pgbot-autonomous-summary.json
             live-postgresql-trace.json
             pgbot-live-summary.json
