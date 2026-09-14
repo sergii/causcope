@@ -110,6 +110,7 @@
         "execution_mode": {"enum": ["session", "direct"]},
         "provider_type": {"$ref": "#/$defs/topology_id"},
         "target_resource": {"$ref": "#/$defs/topology_id"},
+        "endpoint_resource": {"$ref": "#/$defs/topology_id"},
         "runner": {"$ref": "#/$defs/topology_id"}
       }
     },
