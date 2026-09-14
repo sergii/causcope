@@ -7,6 +7,7 @@ on:
       - "lab/pgbot-live/**"
       - "scripts/pgbot_adapter.py"
       - "scripts/pgbot_autonomous_provider.py"
+      - "scripts/diagnostic_provider_capabilities.py"
       - "scripts/verify_pgbot_autonomous_live.py"
       - "scripts/autonomous_investigation.py"
       - "scripts/live_postgresql_trace.py"
@@ -17,14 +18,17 @@ on:
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
       - "schema/pgbot-adapter.schema.json"
+      - "schema/diagnostic-provider-capabilities.schema.json"
       - "RFC/0036-pgbot-live-postgresql-integration.md"
       - "RFC/0037-pgbot-autonomous-probe-provider.md"
+      - "RFC/0038-diagnostic-provider-capability-discovery.md"
       - ".github/workflows/pgbot-live.yml"
   pull_request:
     paths:
       - "lab/pgbot-live/**"
       - "scripts/pgbot_adapter.py"
       - "scripts/pgbot_autonomous_provider.py"
+      - "scripts/diagnostic_provider_capabilities.py"
       - "scripts/verify_pgbot_autonomous_live.py"
       - "scripts/autonomous_investigation.py"
       - "scripts/live_postgresql_trace.py"
@@ -35,8 +39,10 @@ on:
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
       - "schema/pgbot-adapter.schema.json"
+      - "schema/diagnostic-provider-capabilities.schema.json"
       - "RFC/0036-pgbot-live-postgresql-integration.md"
       - "RFC/0037-pgbot-autonomous-probe-provider.md"
+      - "RFC/0038-diagnostic-provider-capability-discovery.md"
       - ".github/workflows/pgbot-live.yml"
 
 concurrency:
@@ -113,6 +119,33 @@ jobs:
           print("pgbot live finding verified: wait_lock_contention")
           PY
 
+      - name: Discover live pgbot provider capabilities
+        run: |
+          python scripts/diagnostic_provider_capabilities.py \
+            --pgbot-adapter examples/adapters/pgbot/postgresql.yaml \
+            --pgbot-report pgbot-report.json \
+            --pretty | tee pgbot-provider-capabilities.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          document = json.loads(Path("pgbot-provider-capabilities.json").read_text(encoding="utf-8"))
+          provider = document["providers"][0]
+          if provider["id"] != "provider.pgbot.postgresql":
+              raise SystemExit(f"unexpected provider: {provider['id']}")
+          if provider["availability"]["state"] != "available":
+              raise SystemExit(f"pgbot provider not available: {provider['availability']}")
+          probe_ids = {item["probe"]["id"] for item in provider["probes"]}
+          expected = {
+              "probe.database.inspect_lock_waits",
+              "probe.database.measure_query_latency",
+          }
+          if probe_ids != expected:
+              raise SystemExit(f"unexpected pgbot provider probes: {sorted(probe_ids)}")
+          print("pgbot provider capability discovery verified")
+          PY
+
       - name: Run autonomous Causcope loop over real pgbot evidence
         run: |
           python scripts/verify_pgbot_autonomous_live.py \
@@ -162,6 +195,7 @@ jobs:
           name: pgbot-live-evidence
           path: |
             pgbot-report.json
+            pgbot-provider-capabilities.json
             pgbot-autonomous-summary.json
             live-postgresql-trace.json
             pgbot-live-summary.json
