@@ -22,6 +22,7 @@ REPOSITORY = os.environ.get("CAUSCOPE_REPOSITORY", "example://database-connectio
 INCIDENT_ID = os.environ.get("CAUSCOPE_INCIDENT_ID", "INC-D3-1-CONCRETE")
 CODE_SYMBOL = os.environ.get("CAUSCOPE_CODE_SYMBOL", "code:Handler#do_GET()")
 POOL_ID = os.environ.get("CAUSCOPE_POOL_ID", "pool:application_database")
+POOL_CONFIG_NAME = os.environ.get("CAUSCOPE_POOL_CONFIG_NAME", "application_database")
 DEPENDENCY_ID = os.environ.get("CAUSCOPE_DEPENDENCY_ID", "dependency:postgresql")
 CONFIGURED_CAPACITY = int(os.environ.get("CAUSCOPE_POOL_CAPACITY", "1"))
 HOLD_MS = int(os.environ.get("HOLD_MS", "500"))
@@ -67,6 +68,13 @@ def work_sample(*, traced=False):
             raise RuntimeError("server telemetry revision does not match requested revision")
         if telemetry.get("code_symbol") != CODE_SYMBOL:
             raise RuntimeError("server telemetry code symbol does not match expected symbol")
+        for timestamp_key in (
+            "start_time_unix_nano",
+            "checkout_time_unix_nano",
+            "end_time_unix_nano",
+        ):
+            if not str(telemetry.get(timestamp_key, "")).isdigit():
+                raise RuntimeError(f"server telemetry lacks valid {timestamp_key}")
         result["telemetry"] = telemetry
     return result
 
@@ -107,9 +115,20 @@ def direct_database_control():
     }
 
 
-def otlp_payload(telemetry):
+def otlp_payload(telemetry, intervention):
     def attr(key, value):
         return {"key": key, "value": {"stringValue": str(value)}}
+
+    checkout_event = {
+        "timeUnixNano": telemetry["checkout_time_unix_nano"],
+        "name": "causcope.pool.checkout",
+        "attributes": [
+            attr("causcope.pool_id", POOL_ID),
+            attr("causcope.pool.technology", "psycopg_pool"),
+            attr("causcope.pool.config_name", POOL_CONFIG_NAME),
+            attr("causcope.pool.checkout_wait_ms", intervention["checkout_wait_ms"]),
+        ],
+    }
 
     return {
         "resourceSpans": [
@@ -134,6 +153,7 @@ def otlp_payload(telemetry):
                                 "attributes": [
                                     attr("causcope.code_symbol", CODE_SYMBOL),
                                 ],
+                                "events": [checkout_event],
                             }
                         ],
                     }
@@ -246,4 +266,9 @@ evidence = {
     ],
 }
 
-print(json.dumps({"evidence": evidence, "otlp": otlp_payload(telemetry)}, sort_keys=True))
+print(
+    json.dumps(
+        {"evidence": evidence, "otlp": otlp_payload(telemetry, intervention)},
+        sort_keys=True,
+    )
+)
