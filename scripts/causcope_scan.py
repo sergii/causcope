@@ -55,17 +55,38 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("path", type=Path, help="Application repository root")
     parser.add_argument("--provider", choices=["auto", "rails"], default="auto")
     parser.add_argument("--environment", default="production", help="Rails environment to inspect")
+    parser.add_argument(
+        "--database-config",
+        type=Path,
+        help="Rails database config path relative to the repository; defaults to database.yml, .sample, then .example",
+    )
     parser.add_argument("--env-file", type=Path, help="YAML file containing environment values")
-    parser.add_argument("--env", action="append", default=[], metavar="KEY=VALUE", help="Environment value used only for bounded config rendering")
+    parser.add_argument(
+        "--env",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Environment value used only for bounded config rendering",
+    )
     parser.add_argument("--system-id", help="Stable concrete system identifier; defaults to directory name")
     parser.add_argument("--revision", help="Revision identity; defaults to git HEAD")
     parser.add_argument("--repository", help="Repository URI; defaults to git remote.origin.url")
-    parser.add_argument("--output", type=Path, help="Output JSON path; defaults to PATH/.causcope/concrete-system-facts.json")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Output JSON path; defaults to PATH/.causcope/concrete-system-facts.json",
+    )
     parser.add_argument("--json", action="store_true", help="Print the emitted document to stdout")
     return parser
 
 
-def scan_rails(args: argparse.Namespace, root: Path, output: Path, revision: str, repository: str | None) -> None:
+def scan_rails(
+    args: argparse.Namespace,
+    root: Path,
+    output: Path,
+    revision: str,
+    repository: str | None,
+) -> None:
     ruby = shutil.which("ruby")
     if not ruby:
         raise ValueError("Rails scanning requires Ruby on PATH")
@@ -86,6 +107,8 @@ def scan_rails(args: argparse.Namespace, root: Path, output: Path, revision: str
     ]
     if repository:
         command.extend(["--repository", repository])
+    if args.database_config:
+        command.extend(["--database-config", str(args.database_config)])
     if args.env_file:
         env_file = args.env_file if args.env_file.is_absolute() else root / args.env_file
         command.extend(["--env-file", str(env_file)])
@@ -124,8 +147,12 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(f"unsupported provider: {provider}")
 
         document = json.loads(output.read_text(encoding="utf-8"))
-        code_paths = sum(1 for item in document.get("entities", []) if item.get("kind") == "code_symbol")
-        pools = sum(1 for item in document.get("entities", []) if item.get("kind") == "resource_pool")
+        code_paths = sum(
+            1 for item in document.get("entities", []) if item.get("kind") == "code_symbol"
+        )
+        pools = sum(
+            1 for item in document.get("entities", []) if item.get("kind") == "resource_pool"
+        )
         print(f"Scanned {root}")
         print(f"Provider: {provider}")
         print(f"Revision: {revision}")
