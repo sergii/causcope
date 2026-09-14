@@ -1,0 +1,104 @@
+name: Validate database read-model recommendation gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "schema/database-read-model-recommendation-context.schema.json"
+      - "schema/architectural-recommendation-projection.schema.json"
+      - "scripts/database_read_model_recommendation.py"
+      - "scripts/test_database_read_model_recommendation.py"
+      - "scripts/pgbot_adapter.py"
+      - "scripts/resource_topology.py"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/topology/shop.yaml"
+      - "examples/recommendations/database-read-model/**"
+      - "knowledge/database/denormalized-read-model.yaml"
+      - "RFC/0064-causally-justified-architecture-advice.md"
+      - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
+      - ".github/workflows/database-read-model-recommendation.yml"
+  pull_request:
+    paths:
+      - "schema/database-read-model-recommendation-context.schema.json"
+      - "schema/architectural-recommendation-projection.schema.json"
+      - "scripts/database_read_model_recommendation.py"
+      - "scripts/test_database_read_model_recommendation.py"
+      - "scripts/pgbot_adapter.py"
+      - "scripts/resource_topology.py"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/topology/shop.yaml"
+      - "examples/recommendations/database-read-model/**"
+      - "knowledge/database/denormalized-read-model.yaml"
+      - "RFC/0064-causally-justified-architecture-advice.md"
+      - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
+      - ".github/workflows/database-read-model-recommendation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Verify recommendation evidence progression
+        run: python scripts/test_database_read_model_recommendation.py
+
+      - name: Project insufficient-context case
+        run: |
+          python scripts/database_read_model_recommendation.py \
+            --context examples/recommendations/database-read-model/insufficient-context.json \
+            --topology examples/topology/shop.yaml \
+            --adapter examples/adapters/pgbot/postgresql.yaml \
+            --pgbot-context examples/recommendations/database-read-model/pgbot-orders-findings.json \
+            --output /tmp/read-model-insufficient.json \
+            --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/read-model-insufficient.json').read_text())
+          assert result['state'] == 'INSUFFICIENT_CONTEXT'
+          assert result['human_approval_required'] is True
+          assert result['causal_basis']['source_uri'] == 'provider-instance:provider.pgbot.orders-prod'
+          PY
+
+          cat /tmp/read-model-insufficient.json
+
+      - name: Project measured-benefit case
+        run: |
+          python scripts/database_read_model_recommendation.py \
+            --context examples/recommendations/database-read-model/measured-context.json \
+            --topology examples/topology/shop.yaml \
+            --adapter examples/adapters/pgbot/postgresql.yaml \
+            --pgbot-context examples/recommendations/database-read-model/pgbot-orders-findings.json \
+            --output /tmp/read-model-measured.json \
+            --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/read-model-measured.json').read_text())
+          assert result['state'] == 'READY_FOR_HUMAN_REVIEW'
+          assert result['benefit']['basis'] == 'measured'
+          assert result['benefit']['improvement_percent'] == 88.95
+          assert result['consistency']['staleness_budget_ms'] == 5000
+          assert result['consistency']['update_strategy'] == 'transactional_outbox'
+          assert result['missing_assumptions'] == []
+          PY
+
+          cat /tmp/read-model-measured.json
