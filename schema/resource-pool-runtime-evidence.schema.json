@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/resource-pool-runtime-evidence.schema.json",
+  "title": "Causcope resource-pool runtime evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "observed_at",
+    "pool",
+    "request",
+    "dependency_control",
+    "baseline",
+    "recovery",
+    "assertions",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "resource_pool_runtime_evidence"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {"$ref": "#/$defs/revision"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "pool": {"$ref": "#/$defs/pool"},
+    "request": {"$ref": "#/$defs/request"},
+    "dependency_control": {"$ref": "#/$defs/dependency_control"},
+    "baseline": {"$ref": "#/$defs/latency_sample"},
+    "recovery": {"$ref": "#/$defs/latency_sample"},
+    "assertions": {"$ref": "#/$defs/assertions"},
+    "source": {"$ref": "#/$defs/source"},
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "local_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*:[^\\s]+$"
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "technology",
+        "configured_capacity",
+        "observed_capacity",
+        "busy",
+        "utilization"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/local_id"},
+        "technology": {"type": "string", "minLength": 1},
+        "configured_capacity": {"type": "integer", "minimum": 1},
+        "observed_capacity": {"type": "integer", "minimum": 1},
+        "busy": {"type": "integer", "minimum": 0},
+        "utilization": {"type": "number", "minimum": 0}
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code_symbol",
+        "trace_id",
+        "span_id",
+        "checkout_wait_ms",
+        "request_latency_ms",
+        "dependency_latency_ms",
+        "dependency_backend_id"
+      ],
+      "properties": {
+        "code_symbol": {"type": "string", "pattern": "^code:[^\\s]+$"},
+        "trace_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+        "span_id": {"type": "string", "pattern": "^[a-f0-9]{16}$"},
+        "checkout_wait_ms": {"type": "number", "minimum": 0},
+        "request_latency_ms": {"type": "number", "minimum": 0},
+        "dependency_latency_ms": {"type": "number", "minimum": 0},
+        "dependency_backend_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "dependency_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dependency_id", "reachable", "total_latency_ms", "query_latency_ms", "backend_id"],
+      "properties": {
+        "dependency_id": {"$ref": "#/$defs/local_id"},
+        "reachable": {"type": "boolean"},
+        "total_latency_ms": {"type": "number", "minimum": 0},
+        "query_latency_ms": {"type": "number", "minimum": 0},
+        "backend_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "latency_sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkout_wait_ms", "request_latency_ms", "dependency_latency_ms"],
+      "properties": {
+        "checkout_wait_ms": {"type": "number", "minimum": 0},
+        "request_latency_ms": {"type": "number", "minimum": 0},
+        "dependency_latency_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application_pool_was_at_capacity",
+        "pool_checkout_wait_increased",
+        "request_latency_increased",
+        "query_latency_stayed_near_baseline",
+        "database_still_accepts_direct_connections",
+        "checkout_wait_explains_request_delta",
+        "recovery_checkout_wait_returned_to_baseline",
+        "recovery_request_latency_returned_to_baseline"
+      ],
+      "properties": {
+        "application_pool_was_at_capacity": {"type": "boolean"},
+        "pool_checkout_wait_increased": {"type": "boolean"},
+        "request_latency_increased": {"type": "boolean"},
+        "query_latency_stayed_near_baseline": {"type": "boolean"},
+        "database_still_accepts_direct_connections": {"type": "boolean"},
+        "checkout_wait_explains_request_delta": {"type": "boolean"},
+        "recovery_checkout_wait_returned_to_baseline": {"type": "boolean"},
+        "recovery_request_latency_returned_to_baseline": {"type": "boolean"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": {"const": "probe"},
+        "name": {"type": "string", "minLength": 1},
+        "uri": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
