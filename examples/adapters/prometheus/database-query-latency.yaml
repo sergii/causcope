@@ -1,0 +1,28 @@
+schema_version: "0.1"
+kind: prometheus_adapter
+id: adapter.prometheus.database_query_latency
+description: >-
+  Target-aware PostgreSQL query latency mapping. The resource token is rendered
+  by the Prometheus provider and the returned vector must carry the same stable
+  causcope_resource identity label.
+default_confidence: moderate
+default_ttl_seconds: 300
+mappings:
+  - id: database_query_latency_p95
+    observation: observation.database.query_latency
+    query: >-
+      histogram_quantile(0.95,
+        sum by (le, causcope_resource)
+          (rate(app_database_query_duration_seconds_bucket{causcope_resource="{{target_resource}}"}[5m]))) * 1000
+    unit: ms
+    state_rule:
+      operator: gt
+      threshold: 150
+      state_when_true: observed
+      state_when_false: absent
+    scope:
+      boundaries:
+        - boundary.application.database
+      attributes:
+        service: checkout-api
+        dependency: postgresql
