@@ -1,0 +1,265 @@
+name: Validate Rails multi-database runtime identity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "integrations/rails/**"
+      - "scripts/causcope_scan.py"
+      - "scripts/rails_repository_scan.rb"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/otlp_concrete_receiver.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
+      - "lab/rails-connection-pool/**"
+      - "RFC/0061-exact-resource-pool-runtime-binding.md"
+      - "RFC/0062-rails-multi-database-runtime-proof.md"
+      - ".github/workflows/rails-multi-database-runtime.yml"
+  pull_request:
+    paths:
+      - "integrations/rails/**"
+      - "scripts/causcope_scan.py"
+      - "scripts/rails_repository_scan.rb"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/otlp_concrete_receiver.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
+      - "lab/rails-connection-pool/**"
+      - "RFC/0061-exact-resource-pool-runtime-binding.md"
+      - "RFC/0062-rails-multi-database-runtime-proof.md"
+      - ".github/workflows/rails-multi-database-runtime.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rails-multi-database-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: causcope
+          POSTGRES_PASSWORD: causcope
+          POSTGRES_DB: causcope
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U causcope -d causcope"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
+      RAILS_ENV: multi_database
+      RAILS_MAX_THREADS: "5"
+      PORT: "4569"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_USER: causcope
+      DB_PASSWORD: causcope
+      DB_NAME: causcope
+      REPLICA_DB_NAME: causcope
+      DB_POOL: "1"
+      DB_CHECKOUT_TIMEOUT: "5"
+      CAUSCOPE_SYSTEM_ID: rails-multi-database-app
+      CAUSCOPE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      CAUSCOPE_REPOSITORY: https://github.com/sergii/causcope
+      CAUSCOPE_INCIDENT_ID: INC-RAILS-MULTI-DB
+      CAUSCOPE_STATIC_FACTS: /tmp/rails-multi-static.json
+      CAUSCOPE_OTEL_SYNC: "1"
+      OTEL_SERVICE_NAME: causcope-rails-multi-database
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://127.0.0.1:4318/v1/traces
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema opentelemetry-proto
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+          bundler-cache: true
+
+      - name: Scan intentionally ambiguous multi-database static topology
+        run: |
+          ./bin/causcope scan lab/rails-connection-pool \
+            --provider rails \
+            --environment multi_database \
+            --env-file deployment.yml \
+            --system-id "$CAUSCOPE_SYSTEM_ID" \
+            --revision "$CAUSCOPE_REVISION" \
+            --repository "$CAUSCOPE_REPOSITORY" \
+            --output /tmp/rails-multi-static.json
+
+          python scripts/concrete_system_facts.py /tmp/rails-multi-static.json --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          document = json.loads(Path('/tmp/rails-multi-static.json').read_text())
+          pools = {
+              entity['id']: entity
+              for entity in document['entities']
+              if entity['kind'] == 'resource_pool'
+          }
+          assert set(pools) == {
+              'pool:active_record.primary',
+              'pool:active_record.replica',
+          }, pools
+          assert pools['pool:active_record.primary']['attributes']['config_name'] == 'primary'
+          assert pools['pool:active_record.replica']['attributes']['config_name'] == 'replica'
+          assert pools['pool:active_record.replica']['attributes']['replica'] is True
+
+          code = next(
+              entity for entity in document['entities']
+              if entity['id'] == 'code:PoolController#multi_pool()'
+          )
+          assert code['attributes']['pool_assignment'] == 'unresolved_multiple_configs'
+          assert not any(
+              fact['subject'] == code['id']
+              and fact['relation'] == 'depends_on'
+              and fact['object'] in pools
+              for fact in document['facts']
+          )
+          assert any('Multiple ActiveRecord database configurations' in item for item in document['limitations'])
+          PY
+
+      - name: Start concrete OTLP receiver
+        run: |
+          python scripts/otlp_concrete_receiver.py \
+            --static-facts /tmp/rails-multi-static.json \
+            --incident-id "$CAUSCOPE_INCIDENT_ID" \
+            --snapshot /tmp/rails-multi-runtime.json \
+            --source-uri otlp:http:rails-multi-database \
+            > /tmp/rails-multi-otlp.log 2>&1 &
+          echo $! > /tmp/rails-multi-otlp.pid
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4318/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat /tmp/rails-multi-otlp.log
+          exit 1
+
+      - name: Start Rails multi-database application
+        run: |
+          pushd lab/rails-connection-pool
+          bundle exec puma -C config/puma.rb > /tmp/rails-multi-puma.log 2>&1 &
+          echo $! > /tmp/rails-multi-puma.pid
+          popd
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4569/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat /tmp/rails-multi-puma.log
+          exit 1
+
+      - name: Exercise one request across writing and reading pools
+        run: |
+          curl --fail --silent http://127.0.0.1:4569/multi-pool > /tmp/rails-multi-response.json
+          cat /tmp/rails-multi-response.json
+
+          for attempt in $(seq 1 30); do
+            if [ -s /tmp/rails-multi-runtime.json ]; then
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Prove runtime resolves static pool ambiguity exactly
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          response = json.loads(Path('/tmp/rails-multi-response.json').read_text())
+          runtime = json.loads(Path('/tmp/rails-multi-runtime.json').read_text())
+
+          assert response['code_symbol'] == 'code:PoolController#multi_pool()'
+          assert response['writing_backend_id'] != response['reading_backend_id']
+
+          executions = [
+              item for item in runtime['executions']
+              if item['code_symbol'] == response['code_symbol']
+              and item['trace_id'] == response['trace_id']
+              and item['span_id'] == response['span_id']
+          ]
+          assert len(executions) == 1, executions
+          execution = executions[0]
+
+          interactions = [
+              item for item in runtime['pool_interactions']
+              if item['execution_id'] == execution['id']
+              and item['trace_id'] == response['trace_id']
+              and item['span_id'] == response['span_id']
+          ]
+          assert len(interactions) == 2, interactions
+          by_pool = {item['pool_id']: item for item in interactions}
+          assert set(by_pool) == {
+              'pool:active_record.primary',
+              'pool:active_record.replica',
+          }, by_pool
+
+          primary = by_pool['pool:active_record.primary']
+          replica = by_pool['pool:active_record.replica']
+          assert primary['config_name'] == 'primary'
+          assert primary['role'] == 'writing'
+          assert primary['shard'] == 'default'
+          assert primary['technology'] == 'active_record'
+          assert replica['config_name'] == 'replica'
+          assert replica['role'] == 'reading'
+          assert replica['shard'] == 'default'
+          assert replica['technology'] == 'active_record'
+
+          assert primary['code_symbol'] == response['code_symbol']
+          assert replica['code_symbol'] == response['code_symbol']
+          assert primary['execution_id'] == replica['execution_id'] == execution['id']
+          assert primary['source']['uri'] == 'otlp:http:rails-multi-database'
+          assert replica['source']['uri'] == 'otlp:http:rails-multi-database'
+
+          print(json.dumps({
+              'static_mapping': 'unknown',
+              'runtime_execution': execution['id'],
+              'runtime_pools': {
+                  'writing': primary['pool_id'],
+                  'reading': replica['pool_id'],
+              },
+              'backend_ids_distinct': True,
+          }, indent=2, sort_keys=True))
+          PY
+
+          curl --fail --silent http://127.0.0.1:4318/status
+
+      - name: Stop services
+        if: always()
+        run: |
+          if [ -f /tmp/rails-multi-puma.pid ]; then
+            kill "$(cat /tmp/rails-multi-puma.pid)" || true
+          fi
+          if [ -f /tmp/rails-multi-otlp.pid ]; then
+            kill "$(cat /tmp/rails-multi-otlp.pid)" || true
+          fi
+          cat /tmp/rails-multi-puma.log || true
+          cat /tmp/rails-multi-otlp.log || true

@@ -3,4 +3,5 @@ Rails.application.routes.draw do
   get "/status", to: "pool#status"
   get "/hold", to: "pool#hold"
   get "/work", to: "pool#work"
+  get "/multi-pool", to: "pool#multi_pool"
 end
