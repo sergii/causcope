@@ -23,7 +23,9 @@ def _default_clock() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _top_hypothesis(diagnosis: dict[str, Any]) -> str | None:
+def _top_hypothesis(diagnosis: dict[str, Any] | None) -> str | None:
+    if not isinstance(diagnosis, dict):
+        return None
     ranking = diagnosis.get("ranking", {})
     candidates = ranking.get("candidates", []) if isinstance(ranking, dict) else []
     if not isinstance(candidates, list) or not candidates:
@@ -33,7 +35,9 @@ def _top_hypothesis(diagnosis: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _top_probe(diagnosis: dict[str, Any]) -> str | None:
+def _top_probe(diagnosis: dict[str, Any] | None) -> str | None:
+    if not isinstance(diagnosis, dict):
+        return None
     ranking = diagnosis.get("probe_ranking", {})
     probes = ranking.get("probes", []) if isinstance(ranking, dict) else []
     if not isinstance(probes, list) or not probes:
@@ -64,43 +68,58 @@ def _recommendations(
     concepts: dict[str, dict[str, Any]],
     *,
     supported_probe_ids: set[str],
-    executed: set[tuple[str, str, str]],
+    attempted: set[tuple[str, str, str]],
 ) -> tuple[list[dict[str, Any]], bool]:
+    """Return ranked supported probes without allowing one unavailable probe to block the rest."""
     output: list[dict[str, Any]] = []
     repeated = False
     for partition in snapshot.get("partitions", []):
-        raw_scope = partition.get("scope")
-        normalized_scope = normalize_scope(raw_scope, concepts)
+        normalized_scope = normalize_scope(partition.get("scope"), concepts)
         scope_identity = scope_key(normalized_scope)
         for diagnosis in partition.get("diagnoses", []):
             target = diagnosis.get("target")
             if not isinstance(target, str):
                 continue
-            probe_id = _top_probe(diagnosis)
-            if probe_id is None or probe_id not in supported_probe_ids:
+            probe_ranking = diagnosis.get("probe_ranking", {})
+            probes = probe_ranking.get("probes", []) if isinstance(probe_ranking, dict) else []
+            if not isinstance(probes, list):
                 continue
-            probe = concepts.get(probe_id)
-            if not isinstance(probe, dict) or probe.get("kind") != "probe":
-                raise ValueError(f"recommended probe is not a canonical probe concept: {probe_id}")
-            if probe.get("risk") != "read_only":
-                raise ValueError(
-                    f"autonomous execution refuses non-read-only recommended probe {probe_id}: "
-                    f"risk={probe.get('risk')}"
+            for rank_index, candidate in enumerate(probes):
+                probe_view = candidate.get("probe", {}) if isinstance(candidate, dict) else {}
+                probe_id = probe_view.get("id") if isinstance(probe_view, dict) else None
+                if not isinstance(probe_id, str) or probe_id not in supported_probe_ids:
+                    continue
+                probe = concepts.get(probe_id)
+                if not isinstance(probe, dict) or probe.get("kind") != "probe":
+                    raise ValueError(f"recommended probe is not a canonical probe concept: {probe_id}")
+                if probe.get("risk") != "read_only":
+                    raise ValueError(
+                        f"autonomous execution refuses non-read-only recommended probe {probe_id}: "
+                        f"risk={probe.get('risk')}"
+                    )
+                key = (target, scope_identity, probe_id)
+                if key in attempted:
+                    repeated = True
+                    continue
+                output.append(
+                    {
+                        "target": target,
+                        "scope": copy.deepcopy(normalized_scope),
+                        "probe_id": probe_id,
+                        "probe_rank": rank_index + 1,
+                        "before_top_hypothesis": _top_hypothesis(diagnosis),
+                        "key": key,
+                    }
                 )
-            key = (target, scope_identity, probe_id)
-            if key in executed:
-                repeated = True
-                continue
-            output.append(
-                {
-                    "target": target,
-                    "scope": copy.deepcopy(normalized_scope),
-                    "probe_id": probe_id,
-                    "before_top_hypothesis": _top_hypothesis(diagnosis),
-                    "key": key,
-                }
-            )
-    output.sort(key=lambda item: (item["target"], scope_key(item["scope"]), item["probe_id"]))
+
+    output.sort(
+        key=lambda item: (
+            item["probe_rank"],
+            item["target"],
+            scope_key(item["scope"]),
+            item["probe_id"],
+        )
+    )
     return output, repeated
 
 
@@ -184,7 +203,7 @@ def run_autonomous_read_only_loop(
     current_snapshot = copy.deepcopy(snapshot)
     revision = int(snapshot.get("evidence_revision", 0))
     started_at = clock().astimezone(timezone.utc)
-    executed: set[tuple[str, str, str]] = set()
+    attempted: set[tuple[str, str, str]] = set()
     steps: list[dict[str, Any]] = []
     stop_reason = "max_steps"
 
@@ -193,7 +212,7 @@ def run_autonomous_read_only_loop(
             current_snapshot,
             concepts,
             supported_probe_ids=supported_probe_ids,
-            executed=executed,
+            attempted=attempted,
         )
         if not recommendations:
             stop_reason = "repeated_recommendation" if repeated else "no_executable_recommendation"
@@ -203,13 +222,30 @@ def run_autonomous_read_only_loop(
         probe_id = recommendation["probe_id"]
         target = recommendation["target"]
         scope = recommendation["scope"]
-        executed.add(recommendation["key"])
+        attempted.add(recommendation["key"])
 
         try:
             probe_evidence = execute_probe(probe_id, target, copy.deepcopy(scope))
-        except ProbeInsufficientEvidence:
-            stop_reason = "probe_insufficient_evidence"
-            break
+        except ProbeInsufficientEvidence as exc:
+            steps.append(
+                {
+                    "index": index,
+                    "status": "insufficient_evidence",
+                    "target": target,
+                    "scope": copy.deepcopy(scope),
+                    "probe_id": probe_id,
+                    "probe_rank": recommendation["probe_rank"],
+                    "before_top_hypothesis": recommendation["before_top_hypothesis"],
+                    "after_top_hypothesis": recommendation["before_top_hypothesis"],
+                    "next_probe_after": _top_probe(
+                        _diagnosis_for(current_snapshot, target=target, scope=scope)
+                    ),
+                    "evidence_instance_ids": [],
+                    "evidence_revision": revision,
+                    "reason": str(exc),
+                }
+            )
+            continue
 
         _validate_probe_evidence(
             probe_evidence,
@@ -240,14 +276,17 @@ def run_autonomous_read_only_loop(
         steps.append(
             {
                 "index": index,
+                "status": "completed",
                 "target": target,
                 "scope": copy.deepcopy(scope),
                 "probe_id": probe_id,
+                "probe_rank": recommendation["probe_rank"],
                 "before_top_hypothesis": recommendation["before_top_hypothesis"],
-                "after_top_hypothesis": _top_hypothesis(after) if after is not None else None,
-                "next_probe_after": _top_probe(after) if after is not None else None,
+                "after_top_hypothesis": _top_hypothesis(after),
+                "next_probe_after": _top_probe(after),
                 "evidence_instance_ids": sorted(new_ids),
                 "evidence_revision": revision,
+                "reason": None,
             }
         )
     else:
