@@ -18,6 +18,8 @@ on:
       - "RFC/0057-portable-rails-provider.md"
       - "RFC/0058-portable-rails-otlp-runtime.md"
       - "RFC/0059-rails-product-cli.md"
+      - "RFC/0060-real-world-rails-database-discovery.md"
+      - "research/rails-external-compatibility-spike.md"
       - ".github/workflows/portable-rails-provider.yml"
   pull_request:
     paths:
@@ -35,6 +37,8 @@ on:
       - "RFC/0057-portable-rails-provider.md"
       - "RFC/0058-portable-rails-otlp-runtime.md"
       - "RFC/0059-rails-product-cli.md"
+      - "RFC/0060-real-world-rails-database-discovery.md"
+      - "research/rails-external-compatibility-spike.md"
       - ".github/workflows/portable-rails-provider.yml"
 
 permissions:
@@ -68,6 +72,7 @@ jobs:
       - name: Validate product CLI syntax
         run: |
           python -m py_compile scripts/causcope_scan.py scripts/causcope_rails.py scripts/causcope_runtime.py
+          ruby -c scripts/rails_repository_scan.rb
           ruby -c integrations/rails/causcope_runtime.rb
 
       - name: Validate portable Rails repository scan
