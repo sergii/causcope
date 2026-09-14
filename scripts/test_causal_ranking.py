@@ -160,6 +160,20 @@ class CausalRankingTest(unittest.TestCase):
             self.assertNotIn("score", candidate)
             self.assertNotIn("probability", candidate)
 
+    def test_architectural_recommendations_are_not_root_cause_candidates(self) -> None:
+        recommendation = self.concepts["recommendation.database.denormalize_read_model"]
+        self.assertEqual("architectural_recommendation", recommendation["kind"])
+
+        ranking = rank_causes(
+            "observation.network.tcp_retransmissions",
+            self.edges,
+            self.concepts,
+        )
+        candidate_ids = [candidate["source"]["id"] for candidate in ranking["candidates"]]
+        self.assertNotIn("recommendation.database.denormalize_read_model", candidate_ids)
+        for candidate_id in candidate_ids:
+            self.assertEqual("hypothesis", self.concepts[candidate_id]["kind"])
+
 
 if __name__ == "__main__":
     unittest.main()
