@@ -1,0 +1,11 @@
+id: probe.database.inspect_lock_error_events
+kind: probe
+title: Inspect database lock error events
+summary: Query the available diagnostic or application log stream for explicit database lock acquisition, lock timeout, or equivalent lock-conflict errors in the investigation window.
+produces:
+  - observation.database.lock_error_event
+requires:
+  - capability.logs.query
+preferred_tools:
+  - tool.structured_logs
+risk: read_only
