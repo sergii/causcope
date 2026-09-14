@@ -69,6 +69,7 @@ def validate_resource_topology(document: dict[str, Any]) -> None:
         provider_type = instance["provider_type"]
         target = instance["target"]
         runner = instance["runner"]
+        endpoint_resource = instance.get("endpoint_resource", target)
         if provider_type not in provider_type_ids:
             raise ValueError(
                 f"provider instance {instance['id']} references unknown provider type: {provider_type}"
@@ -76,6 +77,11 @@ def validate_resource_topology(document: dict[str, Any]) -> None:
         if target not in resource_ids:
             raise ValueError(
                 f"provider instance {instance['id']} references unknown target resource: {target}"
+            )
+        if endpoint_resource not in resource_ids:
+            raise ValueError(
+                f"provider instance {instance['id']} references unknown endpoint resource: "
+                f"{endpoint_resource}"
             )
         if runner not in runner_ids:
             raise ValueError(
@@ -121,6 +127,10 @@ class ResourceTopology:
             raise ValueError(
                 f"unknown topology provider instance: {provider_instance_id}"
             ) from exc
+
+    def provider_endpoint(self, provider_instance_id: str) -> dict[str, Any]:
+        instance = self.provider_instance(provider_instance_id)
+        return self.resource(instance.get("endpoint_resource", instance["target"]))
 
     @property
     def provider_instances(self) -> list[dict[str, Any]]:
