@@ -144,7 +144,7 @@ def mask_unresolved_value_erb(source)
 end
 
 def unresolved_value?(value)
-  value.is_a?(String) && value.start_with?(UNRESOLVED_ERB_PREFIX)
+  value.is_a?(String) && value.include?(UNRESOLVED_ERB_PREFIX)
 end
 
 def database_configurations(environment_config)
@@ -438,7 +438,7 @@ configurations.each do |config_name, configuration|
 
   if configuration.key?("pool")
     if unresolved_value?(configuration["pool"])
-      limitations << "Configured pool capacity for #{options.fetch(:environment)}.#{config_name} is unresolved because the database config uses non-bounded ERB."
+      limitations << "Configured pool capacity for #{options.fetch(:environment)}.#{config_name} is unresolved; resolving it would require runtime configuration or executing repository Ruby, so capacity remains unknown."
     elsif pool_capacity.nil?
       limitations << "Configured pool capacity for #{options.fetch(:environment)}.#{config_name} is present but not a positive integer; capacity remains unknown."
     end
