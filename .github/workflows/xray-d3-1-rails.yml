@@ -1,0 +1,227 @@
+name: Validate Rails ActiveRecord D3.1 X-Ray
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/rails_connection_pool_concrete_facts.rb"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/xray_engine.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "schema/resource-pool-runtime-evidence.schema.json"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "lab/rails-connection-pool/**"
+      - "RFC/0056-rails-active-record-d3-1-provider.md"
+      - ".github/workflows/xray-d3-1-rails.yml"
+  pull_request:
+    paths:
+      - "scripts/rails_connection_pool_concrete_facts.rb"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/xray_engine.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "schema/resource-pool-runtime-evidence.schema.json"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "lab/rails-connection-pool/**"
+      - "RFC/0056-rails-active-record-d3-1-provider.md"
+      - ".github/workflows/xray-d3-1-rails.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rails-d3-1-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: causcope
+          POSTGRES_PASSWORD: causcope
+          POSTGRES_DB: causcope
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U causcope -d causcope"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
+      RAILS_ENV: production
+      RAILS_MAX_THREADS: "5"
+      PORT: "4567"
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_USER: causcope
+      DB_PASSWORD: causcope
+      DB_NAME: causcope
+      DB_POOL: "1"
+      DB_CHECKOUT_TIMEOUT: "5"
+      CAUSCOPE_SYSTEM_ID: rails-connection-pool-app
+      CAUSCOPE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      CAUSCOPE_REPOSITORY: https://github.com/sergii/causcope
+      CAUSCOPE_INCIDENT_ID: INC-D3-1-RAILS
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+          bundler-cache: true
+
+      - name: Extract revision-bound ActiveRecord pool facts
+        run: |
+          ruby scripts/rails_connection_pool_concrete_facts.rb \
+            --controller lab/rails-connection-pool/app/controllers/pool_controller.rb \
+            --database lab/rails-connection-pool/config/database.yml \
+            --deployment lab/rails-connection-pool/deployment.yml \
+            --system-id "$CAUSCOPE_SYSTEM_ID" \
+            --revision "$CAUSCOPE_REVISION" \
+            --repository "$CAUSCOPE_REPOSITORY" \
+            --output /tmp/rails-d3-static.json
+
+          python scripts/concrete_system_facts.py /tmp/rails-d3-static.json --pretty
+
+      - name: Start Rails application
+        run: |
+          pushd lab/rails-connection-pool
+          bundle exec puma -C config/puma.rb > /tmp/rails-d3-puma.log 2>&1 &
+          echo $! > /tmp/rails-d3-puma.pid
+          popd
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4567/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          cat /tmp/rails-d3-puma.log
+          exit 1
+
+      - name: Capture ActiveRecord pool and native OTel identity
+        env:
+          APP_URL: http://127.0.0.1:4567
+          HOLD_MS: "2000"
+        run: |
+          bundle exec ruby lab/rails-connection-pool/concrete_probe.rb > /tmp/rails-d3-envelope.json
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/rails-d3-envelope.json').read_text())
+          Path('/tmp/rails-d3-pool.json').write_text(json.dumps(payload['evidence'], indent=2, sort_keys=True) + '\n')
+          Path('/tmp/rails-d3-otlp.json').write_text(json.dumps(payload['otlp'], indent=2, sort_keys=True) + '\n')
+          PY
+
+      - name: Validate ActiveRecord resource-pool evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import jsonschema
+
+          schema = json.loads(Path('schema/resource-pool-runtime-evidence.schema.json').read_text())
+          evidence = json.loads(Path('/tmp/rails-d3-pool.json').read_text())
+          jsonschema.Draft202012Validator(schema, format_checker=jsonschema.FormatChecker()).validate(evidence)
+
+          assert evidence['pool']['technology'] == 'active_record'
+          assert evidence['pool']['configured_capacity'] == 1
+          assert evidence['pool']['observed_capacity'] == 1
+          assert evidence['dependency_control']['reachable'] is True
+          assert evidence['request']['dependency_backend_id'] != evidence['dependency_control']['backend_id']
+          assert all(evidence['assertions'].values()), evidence['assertions']
+          print(json.dumps(evidence['assertions'], indent=2, sort_keys=True))
+          PY
+
+      - name: Project native Rails request span into concrete runtime facts
+        run: |
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/rails-d3-static.json \
+            --otlp /tmp/rails-d3-otlp.json \
+            --incident-id "$CAUSCOPE_INCIDENT_ID" \
+            --source-uri live:rails-active-record \
+            --output /tmp/rails-d3-runtime.json
+
+      - name: Run unchanged generic D3.1 concrete profile
+        run: |
+          python scripts/xray_engine.py \
+            --profile xray/profiles/d3-1-concrete-connection-pool.yaml \
+            --input static=/tmp/rails-d3-static.json \
+            --input runtime=/tmp/rails-d3-runtime.json \
+            --input pool=/tmp/rails-d3-pool.json \
+            --require-state CAUSAL_DIAGNOSIS_CONFIRMED \
+            --output /tmp/rails-d3-xray.json
+
+          cat /tmp/rails-d3-xray.json
+
+      - name: Verify technology and identity fail closed
+        run: |
+          python - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+          import yaml
+
+          from scripts.xray_engine import project
+
+          profile = yaml.safe_load(Path('xray/profiles/d3-1-concrete-connection-pool.yaml').read_text())
+          static = json.loads(Path('/tmp/rails-d3-static.json').read_text())
+          runtime = json.loads(Path('/tmp/rails-d3-runtime.json').read_text())
+          pool = json.loads(Path('/tmp/rails-d3-pool.json').read_text())
+
+          def state(static_document=static, runtime_document=runtime, pool_document=pool):
+              return project(profile, {'static': static_document, 'runtime': runtime_document, 'pool': pool_document})['epistemic_state']
+
+          assert state() == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+
+          wrong_technology = copy.deepcopy(pool)
+          wrong_technology['pool']['technology'] = 'psycopg_pool'
+          assert state(pool_document=wrong_technology) == 'PRECONDITIONS_PRESENT'
+
+          wrong_trace = copy.deepcopy(pool)
+          wrong_trace['request']['trace_id'] = '0' * 32
+          assert state(pool_document=wrong_trace) == 'PRECONDITIONS_PRESENT'
+
+          wrong_capacity = copy.deepcopy(pool)
+          wrong_capacity['pool']['observed_capacity'] = 2
+          assert state(pool_document=wrong_capacity) == 'PRECONDITIONS_PRESENT'
+
+          unavailable_database_control = copy.deepcopy(pool)
+          unavailable_database_control['assertions']['database_still_accepts_direct_connections'] = False
+          assert state(pool_document=unavailable_database_control) == 'CHECKOUT_WAIT_OBSERVED'
+
+          wrong_revision = copy.deepcopy(runtime)
+          wrong_revision['revision']['value'] = 'different-revision'
+          try:
+              state(runtime_document=wrong_revision)
+          except ValueError as exc:
+              assert 'identity group revision' in str(exc)
+          else:
+              raise AssertionError('revision mismatch must fail closed')
+          PY
+
+      - name: Stop Rails application
+        if: always()
+        run: |
+          if [ -f /tmp/rails-d3-puma.pid ]; then
+            kill "$(cat /tmp/rails-d3-puma.pid)" || true
+          fi
+          cat /tmp/rails-d3-puma.log || true
