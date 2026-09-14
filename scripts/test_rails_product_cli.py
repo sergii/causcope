@@ -83,14 +83,13 @@ def main() -> int:
             system_id="multi-pool-product",
             revision="revision-multi-pool",
         )
-        multi_gemfile_before = multi_pool_gemfile.read_text(encoding="utf-8")
-        unsupported_runtime = run("rails", "install", str(multi_pool_app), check=False)
-        assert unsupported_runtime.returncode == 2
-        assert "requires exactly one ActiveRecord resource pool" in unsupported_runtime.stderr
-        assert "discovered 2" in unsupported_runtime.stderr
-        assert not (multi_pool_app / "lib" / "causcope" / "runtime.rb").exists()
-        assert not (multi_pool_app / "config" / "initializers" / "causcope.rb").exists()
-        assert multi_pool_gemfile.read_text(encoding="utf-8") == multi_gemfile_before
+        multi_install = run("rails", "install", str(multi_pool_app))
+        assert "ActiveRecord pools: 2" in multi_install.stdout
+        assert (multi_pool_app / "lib" / "causcope" / "runtime.rb").is_file()
+        assert (multi_pool_app / "config" / "initializers" / "causcope.rb").is_file()
+        multi_gemfile = multi_pool_gemfile.read_text(encoding="utf-8")
+        assert multi_gemfile.count('gem "opentelemetry-sdk"') == 1
+        assert multi_gemfile.count('gem "opentelemetry-exporter-otlp"') == 1
 
         conflict_app = temporary_root / "atomic-conflict-app"
         conflict_gemfile = prepare_app(conflict_app)
@@ -116,6 +115,7 @@ def main() -> int:
 
         install = run("rails", "install", str(app))
         assert "System: product-cli-fixture" in install.stdout
+        assert "ActiveRecord pools: 1" in install.stdout
         runtime = app / "lib" / "causcope" / "runtime.rb"
         initializer = app / "config" / "initializers" / "causcope.rb"
         assert runtime.is_file()

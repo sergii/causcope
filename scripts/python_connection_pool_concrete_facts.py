@@ -16,6 +16,7 @@ from concrete_system_facts import load_schema, validate_schema, validate_semanti
 CODE_SYMBOL = "code:Handler#do_GET()"
 SERVICE_ID = "service:database-connection-pool-app"
 POOL_ID = "pool:application_database"
+POOL_CONFIG_NAME = "application_database"
 DEPENDENCY_ID = "dependency:postgresql"
 
 
@@ -221,6 +222,7 @@ def build_document(
                 },
                 "attributes": {
                     "technology": "psycopg_pool",
+                    "config_name": POOL_CONFIG_NAME,
                     "configured_capacity": configured_capacity,
                     "source_default_capacity": pool_default,
                     "checkout_timeout_seconds": pool_timeout,
@@ -284,6 +286,7 @@ def build_document(
         ],
         "limitations": [
             "The extractor intentionally supports only the bounded Python/psycopg_pool fixture shape used by the D3.1 concrete proof.",
+            "The provider-local config_name is an exact stable identity for this one declared psycopg_pool instance; it is not a Rails database-role concept.",
             "A configured pool capacity proves a revision-bound deployment fact, not that the pool was saturated at runtime.",
             "Runtime execution and saturation require independent trace and probe evidence.",
         ],

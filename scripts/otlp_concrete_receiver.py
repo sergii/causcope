@@ -107,7 +107,7 @@ def decode_otlp_payload(body: bytes, content_type: str) -> tuple[dict[str, Any],
         request = ExportTraceServiceRequest()
         try:
             request.ParseFromString(body)
-        except Exception as exc:  # protobuf raises implementation-specific decode errors
+        except Exception as exc:
             raise ValueError("request body must be a valid OTLP ExportTraceServiceRequest") from exc
         return protobuf_request_to_otlp_json(request), "protobuf"
 
@@ -135,16 +135,22 @@ class ConcreteRuntimeStore:
         self.snapshot_path = snapshot_path
         self.source_uri = source_uri
         self._executions: dict[str, dict[str, Any]] = {}
+        self._pool_interactions: dict[str, dict[str, Any]] = {}
         self._lock = RLock()
         self._accepted_requests_total = 0
         self._ignored_unbound_requests_total = 0
         self._matched_executions_total = 0
         self._duplicate_executions_total = 0
+        self._matched_pool_interactions_total = 0
+        self._duplicate_pool_interactions_total = 0
 
     def _document(self) -> dict[str, Any] | None:
         if not self._executions:
             return None
         executions = sorted(self._executions.values(), key=lambda item: item["id"])
+        pool_interactions = sorted(
+            self._pool_interactions.values(), key=lambda item: item["id"]
+        )
         document = {
             "schema_version": "0.1",
             "kind": "concrete_runtime_facts",
@@ -153,8 +159,10 @@ class ConcreteRuntimeStore:
             "incident_id": self.incident_id,
             "executions": executions,
             "overlaps": derive_overlaps(executions),
+            "pool_interactions": pool_interactions,
             "limitations": [
                 "Only spans carrying an explicit causcope.code_symbol binding are projected into concrete runtime facts.",
+                "Pool interactions are projected only from exact causcope.pool.checkout events whose pool id, technology, and database config name match the pinned static contract.",
                 "The receiver validates system and revision identity against the pinned concrete-system facts and rejects mismatches.",
                 "Temporal overlap proves concurrent span intervals, not simultaneous database lock ownership or a database wait-for cycle.",
             ],
@@ -170,6 +178,29 @@ class ConcreteRuntimeStore:
         temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         temporary.replace(self.snapshot_path)
 
+    def _merge_by_id(
+        self,
+        destination: dict[str, dict[str, Any]],
+        items: list[dict[str, Any]],
+        *,
+        label: str,
+    ) -> tuple[int, int]:
+        matched = 0
+        duplicates = 0
+        for item in items:
+            current = destination.get(item["id"])
+            if current is None:
+                destination[item["id"]] = item
+                matched += 1
+                continue
+            if current != item:
+                raise ValueError(
+                    f"deterministic concrete {label} id was replayed with different content: "
+                    + item["id"]
+                )
+            duplicates += 1
+        return matched, duplicates
+
     def ingest(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             self._accepted_requests_total += 1
@@ -183,18 +214,21 @@ class ConcreteRuntimeStore:
                 incident_id=self.incident_id,
                 source_uri=self.source_uri,
             )
-            for execution in batch["executions"]:
-                current = self._executions.get(execution["id"])
-                if current is None:
-                    self._executions[execution["id"]] = execution
-                    self._matched_executions_total += 1
-                    continue
-                if current != execution:
-                    raise ValueError(
-                        "deterministic concrete execution id was replayed with different content: "
-                        + execution["id"]
-                    )
-                self._duplicate_executions_total += 1
+            matched, duplicates = self._merge_by_id(
+                self._executions,
+                batch["executions"],
+                label="execution",
+            )
+            self._matched_executions_total += matched
+            self._duplicate_executions_total += duplicates
+
+            matched, duplicates = self._merge_by_id(
+                self._pool_interactions,
+                batch.get("pool_interactions", []),
+                label="pool interaction",
+            )
+            self._matched_pool_interactions_total += matched
+            self._duplicate_pool_interactions_total += duplicates
 
             document = self._document()
             if document is not None:
@@ -213,10 +247,13 @@ class ConcreteRuntimeStore:
                 "revision": self.static_document["revision"]["value"],
                 "incident_id": self.incident_id,
                 "stored_executions": len(self._executions),
+                "stored_pool_interactions": len(self._pool_interactions),
                 "accepted_requests_total": self._accepted_requests_total,
                 "ignored_unbound_requests_total": self._ignored_unbound_requests_total,
                 "matched_executions_total": self._matched_executions_total,
                 "duplicate_executions_total": self._duplicate_executions_total,
+                "matched_pool_interactions_total": self._matched_pool_interactions_total,
+                "duplicate_pool_interactions_total": self._duplicate_pool_interactions_total,
             }
 
 

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
       - "schema/resource-pool-runtime-evidence.schema.json"
       - "scripts/python_connection_pool_concrete_facts.py"
       - "scripts/otel_concrete_runtime_facts.py"
@@ -12,10 +13,12 @@ on:
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
       - "lab/database-connection-pool/**"
       - "RFC/0055-concrete-d3-1-connection-pool.md"
+      - "RFC/0061-exact-resource-pool-runtime-binding.md"
       - ".github/workflows/xray-d3-1-concrete.yml"
   pull_request:
     paths:
       - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
       - "schema/resource-pool-runtime-evidence.schema.json"
       - "scripts/python_connection_pool_concrete_facts.py"
       - "scripts/otel_concrete_runtime_facts.py"
@@ -23,6 +26,7 @@ on:
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
       - "lab/database-connection-pool/**"
       - "RFC/0055-concrete-d3-1-connection-pool.md"
+      - "RFC/0061-exact-resource-pool-runtime-binding.md"
       - ".github/workflows/xray-d3-1-concrete.yml"
 
 permissions:
@@ -122,6 +126,33 @@ jobs:
             --source-uri live:database-connection-pool \
             --output /tmp/d3-runtime.json
 
+      - name: Verify exact pool checkout interaction
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          static = json.loads(Path('/tmp/d3-static.json').read_text())
+          runtime = json.loads(Path('/tmp/d3-runtime.json').read_text())
+          evidence = json.loads(Path('/tmp/d3-pool-evidence.json').read_text())
+          request = evidence['request']
+          interactions = [
+              item for item in runtime['pool_interactions']
+              if item['pool_id'] == evidence['pool']['id']
+              and item['technology'] == evidence['pool']['technology']
+              and item['code_symbol'] == request['code_symbol']
+              and item['trace_id'] == request['trace_id']
+              and item['span_id'] == request['span_id']
+          ]
+          assert len(interactions) == 1, runtime['pool_interactions']
+          interaction = interactions[0]
+          assert interaction['config_name'] == 'application_database'
+          assert interaction['checkout_wait_ms'] >= 0
+          pool = next(entity for entity in static['entities'] if entity['id'] == interaction['pool_id'])
+          assert pool['attributes']['config_name'] == interaction['config_name']
+          print(json.dumps(interaction, indent=2, sort_keys=True))
+          PY
+
       - name: Run concrete D3.1 declarative X-Ray profile
         run: |
           python scripts/xray_engine.py \
@@ -149,34 +180,54 @@ jobs:
           runtime = json.loads(Path('/tmp/d3-runtime.json').read_text())
           pool = json.loads(Path('/tmp/d3-pool-evidence.json').read_text())
 
-          def state(pool_document, runtime_document=runtime):
+          def state(pool_document=pool, runtime_document=runtime):
               return project(
                   profile,
                   {'static': static, 'runtime': runtime_document, 'pool': pool_document},
               )['epistemic_state']
 
-          assert state(pool) == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+          def exact_interaction(interactions):
+              request = pool['request']
+              matches = [
+                  item for item in interactions
+                  if item['code_symbol'] == request['code_symbol']
+                  and item['trace_id'] == request['trace_id']
+                  and item['span_id'] == request['span_id']
+                  and item['pool_id'] == pool['pool']['id']
+              ]
+              assert len(matches) == 1, matches
+              return matches[0]
+
+          assert state() == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+
+          target_id = exact_interaction(runtime['pool_interactions'])['id']
+          missing_pool_interaction = copy.deepcopy(runtime)
+          missing_pool_interaction['pool_interactions'] = [
+              item for item in missing_pool_interaction['pool_interactions']
+              if item['id'] != target_id
+          ]
+          assert state(runtime_document=missing_pool_interaction) == 'PRECONDITIONS_PRESENT'
 
           wrong_trace = copy.deepcopy(pool)
           wrong_trace['request']['trace_id'] = '0' * 32
-          assert state(wrong_trace) == 'PRECONDITIONS_PRESENT'
+          assert state(pool_document=wrong_trace) == 'PRECONDITIONS_PRESENT'
 
           wrong_capacity = copy.deepcopy(pool)
           wrong_capacity['pool']['observed_capacity'] = 2
-          assert state(wrong_capacity) == 'PRECONDITIONS_PRESENT'
+          assert state(pool_document=wrong_capacity) == 'PRECONDITIONS_PRESENT'
 
           unavailable_database_control = copy.deepcopy(pool)
           unavailable_database_control['assertions']['database_still_accepts_direct_connections'] = False
-          assert state(unavailable_database_control) == 'CHECKOUT_WAIT_OBSERVED'
+          assert state(pool_document=unavailable_database_control) == 'CHECKOUT_WAIT_OBSERVED'
 
           unexplained_latency = copy.deepcopy(pool)
           unexplained_latency['assertions']['checkout_wait_explains_request_delta'] = False
-          assert state(unexplained_latency) == 'DATABASE_CAPACITY_DISTINGUISHED'
+          assert state(pool_document=unexplained_latency) == 'DATABASE_CAPACITY_DISTINGUISHED'
 
           wrong_revision = copy.deepcopy(runtime)
           wrong_revision['revision']['value'] = 'different-revision'
           try:
-              state(pool, wrong_revision)
+              state(runtime_document=wrong_revision)
           except ValueError as exc:
               assert 'identity group revision' in str(exc)
           else:
@@ -184,6 +235,7 @@ jobs:
 
           print(json.dumps({
               'confirmed': 'CAUSAL_DIAGNOSIS_CONFIRMED',
+              'missing_exact_pool_interaction': 'PRECONDITIONS_PRESENT',
               'wrong_trace': 'PRECONDITIONS_PRESENT',
               'wrong_capacity': 'PRECONDITIONS_PRESENT',
               'database_control_removed': 'CHECKOUT_WAIT_OBSERVED',

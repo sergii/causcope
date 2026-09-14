@@ -70,22 +70,6 @@ def load_facts(path: Path) -> dict[str, Any]:
     return document
 
 
-def require_single_active_record_pool(document: dict[str, Any]) -> dict[str, Any]:
-    pools = [
-        entity
-        for entity in document.get("entities", [])
-        if entity.get("kind") == "resource_pool"
-        and entity.get("attributes", {}).get("technology") == "active_record"
-    ]
-    if len(pools) != 1:
-        raise ValueError(
-            "portable Rails runtime currently requires exactly one ActiveRecord resource pool; "
-            f"the static scan discovered {len(pools)}. Static discovery remains valid, but "
-            "runtime role/shard binding is not supported yet."
-        )
-    return pools[0]
-
-
 def managed_file_action(path: Path, content: str, *, force: bool) -> str:
     if not path.exists():
         return "created"
@@ -149,7 +133,6 @@ def install(args: argparse.Namespace) -> int:
     ensure_rails_root(root)
     static_path = facts_path(root, args.static_facts)
     document = load_facts(static_path)
-    require_single_active_record_pool(document)
 
     runtime_content = RUNTIME_SOURCE.read_text(encoding="utf-8")
     runtime_path = root / RUNTIME_TARGET
@@ -171,9 +154,16 @@ def install(args: argparse.Namespace) -> int:
     if not args.no_gemfile and added_gems:
         gemfile_path.write_text(gemfile_content, encoding="utf-8")
 
+    pool_count = sum(
+        1
+        for entity in document.get("entities", [])
+        if entity.get("kind") == "resource_pool"
+        and entity.get("attributes", {}).get("technology") == "active_record"
+    )
     print(f"Rails root: {root}")
     print(f"System: {document['system_id']}")
     print(f"Scanned revision: {document['revision']['value']}")
+    print(f"ActiveRecord pools: {pool_count}")
     print(f"{runtime_action.capitalize()}: {runtime_path}")
     print(f"{initializer_action.capitalize()}: {initializer_path}")
     if args.no_gemfile:
@@ -193,7 +183,6 @@ def run_rails(args: argparse.Namespace) -> int:
     ensure_rails_root(root)
     static_path = facts_path(root, args.static_facts)
     document = load_facts(static_path)
-    require_single_active_record_pool(document)
 
     if not (root / INITIALIZER_TARGET).is_file() or not (root / RUNTIME_TARGET).is_file():
         raise ValueError(

@@ -37,6 +37,10 @@
       "type": "array",
       "items": {"$ref": "#/$defs/overlap"}
     },
+    "pool_interactions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/pool_interaction"}
+    },
     "limitations": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
@@ -44,13 +48,31 @@
     }
   },
   "$defs": {
+    "local_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*:[^\\s]+$"
+    },
     "execution_id": {
       "type": "string",
       "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"
     },
+    "pool_interaction_id": {
+      "type": "string",
+      "pattern": "^pool_interaction\\.opentelemetry\\.[a-f0-9]{16}$"
+    },
     "code_symbol": {
       "type": "string",
       "pattern": "^code:[^\\s]+$"
+    },
+    "trace_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": {"const": "trace"},
+        "name": {"const": "opentelemetry"},
+        "uri": {"type": "string", "minLength": 1}
+      }
     },
     "execution": {
       "type": "object",
@@ -73,16 +95,44 @@
         "duration_ms": {"type": "number", "minimum": 0},
         "trace_id": {"type": "string", "minLength": 1},
         "span_id": {"type": "string", "minLength": 1},
-        "source": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "name"],
-          "properties": {
-            "type": {"const": "trace"},
-            "name": {"const": "opentelemetry"},
-            "uri": {"type": "string", "minLength": 1}
-          }
-        }
+        "source": {"$ref": "#/$defs/trace_source"}
+      }
+    },
+    "pool_interaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "execution_id",
+        "code_symbol",
+        "pool_id",
+        "technology",
+        "config_name",
+        "trace_id",
+        "span_id",
+        "event_index",
+        "observed_at",
+        "checkout_wait_ms",
+        "source"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/pool_interaction_id"},
+        "execution_id": {"$ref": "#/$defs/execution_id"},
+        "code_symbol": {"$ref": "#/$defs/code_symbol"},
+        "pool_id": {"$ref": "#/$defs/local_id"},
+        "technology": {"type": "string", "minLength": 1},
+        "config_name": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "shard": {"type": "string", "minLength": 1},
+        "trace_id": {"type": "string", "minLength": 1},
+        "span_id": {"type": "string", "minLength": 1},
+        "event_index": {"type": "integer", "minimum": 0},
+        "observed_at": {"type": "string", "format": "date-time"},
+        "checkout_wait_ms": {"type": "number", "minimum": 0},
+        "observed_size": {"type": "integer", "minimum": 0},
+        "observed_busy": {"type": "integer", "minimum": 0},
+        "observed_waiting": {"type": "integer", "minimum": 0},
+        "source": {"$ref": "#/$defs/trace_source"}
       }
     },
     "overlap": {
