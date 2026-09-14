@@ -9,11 +9,14 @@ on:
       - "scripts/rails_repository_scan.rb"
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/otlp_concrete_receiver.py"
+      - "scripts/runtime_resolved_relationships.py"
       - "schema/concrete-system-facts.schema.json"
       - "schema/concrete-runtime-facts.schema.json"
+      - "schema/runtime-resolved-relationships.schema.json"
       - "lab/rails-connection-pool/**"
       - "RFC/0061-exact-resource-pool-runtime-binding.md"
       - "RFC/0062-rails-multi-database-runtime-proof.md"
+      - "RFC/0063-runtime-resolved-relationships.md"
       - ".github/workflows/rails-multi-database-runtime.yml"
   pull_request:
     paths:
@@ -22,11 +25,14 @@ on:
       - "scripts/rails_repository_scan.rb"
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/otlp_concrete_receiver.py"
+      - "scripts/runtime_resolved_relationships.py"
       - "schema/concrete-system-facts.schema.json"
       - "schema/concrete-runtime-facts.schema.json"
+      - "schema/runtime-resolved-relationships.schema.json"
       - "lab/rails-connection-pool/**"
       - "RFC/0061-exact-resource-pool-runtime-binding.md"
       - "RFC/0062-rails-multi-database-runtime-proof.md"
+      - "RFC/0063-runtime-resolved-relationships.md"
       - ".github/workflows/rails-multi-database-runtime.yml"
 
 permissions:
@@ -251,6 +257,110 @@ jobs:
           PY
 
           curl --fail --silent http://127.0.0.1:4318/status
+
+      - name: Project generic runtime-resolved resource relationships
+        run: |
+          python scripts/runtime_resolved_relationships.py \
+            --static-facts /tmp/rails-multi-static.json \
+            --runtime-facts /tmp/rails-multi-runtime.json \
+            --output /tmp/rails-multi-relationships.json \
+            --pretty
+
+          python - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+
+          import jsonschema
+
+          from scripts.runtime_resolved_relationships import project
+
+          schema = json.loads(Path('schema/runtime-resolved-relationships.schema.json').read_text())
+          static = json.loads(Path('/tmp/rails-multi-static.json').read_text())
+          runtime = json.loads(Path('/tmp/rails-multi-runtime.json').read_text())
+          relationships = json.loads(Path('/tmp/rails-multi-relationships.json').read_text())
+          jsonschema.Draft202012Validator(
+              schema,
+              format_checker=jsonschema.FormatChecker(),
+          ).validate(relationships)
+
+          response = json.loads(Path('/tmp/rails-multi-response.json').read_text())
+          exact = [
+              item for item in relationships['relationships']
+              if item['code_symbol'] == response['code_symbol']
+              and item['trace_id'] == response['trace_id']
+              and item['span_id'] == response['span_id']
+          ]
+          assert len(exact) == 2, exact
+          assert {item['object_resource'] for item in exact} == {
+              'pool:active_record.primary',
+              'pool:active_record.replica',
+          }
+          assert len({item['subject_execution'] for item in exact}) == 1
+          assert all(item['relation'] == 'used_resource' for item in exact)
+          assert all(item['interaction_kind'] == 'resource_pool_checkout' for item in exact)
+
+          static_code = 'code:PoolController#multi_pool()'
+          assert not any(
+              fact['subject'] == static_code
+              and fact['relation'] == 'depends_on'
+              and fact['object'] in {
+                  'pool:active_record.primary',
+                  'pool:active_record.replica',
+              }
+              for fact in static['facts']
+          )
+
+          tampered_trace = copy.deepcopy(runtime)
+          target = next(
+              item for item in tampered_trace['pool_interactions']
+              if item['code_symbol'] == static_code
+          )
+          target['trace_id'] = '0' * 32
+          try:
+              project(static, tampered_trace)
+          except ValueError as exc:
+              assert 'trace_id does not match its execution' in str(exc)
+          else:
+              raise AssertionError('trace mismatch must fail closed')
+
+          unknown_resource = copy.deepcopy(runtime)
+          target = next(
+              item for item in unknown_resource['pool_interactions']
+              if item['code_symbol'] == static_code
+          )
+          target['pool_id'] = 'pool:active_record.unknown'
+          try:
+              project(static, unknown_resource)
+          except ValueError as exc:
+              assert 'references unknown resource' in str(exc)
+          else:
+              raise AssertionError('unknown runtime resource must fail closed')
+
+          wrong_config = copy.deepcopy(runtime)
+          target = next(
+              item for item in wrong_config['pool_interactions']
+              if item['code_symbol'] == static_code
+          )
+          target['config_name'] = 'not-the-static-config'
+          try:
+              project(static, wrong_config)
+          except ValueError as exc:
+              assert 'config_name does not match static resource' in str(exc)
+          else:
+              raise AssertionError('provider-local identity mismatch must fail closed')
+
+          print(json.dumps({
+              'relationship_count': len(exact),
+              'resources': sorted(item['object_resource'] for item in exact),
+              'static_code_to_pool_edge': 'absent',
+              'tampered_trace': 'rejected',
+              'unknown_resource': 'rejected',
+              'wrong_config_name': 'rejected',
+          }, indent=2, sort_keys=True))
+          PY
+
+          cat /tmp/rails-multi-relationships.json
 
       - name: Stop services
         if: always()
