@@ -9,6 +9,9 @@ predictions:
   - observation: observation.database.lock_wait_event
     expected: present_during_blocked_operation
     strength: strong
+  - observation: observation.database.lock_error_event
+    expected: present_when_lock_acquisition_times_out_or_fails
+    strength: strong
   - observation: observation.http.request_latency
     expected: above_baseline_when_blocked_database_operation_is_on_critical_path
     strength: strong
@@ -16,8 +19,12 @@ falsifiers:
   - observation: observation.database.lock_wait_time
     condition: not_above_baseline
     effect: decrease
+  - observation: observation.database.lock_error_event
+    condition: absent_in_complete_diagnostic_log_window
+    effect: decrease
 tested_by:
   - probe.database.inspect_lock_waits
+  - probe.database.inspect_lock_error_events
   - probe.http.measure_request_latency
 related_to:
   - hypothesis.latency.database
