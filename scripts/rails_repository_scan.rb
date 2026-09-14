@@ -5,6 +5,13 @@ require "optparse"
 require "ripper"
 require "yaml"
 
+UNRESOLVED_ERB_PREFIX = "__CAUSCOPE_UNRESOLVED_ERB_"
+DATABASE_CANDIDATES = [
+  "config/database.yml",
+  "config/database.yml.sample",
+  "config/database.yml.example",
+].freeze
+
 options = {
   environment: "production",
   env: {},
@@ -14,6 +21,7 @@ OptionParser.new do |parser|
   parser.banner = "Usage: rails_repository_scan.rb --root PATH --system-id ID --revision VALUE --output PATH [options]"
   parser.on("--root PATH") { |value| options[:root] = value }
   parser.on("--environment NAME") { |value| options[:environment] = value }
+  parser.on("--database-config PATH") { |value| options[:database_config] = value }
   parser.on("--env-file PATH") { |value| options[:env_file] = value }
   parser.on("--env KEY=VALUE") do |value|
     key, separator, item = value.partition("=")
@@ -35,13 +43,36 @@ abort("Rails root does not exist: #{root}") unless Dir.exist?(root)
 
 gemfile_path = File.join(root, "Gemfile")
 application_path = File.join(root, "config", "application.rb")
-database_path = File.join(root, "config", "database.yml")
 abort("not a supported Rails repository: missing Gemfile") unless File.file?(gemfile_path)
 abort("not a supported Rails repository: missing config/application.rb") unless File.file?(application_path)
-abort("not a supported Rails repository: missing config/database.yml") unless File.file?(database_path)
 
 gemfile = File.read(gemfile_path)
 abort("Gemfile does not declare Rails") unless gemfile.match?(/\bgem\s+["']rails["']/)
+
+def relative_reference(root, path)
+  prefix = root.end_with?(File::SEPARATOR) ? root : root + File::SEPARATOR
+  path.start_with?(prefix) ? path.delete_prefix(prefix) : path
+end
+
+def choose_database_path(root, configured)
+  if configured && !configured.empty?
+    path = File.expand_path(configured, root)
+    abort("database config does not exist: #{path}") unless File.file?(path)
+    return path
+  end
+
+  candidate = DATABASE_CANDIDATES
+    .map { |relative| File.join(root, relative) }
+    .find { |path| File.file?(path) }
+  abort(
+    "not a supported Rails repository: missing database config; expected one of #{DATABASE_CANDIDATES.join(', ')}"
+  ) unless candidate
+  candidate
+end
+
+database_path = choose_database_path(root, options[:database_config])
+database_reference = relative_reference(root, database_path)
+database_is_sample = File.basename(database_path) != "database.yml"
 
 environment_values = {}
 if options[:env_file]
@@ -63,7 +94,7 @@ def yaml_scalar(value)
   value.to_s.to_json
 end
 
-def bounded_render_database(source, environment_values)
+def render_bounded_env_expressions(source, environment_values)
   rendered = source.dup
 
   rendered.gsub!(/<%=\s*ENV\.fetch\(\s*["']([A-Z0-9_]+)["']\s*,\s*(["'])(.*?)\2\s*\)\s*%>/m) do
@@ -74,51 +105,133 @@ def bounded_render_database(source, environment_values)
 
   rendered.gsub!(/<%=\s*ENV\.fetch\(\s*["']([A-Z0-9_]+)["']\s*\)\s*%>/m) do
     key = Regexp.last_match(1)
-    abort("database.yml requires unresolved environment variable #{key}") unless environment_values.key?(key)
-    yaml_scalar(environment_values.fetch(key))
+    environment_values.key?(key) ? yaml_scalar(environment_values.fetch(key)) : "#{UNRESOLVED_ERB_PREFIX}ENV_#{key}".to_json
   end
 
   rendered.gsub!(/<%=\s*ENV\[\s*["']([A-Z0-9_]+)["']\s*\]\s*%>/m) do
     key = Regexp.last_match(1)
-    yaml_scalar(environment_values[key])
+    environment_values.key?(key) ? yaml_scalar(environment_values.fetch(key)) : "#{UNRESOLVED_ERB_PREFIX}ENV_#{key}".to_json
   end
 
-  abort("database.yml contains unsupported ERB; portable scan never executes repository ERB") if rendered.include?("<%")
   rendered
 end
 
-rendered_database = bounded_render_database(File.read(database_path), environment_values)
-database = YAML.safe_load(rendered_database, aliases: true)
-abort("config/database.yml must contain an object") unless database.is_a?(Hash)
-configuration = database[options.fetch(:environment)]
-abort("database.yml does not define environment #{options.fetch(:environment)}") unless configuration.is_a?(Hash)
+def mask_unresolved_value_erb(source)
+  unresolved_lines = []
+  rendered_lines = source.lines.each_with_index.map do |line, index|
+    line = line.gsub(/<%#.*?%>/, "")
+    next line unless line.include?("<%")
 
-if !configuration.key?("adapter") && configuration["primary"].is_a?(Hash)
-  configuration = configuration.fetch("primary")
-end
+    unless line.scan(/<%.*?%>/).all? { |tag| tag.start_with?("<%=") } && !line.match?(/<%(?![=#])/)
+      abort(
+        "database config contains structural ERB at line #{index + 1}; portable scan never executes repository ERB"
+      )
+    end
 
-adapter = configuration["adapter"]
-abort("portable Rails D3.1 provider currently requires PostgreSQL") unless adapter == "postgresql"
+    match = line.match(/^(\s*[^#\n][^:]*:\s*)(.*)$/)
+    unless match && match[2].include?("<%=")
+      abort(
+        "database config contains unsupported ERB structure at line #{index + 1}; portable scan never executes repository ERB"
+      )
+    end
 
-pool_capacity = nil
-if configuration.key?("pool") && !configuration["pool"].nil?
-  begin
-    pool_capacity = Integer(configuration["pool"])
-  rescue ArgumentError, TypeError
-    abort("database pool capacity must resolve to an integer")
+    placeholder = "#{UNRESOLVED_ERB_PREFIX}LINE_#{index + 1}"
+    unresolved_lines << index + 1
+    newline = line.end_with?("\n") ? "\n" : ""
+    "#{match[1]}#{placeholder.to_json}#{newline}"
   end
-  abort("database pool capacity must be positive") unless pool_capacity.positive?
+  [rendered_lines.join, unresolved_lines]
 end
 
-checkout_timeout = nil
-if configuration.key?("checkout_timeout") && !configuration["checkout_timeout"].nil?
-  begin
-    checkout_timeout = Float(configuration["checkout_timeout"])
-  rescue ArgumentError, TypeError
-    abort("checkout timeout must resolve to a number")
-  end
-  abort("checkout timeout must be positive") unless checkout_timeout.positive?
+def unresolved_value?(value)
+  value.is_a?(String) && value.include?(UNRESOLVED_ERB_PREFIX)
 end
+
+def database_configurations(environment_config)
+  if environment_config.key?("adapter")
+    return [["primary", environment_config]]
+  end
+
+  configs = environment_config.each_with_object([]) do |(name, config), output|
+    next unless config.is_a?(Hash)
+    next if name.to_s == "variables"
+
+    database_keys = %w[adapter database pool checkout_timeout replica migrations_paths]
+    next unless database_keys.any? { |key| config.key?(key) }
+
+    output << [name.to_s, config]
+  end
+  abort("database environment does not contain any recognizable ActiveRecord database configurations") if configs.empty?
+  configs
+end
+
+def local_slug(value)
+  slug = value.to_s.downcase.gsub(/[^a-z0-9_.-]+/, "-").gsub(/^-+|-+$/, "")
+  slug.empty? ? "database" : slug
+end
+
+def fact_slug(value)
+  slug = value.to_s.downcase.gsub(/[^a-z0-9_]+/, "_").gsub(/^_+|_+$/, "")
+  slug.empty? ? "database" : slug
+end
+
+def dbms_for_adapter(adapter)
+  case adapter
+  when "postgresql"
+    "postgresql"
+  when "sqlite3"
+    "sqlite"
+  when "mysql2", "trilogy"
+    "mysql"
+  else
+    adapter
+  end
+end
+
+def label_for_adapter(adapter)
+  case adapter
+  when "postgresql"
+    "PostgreSQL"
+  when "sqlite3"
+    "SQLite"
+  when "mysql2"
+    "MySQL"
+  when "trilogy"
+    "MySQL (Trilogy)"
+  else
+    adapter
+  end
+end
+
+def positive_integer(value)
+  return nil if value.nil? || unresolved_value?(value)
+
+  integer = Integer(value)
+  integer.positive? ? integer : nil
+rescue ArgumentError, TypeError
+  nil
+end
+
+def positive_float(value)
+  return nil if value.nil? || unresolved_value?(value)
+
+  number = Float(value)
+  number.positive? ? number : nil
+rescue ArgumentError, TypeError
+  nil
+end
+
+rendered_database = render_bounded_env_expressions(File.read(database_path), environment_values)
+rendered_database, unresolved_erb_lines = mask_unresolved_value_erb(rendered_database)
+begin
+  database = YAML.safe_load(rendered_database, aliases: true)
+rescue Psych::Exception => error
+  abort("#{database_reference} could not be parsed safely: #{error.message}")
+end
+abort("#{database_reference} must contain an object") unless database.is_a?(Hash)
+environment_config = database[options.fetch(:environment)]
+abort("#{database_reference} does not define environment #{options.fetch(:environment)}") unless environment_config.is_a?(Hash)
+configurations = database_configurations(environment_config)
 
 def const_name(node)
   return nil unless node.is_a?(Array)
@@ -202,8 +315,6 @@ end
 slug = options.fetch(:system_id).downcase.gsub(/[^a-z0-9_.-]+/, "-").gsub(/^-+|-+$/, "")
 slug = "rails-app" if slug.empty?
 service_id = "service:#{slug}"
-pool_id = "pool:active_record.primary"
-dependency_id = "dependency:postgresql"
 
 revision = {
   "type" => "git",
@@ -218,14 +329,6 @@ source_provenance = lambda do |reference|
   { "source_type" => "source", "name" => "ruby_ripper", "reference" => reference }
 end
 
-pool_attributes = {
-  "technology" => "active_record",
-  "adapter" => adapter,
-  "environment" => options.fetch(:environment),
-}
-pool_attributes["configured_capacity"] = pool_capacity if pool_capacity
-pool_attributes["checkout_timeout_seconds"] = checkout_timeout if checkout_timeout
-
 entities = [
   {
     "id" => service_id,
@@ -235,45 +338,129 @@ entities = [
     "provenance" => config_provenance.call("config/application.rb"),
     "attributes" => { "framework" => "rails", "environment" => options.fetch(:environment) },
   },
-  {
+]
+facts = []
+limitations = [
+  "Portable scan never executes repository ERB; unresolved value expressions remain unknown instead of being evaluated.",
+  "Code-to-pool facts are emitted only for methods with explicit ActiveRecord connection-pool API evidence.",
+  "Implicit ActiveRecord query paths remain unknown until semantic enrichment or runtime evidence proves the relationship.",
+]
+limitations << "Using #{database_reference} because config/database.yml is absent or an alternate database config was selected; this source may describe defaults rather than the deployed configuration." if database_is_sample
+limitations << "#{database_reference} contains unresolved value ERB at line(s) #{unresolved_erb_lines.join(', ')}; only fields unaffected by those expressions are emitted as concrete facts." unless unresolved_erb_lines.empty?
+
+pool_records = []
+configurations.each do |config_name, configuration|
+  config_local_slug = local_slug(config_name)
+  config_fact_slug = fact_slug(config_name)
+  pool_id = "pool:active_record.#{config_local_slug}"
+  reference = "#{database_reference}##{options.fetch(:environment)}.#{config_name}"
+
+  adapter_value = configuration["adapter"]
+  adapter = unresolved_value?(adapter_value) || adapter_value.nil? ? nil : adapter_value.to_s
+  pool_capacity = positive_integer(configuration["pool"])
+  checkout_timeout = positive_float(configuration["checkout_timeout"])
+
+  pool_attributes = {
+    "technology" => "active_record",
+    "environment" => options.fetch(:environment),
+    "config_name" => config_name,
+  }
+  pool_attributes["adapter"] = adapter if adapter
+  pool_attributes["replica"] = configuration["replica"] if [true, false].include?(configuration["replica"])
+  pool_attributes["configured_capacity"] = pool_capacity if pool_capacity
+  pool_attributes["checkout_timeout_seconds"] = checkout_timeout if checkout_timeout
+  pool_attributes["config_source"] = database_reference
+
+  entities << {
     "id" => pool_id,
     "kind" => "resource_pool",
-    "label" => "ActiveRecord primary database connection pool",
+    "label" => "ActiveRecord #{config_name} database connection pool",
     "certainty" => "direct",
-    "provenance" => config_provenance.call("config/database.yml"),
+    "provenance" => config_provenance.call(reference),
     "attributes" => pool_attributes,
-  },
-  {
-    "id" => dependency_id,
-    "kind" => "external_dependency",
-    "label" => "PostgreSQL",
-    "certainty" => "direct",
-    "provenance" => config_provenance.call("config/database.yml"),
-    "attributes" => { "dbms" => "postgresql" },
-  },
-]
+  }
 
-facts = [
-  {
-    "id" => "fact.rails.service.depends_on_primary_pool",
+  service_fact_id = if configurations.length == 1 && config_name == "primary"
+    "fact.rails.service.depends_on_primary_pool"
+  else
+    "fact.rails.service.depends_on_pool.#{config_fact_slug}"
+  end
+  facts << {
+    "id" => service_fact_id,
     "subject" => service_id,
     "relation" => "depends_on",
     "object" => pool_id,
     "certainty" => "direct",
-    "provenance" => config_provenance.call("config/database.yml"),
-  },
-  {
-    "id" => "fact.rails.primary_pool.depends_on_postgresql",
-    "subject" => pool_id,
-    "relation" => "depends_on",
-    "object" => dependency_id,
-    "certainty" => "direct",
-    "provenance" => config_provenance.call("config/database.yml"),
-  },
-]
+    "provenance" => config_provenance.call(reference),
+  }
 
+  dependency_id = nil
+  if adapter
+    dbms = dbms_for_adapter(adapter)
+    dependency_id = if configurations.length == 1 && config_name == "primary"
+      "dependency:#{adapter}"
+    else
+      "dependency:database.#{config_local_slug}"
+    end
+    dependency_attributes = {
+      "adapter" => adapter,
+      "dbms" => dbms,
+      "environment" => options.fetch(:environment),
+      "config_name" => config_name,
+    }
+    dependency_attributes["replica"] = configuration["replica"] if [true, false].include?(configuration["replica"])
+
+    entities << {
+      "id" => dependency_id,
+      "kind" => "external_dependency",
+      "label" => configurations.length == 1 ? label_for_adapter(adapter) : "#{label_for_adapter(adapter)} (#{config_name})",
+      "certainty" => "direct",
+      "provenance" => config_provenance.call(reference),
+      "attributes" => dependency_attributes,
+    }
+
+    dependency_fact_id = if configurations.length == 1 && config_name == "primary" && adapter == "postgresql"
+      "fact.rails.primary_pool.depends_on_postgresql"
+    else
+      "fact.rails.pool.#{config_fact_slug}.depends_on_database"
+    end
+    facts << {
+      "id" => dependency_fact_id,
+      "subject" => pool_id,
+      "relation" => "depends_on",
+      "object" => dependency_id,
+      "certainty" => "direct",
+      "provenance" => config_provenance.call(reference),
+    }
+  else
+    limitations << "Database adapter for #{options.fetch(:environment)}.#{config_name} is unresolved; no concrete database dependency is emitted for #{pool_id}."
+  end
+
+  if configuration.key?("pool")
+    if unresolved_value?(configuration["pool"])
+      limitations << "Configured pool capacity for #{options.fetch(:environment)}.#{config_name} is unresolved; resolving it would require runtime configuration or executing repository Ruby, so capacity remains unknown."
+    elsif pool_capacity.nil?
+      limitations << "Configured pool capacity for #{options.fetch(:environment)}.#{config_name} is present but not a positive integer; capacity remains unknown."
+    end
+  else
+    limitations << "Configured pool capacity for #{options.fetch(:environment)}.#{config_name} is unspecified; capacity remains unknown."
+  end
+
+  pool_records << { name: config_name, id: pool_id, dependency_id: dependency_id }
+end
+
+if configurations.length > 1
+  limitations << "Multiple ActiveRecord database configurations were discovered; generic connection_pool/with_connection calls are not assigned to a specific pool without explicit role or config identity."
+end
+
+seen_code_ids = {}
 explicit_methods.each_with_index do |entry, index|
   code_id = "code:#{entry.fetch(:owner)}##{entry.fetch(:method)}()"
+  next if seen_code_ids.key?(code_id)
+
+  seen_code_ids[code_id] = true
+  code_attributes = { "pool_api_evidence" => entry.fetch(:evidence).join(",") }
+  code_attributes["pool_assignment"] = "unresolved_multiple_configs" if configurations.length > 1
   entities << {
     "id" => code_id,
     "kind" => "code_symbol",
@@ -281,17 +468,19 @@ explicit_methods.each_with_index do |entry, index|
     "certainty" => "direct",
     "provenance" => source_provenance.call(entry.fetch(:path)),
     "source_location" => { "path" => entry.fetch(:path), "start_line" => entry.fetch(:line) },
-    "attributes" => { "pool_api_evidence" => entry.fetch(:evidence).join(",") },
+    "attributes" => code_attributes,
   }
-  facts << {
-    "id" => "fact.rails.explicit_pool_path.#{index + 1}",
-    "subject" => code_id,
-    "relation" => "depends_on",
-    "object" => pool_id,
-    "certainty" => "direct",
-    "provenance" => source_provenance.call(entry.fetch(:path)),
-    "note" => "Explicit ActiveRecord connection-pool API observed in this method.",
-  }
+  if configurations.length == 1
+    facts << {
+      "id" => "fact.rails.explicit_pool_path.#{index + 1}",
+      "subject" => code_id,
+      "relation" => "depends_on",
+      "object" => pool_records.first.fetch(:id),
+      "certainty" => "direct",
+      "provenance" => source_provenance.call(entry.fetch(:path)),
+      "note" => "Explicit ActiveRecord connection-pool API observed in this method and exactly one database pool is configured for the selected environment.",
+    }
+  end
   facts << {
     "id" => "fact.rails.service.contains_explicit_pool_path.#{index + 1}",
     "subject" => service_id,
@@ -302,12 +491,6 @@ explicit_methods.each_with_index do |entry, index|
   }
 end
 
-limitations = [
-  "Portable scan never executes repository ERB; only bounded ENV access forms in database.yml are rendered.",
-  "Code-to-pool facts are emitted only for methods with explicit ActiveRecord connection-pool API evidence.",
-  "Implicit ActiveRecord query paths remain unknown until semantic enrichment or runtime evidence proves the relationship.",
-]
-limitations << "Configured pool capacity is unresolved; D3.1 capacity matching cannot advance until capacity evidence is supplied." unless pool_capacity
 limitations << "No explicit application code path using ActiveRecord connection-pool APIs was found." if explicit_methods.empty?
 
 document = {
@@ -317,7 +500,7 @@ document = {
   "revision" => revision,
   "entities" => entities,
   "facts" => facts,
-  "limitations" => limitations,
+  "limitations" => limitations.uniq,
 }
 
 File.write(options.fetch(:output), JSON.pretty_generate(document) + "\n")
