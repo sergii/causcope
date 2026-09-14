@@ -18,6 +18,7 @@ on:
       - "scripts/live_diagnosis.py"
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
+      - "examples/telemetry/opentelemetry/postgresql-query-trace.json"
       - "schema/pgbot-adapter.schema.json"
       - "schema/diagnostic-provider-capabilities.schema.json"
       - "schema/instrument-routing-decision.schema.json"
@@ -42,6 +43,7 @@ on:
       - "scripts/live_diagnosis.py"
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
+      - "examples/telemetry/opentelemetry/postgresql-query-trace.json"
       - "schema/pgbot-adapter.schema.json"
       - "schema/diagnostic-provider-capabilities.schema.json"
       - "schema/instrument-routing-decision.schema.json"
@@ -72,6 +74,45 @@ jobs:
       - name: Install integration dependencies
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema 'psycopg[binary]'
 
+      - name: Build lab connection strings from the checked-in fixture
+        id: lab_connection
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          from urllib.parse import quote
+
+          sql = Path("lab/pgbot-live/init.sql").read_text(encoding="utf-8")
+
+          def role_password(role: str) -> str:
+              match = re.search(
+                  rf"CREATE ROLE {re.escape(role)} LOGIN PASSWORD '([^']+)';",
+                  sql,
+              )
+              if match is None:
+                  raise SystemExit(f"password fixture missing for {role}")
+              return match.group(1)
+
+          pgbot_password = role_password("pgbot_ro")
+          app_password = role_password("causcope_app")
+          print(f"::add-mask::{pgbot_password}")
+          print(f"::add-mask::{app_password}")
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(
+                  "pgbot_dsn=postgres://pgbot_ro:"
+                  + quote(pgbot_password, safe="")
+                  + "@127.0.0.1:55432/causcope?sslmode=disable\n"
+              )
+              handle.write(
+                  "app_dsn=postgres://causcope_app:"
+                  + quote(app_password, safe="")
+                  + "@127.0.0.1:55432/causcope?sslmode=disable\n"
+              )
+          PY
+
       - name: Start PostgreSQL lock-contention lab
         run: |
           docker compose -f lab/pgbot-live/compose.yml up -d db contention
@@ -96,7 +137,7 @@ jobs:
       - name: Run real pgbot against live PostgreSQL
         uses: pgrundev/pgbot@e3834c11d75e81eeeb4140b5e06d396071fa166a
         with:
-          dsn: "postgres://pgbot_ro:pgbot_ro@127.0.0.1:55432/causcope?sslmode=disable"
+          dsn: ${{ steps.lab_connection.outputs.pgbot_dsn }}
           fail-on: none
           format: json
           version: v0.8.1
@@ -157,7 +198,7 @@ jobs:
           python scripts/instrument_router.py \
             --probe probe.database.inspect_lock_waits \
             --execution-requirement direct \
-            --scope-boundary boundary.application.external_dependency \
+            --scope-boundary boundary.application.database \
             --scope-attribute service=checkout-api \
             --scope-attribute dependency=postgresql \
             --pgbot-adapter examples/adapters/pgbot/postgresql.yaml \
@@ -209,9 +250,11 @@ jobs:
           test "$count" -eq 0
 
       - name: Generate trace from a real PostgreSQL query
+        env:
+          APP_DSN: ${{ steps.lab_connection.outputs.app_dsn }}
         run: |
           python scripts/live_postgresql_trace.py \
-            --dsn "postgres://causcope_app:causcope_app@127.0.0.1:55432/causcope?sslmode=disable" \
+            --dsn "$APP_DSN" \
             --sleep-ms 180 \
             --output live-postgresql-trace.json
 
