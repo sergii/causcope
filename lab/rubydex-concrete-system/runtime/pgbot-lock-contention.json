@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.2.0",
+  "collected_at": "2026-09-14T12:01:03.400Z",
+  "fingerprint": "d2-2-xray-lock-contention",
+  "findings": [
+    {
+      "id": "wait_lock_contention",
+      "object": "transactionid",
+      "severity": "warn",
+      "title": "transaction lock contention is active",
+      "detail": "A transaction blocker is present while the concrete D2.2 paths overlap.",
+      "evidence": [
+        "Lock:transactionid is present in the sampled active-session wait profile"
+      ],
+      "impact": {
+        "score": 80,
+        "dimension": "latency",
+        "estimate": "material lock-wait contribution",
+        "basis": "sampled active-session wait profile"
+      },
+      "confidence": 0.94,
+      "caveats": [
+        "Lock contention does not by itself prove a deadlock or identify the concrete application transactions that participate in the wait."
+      ]
+    }
+  ]
+}
