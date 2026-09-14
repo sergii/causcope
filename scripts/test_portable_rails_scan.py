@@ -148,7 +148,7 @@ def main() -> int:
         value_document = scan_app(value_erb, value_output, "revision-value-erb")
         value_entities = {item["id"]: item for item in value_document["entities"]}
         assert "configured_capacity" not in value_entities["pool:active_record.primary"]["attributes"]
-        assert any("non-bounded ERB" in item for item in value_document["limitations"])
+        assert any("capacity remains unknown" in item for item in value_document["limitations"])
         assert not (ROOT / "SHOULD_NOT_EXIST").exists()
         assert not (value_erb / "SHOULD_NOT_EXIST").exists()
 
