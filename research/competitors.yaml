@@ -1,0 +1,924 @@
+version: 0.1
+reviewed_at: 2026-09-14
+purpose: >-
+  Machine-readable registry of direct competitors, adjacent products, evidence providers,
+  and historical references relevant to CauScope. This file is intended to become the
+  source for future website comparison tables and should be extended as new products
+  are discovered.
+
+value_legend:
+  yes: Public product material clearly claims or demonstrates the capability.
+  partial: The capability exists, but only for part of the product surface or with a narrower meaning.
+  no: Public product material clearly indicates the product is not primarily offering this capability.
+  unknown: Not established from the sources reviewed.
+
+comparison_axes:
+  - telemetry_context
+  - code_context
+  - live_topology
+  - failure_ontology
+  - explicit_causal_graph
+  - change_context
+  - hypothesis_testing
+  - falsification_or_verification
+  - blast_radius
+  - proactive_risk
+  - live_runtime_probes
+  - remediation
+  - incident_workflow
+  - self_hosting_or_byoc
+  - open_source
+
+entries:
+  - id: causely
+    name: Causely
+    class: direct
+    homepage: https://www.causely.ai/
+    positioning: Causal intelligence layer and AI SRE foundation for production systems.
+    why_relevant: >-
+      Closest conceptual benchmark found so far. Causely combines an ontology of entity types,
+      failure modes and constraints with live topology and a causality graph, then performs causal
+      inference for root cause, blast radius and proactive reliability.
+    causcope_angle: >-
+      CauScope should differentiate through executable failure knowledge, evidence-backed
+      falsification, application/code semantics, framework-specific vertical slices, and an open
+      adapter model rather than trying to become a general cloud observability platform.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: yes
+      failure_ontology: yes
+      explicit_causal_graph: yes
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: unknown
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: partial
+      open_source: no
+    sources:
+      - https://www.causely.ai/product
+      - https://install.causely.ai/platform/
+      - https://www.causely.ai/product/ai-sre
+
+  - id: traversal
+    name: Traversal
+    class: direct
+    homepage: https://www.traversal.com/
+    positioning: AI SRE built on a continuously updated Production World Model.
+    why_relevant: >-
+      Strong benchmark for system-world modeling. Traversal combines telemetry, code, dependency
+      relationships, behavioral baselines, change context and operational knowledge into a model
+      used by its causal search engine.
+    causcope_angle: >-
+      Compare CauScope's explicit failure semantics and experiments against Traversal's broad
+      production-world representation and large-scale causal search.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: yes
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: yes
+      open_source: no
+    sources:
+      - https://www.traversal.com/
+      - https://www.traversal.com/blog/introducing-production-world-model-ai-readable-model-your-entire-production-environment
+
+  - id: resolve-ai
+    name: Resolve AI
+    class: direct
+    homepage: https://resolve.ai/product/ai-sre
+    positioning: Always-on AI SRE for alert triage, investigation, deployment monitoring and production context.
+    why_relevant: >-
+      Uses parallel hypotheses, production evidence and a verifier, provides blast radius, names code
+      paths and can detect regressions before an alert becomes an incident.
+    causcope_angle: >-
+      Direct benchmark for the incident reasoning loop. CauScope should make known failure mechanics,
+      predictions and falsifiers first-class rather than relying mainly on agentic investigation.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: partial
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: yes
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: unknown
+      open_source: no
+    sources:
+      - https://resolve.ai/product/ai-sre
+
+  - id: nofire
+    name: NOFire AI
+    class: direct
+    homepage: https://www.nofire.ai/
+    positioning: Causal AI for production operations and full-context embedded SRE.
+    why_relevant: >-
+      Explicitly treats causal relationships, time-versioned dependency graphs, changes and failure
+      propagation as first-class production concepts.
+    causcope_angle: >-
+      Useful benchmark for change-to-impact causality. CauScope can differentiate through a public,
+      testable failure ontology and framework-level semantics.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: yes
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: unknown
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: unknown
+      open_source: no
+    sources:
+      - https://www.nofire.ai/sre/causal-ai
+      - https://www.nofire.ai/resources/ai-sre-adoption-guide
+
+  - id: corelayer
+    name: Corelayer
+    class: direct
+    homepage: https://www.corelayer.com/
+    positioning: AI-native production support and AI SRE for complex and regulated environments.
+    why_relevant: >-
+      Builds a production context graph spanning code, database, deployments and observability,
+      learns failure patterns, queries underlying data and supports proactive preflight workflows.
+    causcope_angle: >-
+      Particularly relevant to CauScope's data-integrity and duplicate/missing-effect failure modes.
+      Benchmark its learned failure patterns against explicit, reusable failure knowledge.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: partial
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: yes
+      open_source: no
+    sources:
+      - https://www.corelayer.com/
+      - https://www.corelayer.com/guides/what-is-ai-sre
+      - https://www.ycombinator.com/companies/corelayer
+
+  - id: deeptrace
+    name: Deeptrace
+    class: direct
+    homepage: https://deeptrace.com/
+    positioning: AI agents for on-call, from alert to root cause and remediation PR.
+    why_relevant: >-
+      Builds an internal mapping between logs, traces, metrics and the codebase to understand how
+      production behaves, then uses investigation context to propose fixes.
+    causcope_angle: >-
+      Benchmark for code-to-runtime mapping and alert-to-PR workflow. CauScope's stronger angle is
+      explicit causal/failure semantics and reusable evidence models.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: unknown
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: unknown
+      open_source: no
+    sources:
+      - https://deeptrace.com/blog/introducing-deeptrace
+      - https://www.ycombinator.com/companies/deeptrace
+
+  - id: incidentfox
+    name: IncidentFox
+    class: direct
+    homepage: https://www.incidentfox.ai/
+    positioning: AI SRE agent for production investigation, coordination and fixes.
+    why_relevant: >-
+      Learns the codebase and incident history, auto-builds integrations, queries real systems and
+      keeps investigation in Slack. Open-core/self-hosting is strategically relevant.
+    causcope_angle: >-
+      Compare its integration-first context acquisition with CauScope's capability/adapter abstraction
+      and deterministic semantic knowledge.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: unknown
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: yes
+      open_source: partial
+    sources:
+      - https://www.incidentfox.ai/
+      - https://docs.incidentfox.ai/
+      - https://www.ycombinator.com/companies/brownie
+
+  - id: onepatch
+    name: OnePatch
+    class: direct
+    homepage: https://www.ycombinator.com/companies/onepatch
+    positioning: Forward-deployed AI SRE that instruments services and drives incidents through resolution.
+    why_relevant: >-
+      Explicitly positions as going beyond Datadog-style detection to continue until the fix is shipped.
+      It also observes how services behave in production.
+    causcope_angle: >-
+      Track closely as an emerging competitor, especially its instrumentation and prevention model.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: unknown
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: unknown
+      falsification_or_verification: unknown
+      blast_radius: unknown
+      proactive_risk: yes
+      live_runtime_probes: partial
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: unknown
+      open_source: no
+    sources:
+      - https://www.ycombinator.com/companies/onepatch
+
+  - id: rootly-ai-sre
+    name: Rootly AI SRE
+    class: direct
+    homepage: https://rootly.com/ai-sre
+    positioning: AI SRE integrated with on-call, incident response and service catalog.
+    why_relevant: >-
+      Correlates telemetry, deploys, commits, feature flags and past incidents, runs parallel
+      hypothesis checks and surfaces probable root causes with confidence and visible reasoning.
+    causcope_angle: >-
+      Strong incident-workflow competitor. CauScope should stay composable and reasoning-centric
+      rather than rebuilding the entire incident management surface.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: unknown
+      open_source: no
+    sources:
+      - https://rootly.com/ai-sre
+
+  - id: incident-io-investigations
+    name: incident.io Investigations
+    class: direct
+    homepage: https://incident.io/investigations
+    positioning: Agentic root cause analysis inside an incident management platform.
+    why_relevant: >-
+      Uses a production harness that gathers real evidence, continuously reassesses findings and
+      pressure-tests hypotheses with an adversarial agent before presenting them.
+    causcope_angle: >-
+      Strong benchmark for evidence discipline and hypothesis pressure-testing. CauScope can make
+      falsifiers deterministic and reusable in the semantic layer.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: yes
+      blast_radius: yes
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: unknown
+      open_source: no
+    sources:
+      - https://incident.io/investigations
+      - https://incident.io/blog/introducing-ai-sre
+
+  - id: pagerduty-sre-agent
+    name: PagerDuty SRE Agent
+    class: direct
+    homepage: https://www.pagerduty.com/
+    positioning: Virtual responder for deep incident investigation and approved remediation.
+    why_relevant: >-
+      Pursues multiple hypotheses across logs, metrics, runbooks and deployments, learns from past
+      incidents, supports human steering and can run approved automations.
+    causcope_angle: >-
+      PagerDuty owns paging and response workflow. CauScope's opportunity is to be the specialized
+      causal/failure reasoning layer that can plug into systems like PagerDuty.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: partial
+      failure_ontology: partial
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: yes
+      self_hosting_or_byoc: no
+      open_source: no
+    sources:
+      - https://www.pagerduty.com/eng/inside-pagerdutys-sre-agent-how-we-built-deep-incident-investigation/
+      - https://support.pagerduty.com/main/docs/connectors-tools-and-skills
+
+  - id: datadog-bits-ai-sre
+    name: Datadog Bits AI SRE
+    class: direct
+    homepage: https://www.datadoghq.com/
+    positioning: AI SRE agent grounded in Datadog telemetry, architecture and organizational context.
+    why_relevant: >-
+      Automatically investigates incidents and monitor alerts and produces audit-ready root cause
+      analyses using the broad Datadog observability corpus.
+    causcope_angle: >-
+      Datadog has superior native telemetry breadth. CauScope should win on explicit failure mechanics,
+      open evidence adapters, cross-vendor reasoning and pre-incident structural risk discovery.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: partial
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: no
+      open_source: no
+    sources:
+      - https://www.datadoghq.com/blog/building-bits-ai-sre/
+      - https://www.datadoghq.com/about/latest-news/press-releases/datadog-launches-bits-ai-sre-agent-to-resolve-incidents-faster/
+
+  - id: sentry-seer
+    name: Sentry Seer
+    class: overlapping
+    homepage: https://sentry.io/
+    positioning: AI debugger using Sentry issue, trace, log, profile, commit and source-code context.
+    why_relevant: >-
+      Strong benchmark for application-level code-to-production debugging and automatic fix PRs.
+    causcope_angle: >-
+      CauScope should cover broader failure mechanics and infrastructure/database/network causality,
+      including latent risk before an error issue exists.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: no
+      open_source: partial
+    sources:
+      - https://sentry.io/changelog/seer-sentrys-ai-debugger-is-generally-available/
+
+  - id: coroot
+    name: Coroot
+    class: overlapping
+    homepage: https://coroot.ai/
+    positioning: eBPF-based observability and AI-powered root cause analysis.
+    why_relevant: >-
+      Automatically derives production telemetry and service relationships without application code
+      changes, making it a useful benchmark for zero-instrumentation runtime evidence.
+    causcope_angle: >-
+      More valuable as both competitor and potential evidence source/reference architecture for the
+      network/runtime topology side of CauScope.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: partial
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: partial
+      live_runtime_probes: partial
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: yes
+      open_source: yes
+    sources:
+      - https://coroot.ai/
+
+  - id: metoro
+    name: Metoro
+    class: direct
+    homepage: https://metoro.io/
+    positioning: Kubernetes-native AI SRE with a built-in eBPF telemetry layer.
+    why_relevant: >-
+      Collects logs, metrics, traces, profiling, Kubernetes state and deployment context, then uses
+      AI agents for issue detection, alert investigation, deployment verification, RCA and fix PRs.
+    causcope_angle: >-
+      Important benchmark for complete runtime evidence acquisition. CauScope can remain backend-agnostic
+      and consume equivalent evidence instead of owning a Kubernetes-only observability stack.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: partial
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: partial
+      open_source: no
+    sources:
+      - https://metoro.io/
+      - https://metoro.io/ai-sre-agent
+      - https://metoro.io/blog/how-metoro-uses-ebpf
+
+  - id: dynatrace-davis-ai
+    name: Dynatrace Davis AI
+    class: overlapping
+    homepage: https://www.dynatrace.com/
+    positioning: Causal-AI root cause analysis over Dynatrace topology and observability data.
+    why_relevant: >-
+      Long-running causation-oriented benchmark that correlates topology, transactions, code-level
+      information and events to identify root cause and impacted entities.
+    causcope_angle: >-
+      Demonstrates that causation and topology are established observability concepts. CauScope needs
+      a sharper failure-knowledge and agent-facing differentiation.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: yes
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: partial
+      open_source: no
+    sources:
+      - https://docs.dynatrace.com/docs/dynatrace-intelligence/root-cause-analysis
+
+  - id: new-relic-irca
+    name: New Relic Intelligent Root Cause Analysis
+    class: overlapping
+    homepage: https://newrelic.com/
+    positioning: Causal-inference-based automated root cause analysis inside New Relic observability.
+    why_relevant: >-
+      Another incumbent moving from correlation toward explicit causal inference for RCA.
+    causcope_angle: >-
+      Benchmark for incumbent causal observability; differentiate on open semantic failure knowledge,
+      evidence portability and pre-incident reasoning.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: yes
+      failure_ontology: unknown
+      explicit_causal_graph: partial
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: unknown
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: partial
+      self_hosting_or_byoc: no
+      open_source: no
+    sources:
+      - https://newrelic.com/blog/ai/intelligent-rca-accurately-pinpoints-root-cause-in-seconds
+
+  - id: grafana-assistant-investigations
+    name: Grafana Assistant Investigations
+    class: overlapping
+    homepage: https://grafana.com/
+    positioning: AI-powered multi-step incident investigation over Grafana observability context.
+    why_relevant: >-
+      Relevant as another observability incumbent using an assistant to independently investigate
+      incidents from existing telemetry.
+    causcope_angle: >-
+      CauScope should be consumable from Grafana-like environments rather than competing on dashboards.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: yes
+      hypothesis_testing: yes
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: unknown
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: yes
+      self_hosting_or_byoc: partial
+      open_source: partial
+    sources:
+      - https://grafana.com/blog/a-tale-of-two-incident-responses-how-our-ai-assist-helped-us-find-the-cause-3-5x-faster/
+
+  - id: splunk-ai-assistant-observability
+    name: Splunk AI Assistant in Observability Cloud
+    class: overlapping
+    homepage: https://www.splunk.com/
+    positioning: Natural-language investigation across APM, infrastructure, logs, alerts and incidents.
+    why_relevant: >-
+      Useful incumbent benchmark for cross-signal investigation and root cause workflows over a large
+      observability backend.
+    causcope_angle: >-
+      CauScope should avoid becoming a generic natural-language query layer over telemetry.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: partial
+      hypothesis_testing: partial
+      falsification_or_verification: unknown
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: partial
+      self_hosting_or_byoc: partial
+      open_source: no
+    sources:
+      - https://help.splunk.com/en/splunk-observability-cloud/splunk-ai-assistant/ai-assistant-in-observability-cloud
+
+  - id: elastic-ai-observability
+    name: Elastic AI for Observability
+    class: overlapping
+    homepage: https://www.elastic.co/observability/aiops
+    positioning: AI-assisted investigation, anomaly analysis and operational intelligence over Elastic data.
+    why_relevant: >-
+      Large observability incumbent with RAG-grounded operational assistance, error explanation,
+      anomaly analysis and root cause workflows.
+    causcope_angle: >-
+      Relevant mostly as an integration/data source and incumbent benchmark, not as the semantic model to copy.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: partial
+      hypothesis_testing: partial
+      falsification_or_verification: unknown
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: yes
+      open_source: partial
+    sources:
+      - https://www.elastic.co/observability/aiops/
+      - https://www.elastic.co/docs/solutions/observability/observability-ai-assistant/
+
+  - id: datadog-watchdog
+    name: Datadog Watchdog
+    class: overlapping
+    homepage: https://docs.datadoghq.com/watchdog/
+    positioning: Automated anomaly detection, insights, RCA and impact analysis across Datadog.
+    why_relevant: >-
+      Established baseline for proactive anomaly detection and causal relationships between APM
+      anomalies, infrastructure, deployments and user impact.
+    causcope_angle: >-
+      Compare known supported root-cause classes with CauScope's much broader explicit failure catalog.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: yes
+      failure_ontology: partial
+      explicit_causal_graph: partial
+      change_context: yes
+      hypothesis_testing: partial
+      falsification_or_verification: unknown
+      blast_radius: yes
+      proactive_risk: yes
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: partial
+      self_hosting_or_byoc: no
+      open_source: no
+    sources:
+      - https://docs.datadoghq.com/watchdog/
+      - https://docs.datadoghq.com/watchdog/rca/
+
+  - id: hyperprobe
+    name: HyperProbe
+    class: adjacent
+    homepage: https://www.hyperprobe.co/
+    positioning: AI-native production debugger using read-only live runtime probes.
+    why_relevant: >-
+      Extremely relevant to CauScope's confirmation layer. When logs and traces are insufficient,
+      HyperProbe places read-only virtual breakpoints and captures exact live variable state to confirm RCA.
+    causcope_angle: >-
+      Strong candidate adapter/capability provider for future application-runtime evidence and hypothesis confirmation.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: unknown
+      explicit_causal_graph: unknown
+      change_context: partial
+      hypothesis_testing: yes
+      falsification_or_verification: yes
+      blast_radius: partial
+      proactive_risk: unknown
+      live_runtime_probes: yes
+      remediation: yes
+      incident_workflow: partial
+      self_hosting_or_byoc: yes
+      open_source: no
+    sources:
+      - https://www.hyperprobe.co/
+      - https://www.ycombinator.com/companies/hyperprobe
+
+  - id: appmap
+    name: AppMap
+    class: evidence_provider
+    homepage: https://appmap.io/
+    positioning: Runtime context and structured execution traces that travel with source code.
+    why_relevant: >-
+      Provides observed runtime behavior, call sequences and structured traces that can complement
+      static code analysis and OpenTelemetry in CauScope.
+    causcope_angle: >-
+      Potential runtime-code evidence adapter rather than a direct product competitor.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: no
+      explicit_causal_graph: no
+      change_context: partial
+      hypothesis_testing: no
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: partial
+      remediation: partial
+      incident_workflow: no
+      self_hosting_or_byoc: yes
+      open_source: partial
+    sources:
+      - https://appmap.io/architecture
+
+  - id: digma
+    name: Digma
+    class: evidence_provider
+    homepage: https://digma.ai/
+    positioning: Continuous feedback that overlays runtime observability and code execution insights in the IDE.
+    why_relevant: >-
+      Connects OpenTelemetry runtime data back to specific code locations and flows, surfacing performance,
+      query and scalability insights before production incidents.
+    causcope_angle: >-
+      Strong reference for code-to-runtime mapping and preemptive feedback; potential evidence integration model.
+    capabilities:
+      telemetry_context: yes
+      code_context: yes
+      live_topology: partial
+      failure_ontology: partial
+      explicit_causal_graph: no
+      change_context: partial
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: partial
+      proactive_risk: yes
+      live_runtime_probes: partial
+      remediation: partial
+      incident_workflow: no
+      self_hosting_or_byoc: yes
+      open_source: yes
+    sources:
+      - https://docs.digma.ai/digma-developer-guide/use-cases/understand-the-application-flows-better-for-faster-development
+      - https://github.com/digma-ai/digma
+
+  - id: pgbot
+    name: pgBot
+    class: evidence_provider
+    homepage: https://pgbot.dev/
+    positioning: Read-only PostgreSQL intelligence for AI agents and applications.
+    why_relevant: >-
+      Natural CauScope PostgreSQL adapter for connections, locks, slow queries, regressions, cache,
+      replication, WAL, vacuum, indexes and database-health evidence.
+    causcope_angle: >-
+      Treat as a specialized evidence provider. CauScope should reason over pgBot findings rather than
+      reimplementing all PostgreSQL inspection logic.
+    capabilities:
+      telemetry_context: yes
+      code_context: no
+      live_topology: partial
+      failure_ontology: partial
+      explicit_causal_graph: no
+      change_context: partial
+      hypothesis_testing: partial
+      falsification_or_verification: partial
+      blast_radius: no
+      proactive_risk: partial
+      live_runtime_probes: yes
+      remediation: partial
+      incident_workflow: no
+      self_hosting_or_byoc: yes
+      open_source: yes
+    sources:
+      - https://pgbot.dev/
+
+  - id: rubydex
+    name: Rubydex
+    class: evidence_provider
+    homepage: https://shopify.github.io/rubydex/
+    positioning: High-performance static analysis toolkit and semantic graph for Ruby.
+    why_relevant: >-
+      Natural CauScope Ruby/Rails code-semantic adapter. It can index a workspace and dependencies,
+      resolve declarations and references and expose semantic intelligence through MCP.
+    causcope_angle: >-
+      Use Rubydex for code facts; CauScope should own the mapping from those facts to failure preconditions,
+      risk patterns and causal hypotheses.
+    capabilities:
+      telemetry_context: no
+      code_context: yes
+      live_topology: no
+      failure_ontology: no
+      explicit_causal_graph: partial
+      change_context: partial
+      hypothesis_testing: no
+      falsification_or_verification: no
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: no
+      self_hosting_or_byoc: yes
+      open_source: yes
+    sources:
+      - https://shopify.github.io/rubydex/
+
+  - id: opentelemetry
+    name: OpenTelemetry
+    class: evidence_provider
+    homepage: https://opentelemetry.io/
+    positioning: Vendor-neutral telemetry APIs, SDKs, Collector and semantic conventions.
+    why_relevant: >-
+      Canonical interoperability layer for traces, metrics, logs, profiles, resources and semantic
+      conventions. It should be a primary evidence vocabulary for CauScope adapters.
+    causcope_angle: >-
+      OTel supplies normalized observations and execution context; CauScope supplies failure semantics,
+      causal reasoning, probe selection and diagnosis.
+    capabilities:
+      telemetry_context: yes
+      code_context: partial
+      live_topology: partial
+      failure_ontology: no
+      explicit_causal_graph: no
+      change_context: partial
+      hypothesis_testing: no
+      falsification_or_verification: no
+      blast_radius: no
+      proactive_risk: no
+      live_runtime_probes: no
+      remediation: no
+      incident_workflow: no
+      self_hosting_or_byoc: yes
+      open_source: yes
+    sources:
+      - https://opentelemetry.io/docs/specs/semconv/
+
+  - id: firehydrant
+    name: FireHydrant
+    class: adjacent
+    homepage: https://firehydrant.com/
+    positioning: Incident management with AI-enriched summaries, timelines and response workflows.
+    why_relevant: >-
+      Useful incident-management integration target and comparison point, but currently more focused
+      on coordination and documentation than deep causal system modeling.
+    causcope_angle: >-
+      CauScope should integrate with incident coordinators instead of rebuilding their collaboration surface.
+    capabilities:
+      telemetry_context: partial
+      code_context: partial
+      live_topology: partial
+      failure_ontology: no
+      explicit_causal_graph: no
+      change_context: partial
+      hypothesis_testing: partial
+      falsification_or_verification: unknown
+      blast_radius: partial
+      proactive_risk: no
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: yes
+      self_hosting_or_byoc: no
+      open_source: no
+    sources:
+      - https://firehydrant.com/ai/
+
+  - id: sciencelogic-skylar-automated-rca
+    name: ScienceLogic Skylar Automated RCA
+    former_name: Zebrium
+    class: historical_reference
+    homepage: https://sciencelogic.com/
+    positioning: Automated root cause analysis based historically on ML analysis of logs and anomaly clusters.
+    why_relevant: >-
+      Useful predecessor for automated RCA and an example of signal-correlation/log-anomaly approaches
+      that predate the current AI-SRE wave.
+    causcope_angle: >-
+      Historical benchmark showing the limits of signal-only RCA compared with explicit causal and
+      failure-mechanism reasoning.
+    capabilities:
+      telemetry_context: yes
+      code_context: no
+      live_topology: partial
+      failure_ontology: no
+      explicit_causal_graph: no
+      change_context: partial
+      hypothesis_testing: no
+      falsification_or_verification: no
+      blast_radius: partial
+      proactive_risk: partial
+      live_runtime_probes: no
+      remediation: partial
+      incident_workflow: partial
+      self_hosting_or_byoc: partial
+      open_source: no
+    sources:
+      - https://docs.sciencelogic.com/release_notes_html/Content/Skylar_Automated_RCA/skylar_auto_rca_EA-90_release_notes.htm
+      - https://sciencelogic.com/press_release/aiops-provider-sciencelogic-acquires-machine-learning-analytics-provider-zebrium-to-provide-at-a-glance-root-cause-visibility
+
+notes:
+  - >-
+    Capability values are internal research judgments based on public material reviewed on the date above;
+    they are not vendor-authored claims and must be re-verified before publication.
+  - >-
+    A product may appear in more than one strategic role. For example Coroot and Metoro compete on RCA
+    while also providing useful reference architectures for evidence collection.
+  - >-
+    The most important comparison is not feature count. Track the reasoning substrate: raw telemetry,
+    learned context, topology, explicit failure knowledge, causal graph, falsifiers, probes and confirmation.
