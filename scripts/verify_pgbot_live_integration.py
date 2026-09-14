@@ -52,9 +52,9 @@ def verify(pgbot_report: Path, trace_payload: Path) -> dict:
     trace_context = load_trace_payload(trace_payload)
 
     source_findings = active_finding_ids(pgbot_context)
-    if "connection_saturation" not in source_findings:
+    if "wait_lock_contention" not in source_findings:
         raise ValueError(
-            "live pgbot report did not contain active connection_saturation finding"
+            "live pgbot report did not contain active wait_lock_contention finding"
         )
 
     pgbot_evidence = build_pgbot_evidence(
@@ -89,7 +89,7 @@ def verify(pgbot_report: Path, trace_payload: Path) -> dict:
         if instance["state"] == "observed"
     }
     required_observations = {
-        "observation.database.connection_utilization",
+        "observation.database.lock_wait_time",
         "observation.database.query_latency",
     }
     missing = sorted(required_observations - observations)

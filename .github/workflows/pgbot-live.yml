@@ -52,23 +52,23 @@ jobs:
       - name: Install integration dependencies
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema 'psycopg[binary]'
 
-      - name: Start saturated PostgreSQL lab
+      - name: Start PostgreSQL lock-contention lab
         run: |
-          docker compose -f lab/pgbot-live/compose.yml up -d db holders
+          docker compose -f lab/pgbot-live/compose.yml up -d db contention
 
-          count=0
+          lock_waiters=0
           for attempt in $(seq 1 30); do
-            count="$(docker compose -f lab/pgbot-live/compose.yml exec -T db \
+            lock_waiters="$(docker compose -f lab/pgbot-live/compose.yml exec -T db \
               psql -U causcope_admin -d causcope -Atc \
-              "SELECT count(*) FROM pg_stat_activity WHERE usename = 'causcope_app';")"
-            if [ "$count" -ge 20 ]; then
+              "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'causcope-lock-waiter' AND wait_event_type = 'Lock';")"
+            if [ "$lock_waiters" -ge 3 ]; then
               break
             fi
             sleep 1
           done
 
-          echo "live holder connections: $count"
-          if [ "$count" -lt 20 ]; then
+          echo "live lock waiters: $lock_waiters"
+          if [ "$lock_waiters" -lt 3 ]; then
             docker compose -f lab/pgbot-live/compose.yml logs
             exit 1
           fi
@@ -82,7 +82,7 @@ jobs:
           version: v0.8.1
           upload-sarif: "false"
 
-      - name: Assert live pgbot observed connection saturation
+      - name: Assert live pgbot observed lock contention
         run: |
           python - <<'PY'
           import json
@@ -98,18 +98,18 @@ jobs:
               raise SystemExit(
                   f"unexpected live pgbot schema: {report.get('schema_version')}"
               )
-          if "connection_saturation" not in findings:
+          if "wait_lock_contention" not in findings:
               raise SystemExit(
-                  f"connection_saturation missing from live pgbot findings: {sorted(findings)}"
+                  f"wait_lock_contention missing from live pgbot findings: {sorted(findings)}"
               )
-          print("pgbot live finding verified: connection_saturation")
+          print("pgbot live finding verified: wait_lock_contention")
           PY
 
-      - name: Release saturation workload
+      - name: Release lock-contention workload
         run: |
-          docker compose -f lab/pgbot-live/compose.yml stop -t 1 holders
+          docker compose -f lab/pgbot-live/compose.yml stop -t 1 contention
 
-          count=20
+          count=4
           for attempt in $(seq 1 20); do
             count="$(docker compose -f lab/pgbot-live/compose.yml exec -T db \
               psql -U causcope_admin -d causcope -Atc \
@@ -120,7 +120,7 @@ jobs:
             sleep 1
           done
 
-          echo "remaining holder connections: $count"
+          echo "remaining application connections: $count"
           test "$count" -eq 0
 
       - name: Generate trace from a real PostgreSQL query

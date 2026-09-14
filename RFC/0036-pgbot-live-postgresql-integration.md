@@ -31,19 +31,32 @@ The purpose is not to reproduce pgbot. It is to prove that an external determini
 
 ## Live failure signal
 
-The integration database runs with a deliberately small connection ceiling and temporary load sessions. pgbot observes the live database while the connection count is above its saturation threshold and must emit the real `connection_saturation` finding.
+The integration lab creates a real PostgreSQL row-lock incident. One application transaction updates a row and deliberately keeps the transaction open. Three identical application queries then attempt to update the same row and remain blocked on PostgreSQL heavyweight locks during pgbot's active-session sampling window.
 
-That finding is normalized to:
+pgbot must emit the real `wait_lock_contention` finding. That finding is normalized to:
 
 ```text
-observation.database.connection_utilization
+observation.database.lock_wait_time
 ```
 
 No fixture or hand-written pgbot finding is involved in this path.
 
+## Diagnostic headroom
+
+The first live version of this lab tried to prove `connection_saturation` by nearly exhausting PostgreSQL connection slots. That experiment produced a better invariant than the intended assertion: the pgbot run correctly marked several sections, including `limits`, as `unavailable` because its read-only collectors could no longer open connections. It therefore did not fabricate `connection_saturation` from incomplete evidence.
+
+A diagnostic instrument needs operational headroom to observe a failure. The lab now creates lock contention with only a few application sessions and leaves sufficient connection capacity for every pgbot collector.
+
+This is a general evidence-quality rule:
+
+```text
+failure pressure on the target != permission to degrade the observer silently
+observer unavailable -> preserve unavailable, never infer the missing finding
+```
+
 ## Live trace signal
 
-After the saturation capture, the temporary holder sessions are stopped and the harness executes a real PostgreSQL query with a controlled delay. The harness records the actual start and end nanosecond timestamps and emits an OTLP/HTTP JSON client span with PostgreSQL semantic attributes.
+After the lock-contention capture, the temporary application sessions are stopped and the harness executes a real PostgreSQL query with a controlled delay. The harness records the actual start and end nanosecond timestamps and emits an OTLP/HTTP JSON client span with PostgreSQL semantic attributes.
 
 The existing OpenTelemetry adapter normalizes that measured span to:
 
@@ -69,7 +82,7 @@ Composition is valid because both sources describe the same dependency boundary,
 
 ## Upstream contract pinning
 
-The pgbot adapter now declares the upstream JSON schema versions it accepts explicitly:
+The pgbot adapter declares the upstream JSON schema versions it accepts explicitly:
 
 ```yaml
 accepted_schema_versions:
@@ -84,13 +97,15 @@ An unsupported pgbot schema version fails closed before findings are normalized.
 
 The live PostgreSQL instance creates a dedicated `pgbot_ro` login with `pg_monitor` and no application write grants. The pgbot run is deterministic and does not use an AI key.
 
-The test workload uses a separate application role. The load is intentionally created by the lab harness, never by pgbot or by the adapter.
+The test workload uses a separate application role. The failure is intentionally created by the lab harness, never by pgbot or by the adapter.
 
 ## Files
 
 ```text
 lab/pgbot-live/compose.yml
 lab/pgbot-live/init.sql
+lab/pgbot-live/contention.sql
+lab/pgbot-live/README.md
 scripts/live_postgresql_trace.py
 scripts/verify_pgbot_live_integration.py
 .github/workflows/pgbot-live.yml
@@ -110,12 +125,13 @@ scripts/live_diagnosis.py
 The live integration fails unless all of the following are true:
 
 1. a real pgbot run returns schema version `1.2.0`;
-2. pgbot observes an unsuppressed `connection_saturation` finding from the live database;
-3. the pgbot adapter produces `observation.database.connection_utilization`;
-4. a real delayed PostgreSQL query produces a trace that becomes `observation.database.query_latency`;
-5. pgbot and trace evidence retain distinct provenance;
-6. both evidence streams compose into one semantic partition;
-7. the composed partition reaches the live diagnosis engine.
+2. PostgreSQL itself reports three application sessions waiting on heavyweight locks before pgbot starts;
+3. pgbot observes an unsuppressed `wait_lock_contention` finding from the live database;
+4. the pgbot adapter produces `observation.database.lock_wait_time`;
+5. a real delayed PostgreSQL query produces a trace that becomes `observation.database.query_latency`;
+6. pgbot and trace evidence retain distinct provenance;
+7. both evidence streams compose into one semantic partition;
+8. the composed partition reaches the live diagnosis engine.
 
 ## Non-goals
 
