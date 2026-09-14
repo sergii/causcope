@@ -1,0 +1,67 @@
+name: Validate portable Rails provider
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bin/causcope"
+      - "scripts/causcope_scan.py"
+      - "scripts/rails_repository_scan.rb"
+      - "scripts/test_portable_rails_scan.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "lab/rails-connection-pool/**"
+      - "RFC/0057-portable-rails-provider.md"
+      - ".github/workflows/portable-rails-provider.yml"
+  pull_request:
+    paths:
+      - "bin/causcope"
+      - "scripts/causcope_scan.py"
+      - "scripts/rails_repository_scan.rb"
+      - "scripts/test_portable_rails_scan.py"
+      - "schema/concrete-system-facts.schema.json"
+      - "lab/rails-connection-pool/**"
+      - "RFC/0057-portable-rails-provider.md"
+      - ".github/workflows/portable-rails-provider.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-rails-provider-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check jsonschema PyYAML
+
+      - name: Validate portable Rails repository scan
+        run: python scripts/test_portable_rails_scan.py
+
+      - name: Validate emitted concrete facts with canonical validator
+        run: |
+          tmp=$(mktemp -d)
+          ./bin/causcope scan lab/rails-connection-pool \
+            --provider rails \
+            --env-file deployment.yml \
+            --system-id portable-ci \
+            --revision "$GITHUB_SHA" \
+            --repository "https://github.com/${GITHUB_REPOSITORY}" \
+            --output "$tmp/facts.json"
+          python scripts/concrete_system_facts.py "$tmp/facts.json" --pretty
