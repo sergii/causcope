@@ -23,39 +23,61 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     )
 
 
+def prepare_app(path: Path) -> Path:
+    shutil.copytree(FIXTURE, path)
+    fixture_initializer = path / "config" / "initializers" / "opentelemetry.rb"
+    fixture_initializer.unlink()
+    gemfile = path / "Gemfile"
+    gemfile.write_text(
+        "\n".join(
+            line
+            for line in gemfile.read_text(encoding="utf-8").splitlines()
+            if "opentelemetry-sdk" not in line and "opentelemetry-exporter-otlp" not in line
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return gemfile
+
+
+def scan_app(app: Path, *, system_id: str, revision: str) -> None:
+    result = run(
+        "scan",
+        str(app),
+        "--provider",
+        "rails",
+        "--environment",
+        "production",
+        "--env-file",
+        "deployment.yml",
+        "--system-id",
+        system_id,
+        "--revision",
+        revision,
+    )
+    assert "Provider: rails" in result.stdout
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="causcope-rails-product-") as temporary:
-        app = Path(temporary) / "app"
-        shutil.copytree(FIXTURE, app)
+        temporary_root = Path(temporary)
 
-        fixture_initializer = app / "config" / "initializers" / "opentelemetry.rb"
-        fixture_initializer.unlink()
-        gemfile = app / "Gemfile"
-        gemfile.write_text(
-            "\n".join(
-                line
-                for line in gemfile.read_text(encoding="utf-8").splitlines()
-                if "opentelemetry-sdk" not in line and "opentelemetry-exporter-otlp" not in line
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        conflict_app = temporary_root / "atomic-conflict-app"
+        conflict_gemfile = prepare_app(conflict_app)
+        scan_app(conflict_app, system_id="atomic-conflict", revision="revision-atomic")
+        conflicting_initializer = conflict_app / "config" / "initializers" / "causcope.rb"
+        conflicting_initializer.write_text("# user-owned initializer\n", encoding="utf-8")
+        gemfile_before_conflict = conflict_gemfile.read_text(encoding="utf-8")
+        conflict_result = run("rails", "install", str(conflict_app), check=False)
+        assert conflict_result.returncode == 2
+        assert "refusing to overwrite existing file" in conflict_result.stderr
+        assert not (conflict_app / "lib" / "causcope" / "runtime.rb").exists()
+        assert conflict_gemfile.read_text(encoding="utf-8") == gemfile_before_conflict
+        assert conflicting_initializer.read_text(encoding="utf-8") == "# user-owned initializer\n"
 
-        scan = run(
-            "scan",
-            str(app),
-            "--provider",
-            "rails",
-            "--environment",
-            "production",
-            "--env-file",
-            "deployment.yml",
-            "--system-id",
-            "product-cli-fixture",
-            "--revision",
-            "revision-product-123",
-        )
-        assert "Provider: rails" in scan.stdout
+        app = temporary_root / "app"
+        gemfile = prepare_app(app)
+        scan_app(app, system_id="product-cli-fixture", revision="revision-product-123")
 
         facts_path = app / ".causcope" / "concrete-system-facts.json"
         facts = json.loads(facts_path.read_text(encoding="utf-8"))
@@ -146,7 +168,7 @@ def main() -> int:
         assert "otlp_concrete_receiver.py" in dry_run.stdout
         assert "--incident-id 'INC PRODUCT/1'" in dry_run.stdout
 
-        missing = Path(temporary) / "missing-facts-app"
+        missing = temporary_root / "missing-facts-app"
         shutil.copytree(FIXTURE, missing)
         result = run("rails", "install", str(missing), check=False)
         assert result.returncode == 2
