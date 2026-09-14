@@ -23,28 +23,28 @@
             {
               "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "spanId": "1111111111111111",
-              "name": "CheckoutService#call",
+              "name": "CheckoutService#call()",
               "kind": "SPAN_KIND_INTERNAL",
               "startTimeUnixNano": "1789387263100000000",
               "endTimeUnixNano": "1789387263480000000",
               "attributes": [
                 {
                   "key": "causcope.code_symbol",
-                  "value": {"stringValue": "code:CheckoutService#call"}
+                  "value": {"stringValue": "code:CheckoutService#call()"}
                 }
               ]
             },
             {
               "traceId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
               "spanId": "2222222222222222",
-              "name": "SettlementJob#perform",
+              "name": "SettlementJob#perform()",
               "kind": "SPAN_KIND_INTERNAL",
               "startTimeUnixNano": "1789387263220000000",
               "endTimeUnixNano": "1789387263620000000",
               "attributes": [
                 {
                   "key": "causcope.code_symbol",
-                  "value": {"stringValue": "code:SettlementJob#perform"}
+                  "value": {"stringValue": "code:SettlementJob#perform()"}
                 }
               ]
             }
