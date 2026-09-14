@@ -141,10 +141,9 @@ class PrometheusAutonomousProviderTest(unittest.TestCase):
             execution_requirement="direct",
             target_resource="db.orders.prod",
         )
-        self.assertEqual(
-            "provider.prometheus.orders-prod",
-            orders_decision["selection"]["instrument"]["id"],
-        )
+        instrument = orders_decision["selection"]["instrument"]
+        self.assertEqual("provider.prometheus.orders-prod", instrument["id"])
+        self.assertEqual("observability.prometheus.prod", instrument["endpoint_resource"])
         payment_candidate = next(
             candidate
             for candidate in orders_decision["candidates"]
@@ -161,10 +160,9 @@ class PrometheusAutonomousProviderTest(unittest.TestCase):
         )
         instance = evidence["instances"][0]
         self.assertEqual("provider.prometheus.orders-prod", instance["labels"]["instrument"])
-        self.assertEqual(
-            "db.orders.prod",
-            instance["source"]["attributes"]["routing.target_resource"],
-        )
+        attributes = instance["source"]["attributes"]
+        self.assertEqual("db.orders.prod", attributes["routing.target_resource"])
+        self.assertEqual("observability.prometheus.prod", attributes["routing.endpoint_resource"])
 
 
 if __name__ == "__main__":
