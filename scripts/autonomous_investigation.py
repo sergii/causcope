@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import copy
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
+
+from jsonschema import Draft202012Validator
 
 from live_diagnosis import build_diagnosis_snapshot, normalize_scope, scope_key
 from runtime_evidence import format_timestamp, validate_runtime_references
 from runtime_evidence_composition import compose_runtime_evidence
+
+SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema" / "autonomous-investigation-run.schema.json"
 
 
 class ProbeInsufficientEvidence(ValueError):
@@ -167,6 +173,20 @@ def _validate_probe_evidence(
             )
 
 
+def validate_autonomous_investigation_run(report: dict[str, Any]) -> None:
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    errors = sorted(
+        Draft202012Validator(schema).iter_errors(report),
+        key=lambda error: list(error.path),
+    )
+    if errors:
+        raise ValueError(
+            "autonomous investigation run schema validation failed: "
+            + "; ".join(error.message for error in errors)
+        )
+
+
 def run_autonomous_read_only_loop(
     *,
     evidence: dict[str, Any],
@@ -305,4 +325,5 @@ def run_autonomous_read_only_loop(
         "stop_reason": stop_reason,
         "steps": steps,
     }
+    validate_autonomous_investigation_run(report)
     return current_evidence, current_snapshot, report
