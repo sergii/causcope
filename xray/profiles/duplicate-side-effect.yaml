@@ -215,7 +215,6 @@ stages:
           idempotency_key:
             var: idempotency_key
           client_outcome: success
-          provider_effect_committed: true
           provider_deduplicated: true
       - source: effect
         path: protected.provider_effects
