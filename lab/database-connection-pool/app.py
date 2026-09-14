@@ -15,6 +15,9 @@ DB_PASSWORD = os.environ.get("DB_PASSWORD", "causcope")
 DB_NAME = os.environ.get("DB_NAME", "causcope")
 APP_PORT = int(os.environ.get("APP_PORT", "8080"))
 POOL_SIZE = int(os.environ.get("POOL_SIZE", "1"))
+CAUSCOPE_SYSTEM_ID = os.environ.get("CAUSCOPE_SYSTEM_ID", "database-connection-pool-app")
+CAUSCOPE_REVISION = os.environ.get("CAUSCOPE_REVISION", "unknown")
+WORK_CODE_SYMBOL = "code:Handler#do_GET()"
 
 CONNINFO = (
     f"host={DB_HOST} port={DB_PORT} user={DB_USER} "
@@ -78,24 +81,38 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/work":
+            request_started_wall_ns = time.time_ns()
             request_started = time.monotonic()
             checkout_started = time.monotonic()
             with pool.connection(timeout=5) as connection:
                 checkout_wait_ms = (time.monotonic() - checkout_started) * 1000.0
                 query_started = time.monotonic()
                 with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    cursor.fetchone()
+                    cursor.execute("SELECT 1, pg_backend_pid()")
+                    _one, backend_pid = cursor.fetchone()
                 query_latency_ms = (time.monotonic() - query_started) * 1000.0
             request_latency_ms = (time.monotonic() - request_started) * 1000.0
-            json_response(
-                self,
-                {
-                    "checkout_wait_ms": checkout_wait_ms,
-                    "database_query_latency_ms": query_latency_ms,
-                    "request_latency_ms": request_latency_ms,
-                },
-            )
+            request_ended_wall_ns = time.time_ns()
+
+            payload = {
+                "checkout_wait_ms": checkout_wait_ms,
+                "database_query_latency_ms": query_latency_ms,
+                "request_latency_ms": request_latency_ms,
+                "database_backend_pid": backend_pid,
+            }
+            trace_id = self.headers.get("X-Causcope-Trace-Id")
+            span_id = self.headers.get("X-Causcope-Span-Id")
+            if trace_id and span_id:
+                payload["telemetry"] = {
+                    "system_id": CAUSCOPE_SYSTEM_ID,
+                    "revision": CAUSCOPE_REVISION,
+                    "code_symbol": WORK_CODE_SYMBOL,
+                    "trace_id": trace_id,
+                    "span_id": span_id,
+                    "start_time_unix_nano": str(request_started_wall_ns),
+                    "end_time_unix_nano": str(request_ended_wall_ns),
+                }
+            json_response(self, payload)
             return
 
         if parsed.path == "/direct-control":
@@ -103,8 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             with psycopg.connect(CONNINFO, connect_timeout=5) as connection:
                 query_started = time.monotonic()
                 with connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    cursor.fetchone()
+                    cursor.execute("SELECT 1, pg_backend_pid()")
+                    _one, backend_pid = cursor.fetchone()
                 query_latency_ms = (time.monotonic() - query_started) * 1000.0
             total_latency_ms = (time.monotonic() - total_started) * 1000.0
             json_response(
@@ -112,6 +129,7 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "database_query_latency_ms": query_latency_ms,
                     "direct_total_latency_ms": total_latency_ms,
+                    "database_backend_pid": backend_pid,
                 },
             )
             return
