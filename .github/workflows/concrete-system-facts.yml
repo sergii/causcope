@@ -1,0 +1,46 @@
+name: Validate concrete system facts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "schema/concrete-system-facts.schema.json"
+      - "examples/concrete-system/**"
+      - "scripts/concrete_system_facts.py"
+      - "scripts/test_concrete_system_facts.py"
+      - "RFC/0046-concrete-system-facts-v0.md"
+      - ".github/workflows/concrete-system-facts.yml"
+  pull_request:
+    paths:
+      - "schema/concrete-system-facts.schema.json"
+      - "examples/concrete-system/**"
+      - "scripts/concrete_system_facts.py"
+      - "scripts/test_concrete_system_facts.py"
+      - "RFC/0046-concrete-system-facts-v0.md"
+      - ".github/workflows/concrete-system-facts.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate concrete system facts
+        run: python scripts/test_concrete_system_facts.py
+
+      - name: Render D2.2 structural precondition projection
+        run: |
+          python scripts/concrete_system_facts.py \
+            examples/concrete-system/deadlock-risk.yaml \
+            --pretty
