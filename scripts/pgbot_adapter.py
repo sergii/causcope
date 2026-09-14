@@ -56,6 +56,19 @@ def load_context(path: Path) -> dict[str, Any]:
     return document
 
 
+def validate_context_contract(
+    adapter: dict[str, Any],
+    context: dict[str, Any],
+) -> None:
+    version = context["schema_version"]
+    accepted = adapter["accepted_schema_versions"]
+    if version not in accepted:
+        raise ValueError(
+            "unsupported pgbot schema_version "
+            f"{version}; adapter accepts: {', '.join(accepted)}"
+        )
+
+
 def validate_adapter_references(
     adapter: dict[str, Any],
     concepts: dict[str, dict[str, Any]],
@@ -171,6 +184,7 @@ def build_runtime_evidence(
     incident_id: str,
     source_uri: str | None = None,
 ) -> dict[str, Any]:
+    validate_context_contract(adapter, context)
     validate_adapter_references(adapter, concepts)
 
     mappings = {
