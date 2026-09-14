@@ -1,0 +1,174 @@
+schema_version: "0.1"
+kind: xray_profile
+id: xray.d3_1.concrete_connection_pool_exhaustion
+catalog_code: D3.1
+hypothesis: hypothesis.database.connection_pool_exhaustion
+symptom: symptom.latency.high
+observation: observation.database.connection_pool_wait_time
+max_emitted_bindings: 10
+inputs:
+  static:
+    kind: concrete_system_facts
+    required: true
+  runtime:
+    kind: concrete_runtime_facts
+    required: true
+  pool:
+    kind: resource_pool_runtime_evidence
+    required: true
+identity_groups:
+  - name: system
+    refs:
+      - static.system_id
+      - runtime.system_id
+      - pool.system_id
+  - name: revision
+    refs:
+      - static.revision.value
+      - runtime.revision.value
+      - pool.revision.value
+  - name: incident
+    refs:
+      - runtime.incident_id
+      - pool.incident_id
+stages:
+  - id: PRECONDITIONS_PRESENT
+    description: The pinned application revision contains a bounded database connection pool used by a concrete code path and backed by PostgreSQL.
+    clauses:
+      - source: static
+        path: entities
+        where:
+          kind: resource_pool
+          attributes.technology: psycopg_pool
+        bind:
+          pool_id: id
+          configured_capacity: attributes.configured_capacity
+      - source: static
+        path: facts
+        where:
+          relation: depends_on
+          object:
+            var: pool_id
+        bind:
+          code_symbol: subject
+      - source: static
+        path: entities
+        where:
+          id:
+            var: code_symbol
+          kind: code_symbol
+      - source: static
+        path: facts
+        where:
+          subject:
+            var: pool_id
+          relation: depends_on
+        bind:
+          dependency_id: object
+      - source: static
+        path: entities
+        where:
+          id:
+            var: dependency_id
+          kind: external_dependency
+          attributes.dbms: postgresql
+
+  - id: RUNTIME_EXECUTION_OBSERVED
+    description: A concrete request span for the pinned code symbol is exactly joined to the resource-pool evidence by trace and span identity.
+    clauses:
+      - source: runtime
+        path: executions
+        where:
+          code_symbol:
+            var: code_symbol
+        bind:
+          execution_id: id
+          trace_id: trace_id
+          span_id: span_id
+      - source: pool
+        path: request
+        where:
+          code_symbol:
+            var: code_symbol
+          trace_id:
+            var: trace_id
+          span_id:
+            var: span_id
+        bind:
+          request_backend_id: dependency_backend_id
+      - source: pool
+        path: pool
+        where:
+          id:
+            var: pool_id
+        bind:
+          observed_capacity: observed_capacity
+    constraints:
+      - op: eq
+        left:
+          var: configured_capacity
+        right:
+          var: observed_capacity
+
+  - id: POOL_SATURATED
+    description: The exact configured pool is observed at capacity while the traced request competes for checkout.
+    clauses:
+      - source: pool
+        path: pool
+        where:
+          id:
+            var: pool_id
+        bind:
+          pool_busy: busy
+      - source: pool
+        path: assertions
+        where:
+          application_pool_was_at_capacity: true
+    constraints:
+      - op: eq
+        left:
+          var: pool_busy
+        right:
+          var: observed_capacity
+
+  - id: CHECKOUT_WAIT_OBSERVED
+    description: The traced request experiences materially increased pool checkout wait and request latency during saturation.
+    clauses:
+      - source: pool
+        path: assertions
+        where:
+          pool_checkout_wait_increased: true
+          request_latency_increased: true
+
+  - id: DATABASE_CAPACITY_DISTINGUISHED
+    description: Query execution stays near baseline and an independent PostgreSQL session remains reachable on a distinct backend, rejecting nearby database-wide explanations.
+    clauses:
+      - source: pool
+        path: assertions
+        where:
+          query_latency_stayed_near_baseline: true
+          database_still_accepts_direct_connections: true
+      - source: pool
+        path: dependency_control
+        where:
+          dependency_id:
+            var: dependency_id
+          reachable: true
+        bind:
+          control_backend_id: backend_id
+    constraints:
+      - op: neq
+        left:
+          var: control_backend_id
+        right:
+          var: request_backend_id
+
+  - id: CAUSAL_DIAGNOSIS_CONFIRMED
+    description: Checkout wait explains the traced request latency increase and both wait and request latency recover after the concrete pool slot is released.
+    clauses:
+      - source: pool
+        path: assertions
+        where:
+          checkout_wait_explains_request_delta: true
+          recovery_checkout_wait_returned_to_baseline: true
+          recovery_request_latency_returned_to_baseline: true
