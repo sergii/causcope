@@ -10,6 +10,7 @@ from pathlib import Path
 
 from autonomous_investigation import run_autonomous_read_only_loop
 from causal_projection import ROOT, load_concepts, load_edges
+from instrument_router import InstrumentRouter
 from live_diagnosis import build_diagnosis_snapshot, normalize_scope, scope_key
 from pgbot_adapter import load_adapter, load_context
 from pgbot_autonomous_provider import (
@@ -17,6 +18,7 @@ from pgbot_autonomous_provider import (
     PgbotAutonomousProbeProvider,
     file_context_supplier,
 )
+from probe_executor_runtime import build_probe_execution_capabilities
 from runtime_evidence import format_timestamp, parse_timestamp
 
 DEFAULT_ADAPTER = ROOT / "examples" / "adapters" / "pgbot" / "postgresql.yaml"
@@ -67,6 +69,19 @@ def main() -> int:
         source_uri="pgbot://live-postgresql-ci",
     )
     scope = copy.deepcopy(provider.adapter_scope)
+    router = InstrumentRouter(
+        concepts=concepts,
+        host_capabilities=build_probe_execution_capabilities(concepts),
+        providers=[provider],
+    )
+    route = router.route(LOCK_PROBE, scope, execution_requirement="direct")
+    selection = route["selection"]
+    if selection is None:
+        raise RuntimeError(f"instrument router did not select a live lock instrument: {route}")
+    if selection["instrument"]["id"] != PGBOT_PROVIDER_ID:
+        raise RuntimeError(
+            f"expected router to select {PGBOT_PROVIDER_ID}, got {selection['instrument']['id']}"
+        )
 
     initial_evidence = {
         "schema_version": "0.1",
@@ -101,8 +116,8 @@ def main() -> int:
         snapshot=initial_snapshot,
         concepts=concepts,
         edges=edges,
-        supported_probe_ids=provider.supported_probe_ids,
-        execute_probe=provider.execute,
+        supported_probe_ids=router.autonomous_probe_ids,
+        execute_probe=router.execute,
         max_steps=4,
         clock=clock,
     )
@@ -126,6 +141,11 @@ def main() -> int:
         raise RuntimeError("live pgbot evidence did not preserve canonical probe provenance")
     if lock_instance["labels"].get("source_finding") != "wait_lock_contention":
         raise RuntimeError("live pgbot evidence lost wait_lock_contention source identity")
+    if lock_instance["labels"].get("instrument") != PGBOT_PROVIDER_ID:
+        raise RuntimeError("live pgbot evidence did not preserve router instrument identity")
+    routing_attributes = lock_instance["source"].get("attributes", {})
+    if routing_attributes.get("routing.instrument_id") != PGBOT_PROVIDER_ID:
+        raise RuntimeError("live pgbot evidence lost instrument routing provenance")
 
     diagnosis = diagnosis_for(
         final_snapshot,
@@ -141,6 +161,8 @@ def main() -> int:
         "incident_id": args.incident_id,
         "initial_target": TARGET,
         "provider": PGBOT_PROVIDER_ID,
+        "selected_instrument": selection["instrument"],
+        "route_selection_policy": route["selection_policy"],
         "completed_probes": [step["probe_id"] for step in completed],
         "source_finding": lock_instance["labels"]["source_finding"],
         "new_observation": lock_instance["observation"],
