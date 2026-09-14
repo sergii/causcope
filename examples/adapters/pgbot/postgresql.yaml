@@ -1,6 +1,8 @@
 schema_version: "0.1"
 kind: pgbot_adapter
 id: adapter.pgbot.postgresql
+accepted_schema_versions:
+  - "1.2.0"
 default_ttl_seconds: 300
 default_confidence: high
 
