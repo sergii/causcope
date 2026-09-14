@@ -63,6 +63,13 @@ class PgbotAdapterTest(unittest.TestCase):
     def test_output_is_deterministic(self) -> None:
         self.assertEqual(self.evidence(), self.evidence())
 
+    def test_rejects_unaccepted_upstream_schema_version(self) -> None:
+        context = copy.deepcopy(self.context)
+        context["schema_version"] = "2.0.0"
+
+        with self.assertRaisesRegex(ValueError, "unsupported pgbot schema_version"):
+            self.evidence(context)
+
     def test_source_suppression_does_not_become_absent_evidence(self) -> None:
         context = copy.deepcopy(self.context)
         for finding in context["findings"]:
