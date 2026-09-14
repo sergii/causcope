@@ -6,6 +6,9 @@ on:
     paths:
       - "lab/pgbot-live/**"
       - "scripts/pgbot_adapter.py"
+      - "scripts/pgbot_autonomous_provider.py"
+      - "scripts/verify_pgbot_autonomous_live.py"
+      - "scripts/autonomous_investigation.py"
       - "scripts/live_postgresql_trace.py"
       - "scripts/verify_pgbot_live_integration.py"
       - "scripts/opentelemetry_trace_adapter.py"
@@ -15,11 +18,15 @@ on:
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
       - "schema/pgbot-adapter.schema.json"
       - "RFC/0036-pgbot-live-postgresql-integration.md"
+      - "RFC/0037-pgbot-autonomous-probe-provider.md"
       - ".github/workflows/pgbot-live.yml"
   pull_request:
     paths:
       - "lab/pgbot-live/**"
       - "scripts/pgbot_adapter.py"
+      - "scripts/pgbot_autonomous_provider.py"
+      - "scripts/verify_pgbot_autonomous_live.py"
+      - "scripts/autonomous_investigation.py"
       - "scripts/live_postgresql_trace.py"
       - "scripts/verify_pgbot_live_integration.py"
       - "scripts/opentelemetry_trace_adapter.py"
@@ -29,6 +36,7 @@ on:
       - "examples/adapters/opentelemetry/postgresql-dependency.yaml"
       - "schema/pgbot-adapter.schema.json"
       - "RFC/0036-pgbot-live-postgresql-integration.md"
+      - "RFC/0037-pgbot-autonomous-probe-provider.md"
       - ".github/workflows/pgbot-live.yml"
 
 concurrency:
@@ -105,6 +113,12 @@ jobs:
           print("pgbot live finding verified: wait_lock_contention")
           PY
 
+      - name: Run autonomous Causcope loop over real pgbot evidence
+        run: |
+          python scripts/verify_pgbot_autonomous_live.py \
+            --pgbot-report pgbot-report.json \
+            --pretty | tee pgbot-autonomous-summary.json
+
       - name: Release lock-contention workload
         run: |
           docker compose -f lab/pgbot-live/compose.yml exec -T db \
@@ -148,6 +162,7 @@ jobs:
           name: pgbot-live-evidence
           path: |
             pgbot-report.json
+            pgbot-autonomous-summary.json
             live-postgresql-trace.json
             pgbot-live-summary.json
           if-no-files-found: warn
