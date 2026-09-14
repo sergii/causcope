@@ -35,7 +35,7 @@ INCIDENT_ID = "incident.test.routed-mcp"
 TARGET = "observation.http.request_failure"
 PROBE = "probe.database.inspect_lock_waits"
 INSTRUMENT = "provider.pgbot.postgresql"
-NOW = datetime(2026, 9, 14, 10, 15, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 14, 0, 30, 5, tzinfo=timezone.utc)
 
 
 class RoutedInstrumentMcpToolTest(unittest.TestCase):
@@ -76,7 +76,7 @@ class RoutedInstrumentMcpToolTest(unittest.TestCase):
                     "id": "evidence.routed-mcp.request-failure",
                     "observation": TARGET,
                     "state": "observed",
-                    "observed_at": "2026-09-14T10:14:50Z",
+                    "observed_at": "2026-09-14T00:29:55Z",
                     "confidence": "high",
                     "source": {"type": "manual", "name": "incident-report"},
                     "scope": scope,
