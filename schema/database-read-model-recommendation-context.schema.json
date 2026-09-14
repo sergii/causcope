@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/database-read-model-recommendation-context.schema.json",
+  "title": "Causcope database read-model recommendation context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "evaluation_time",
+    "recommendation_id",
+    "subject_resource",
+    "provider_instance",
+    "workload"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "database_read_model_recommendation_context"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "evaluation_time": {"type": "string", "format": "date-time"},
+    "recommendation_id": {"const": "recommendation.database.denormalize_read_model"},
+    "subject_resource": {"type": "string", "minLength": 1},
+    "provider_instance": {"type": "string", "minLength": 1},
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "query_object",
+        "request_path",
+        "read_frequency_per_minute",
+        "query_contribution"
+      ],
+      "properties": {
+        "query_object": {"type": "string", "minLength": 1},
+        "request_path": {"type": "string", "minLength": 1},
+        "read_frequency_per_minute": {"type": "number", "minimum": 0},
+        "query_contribution": {"enum": ["dominant", "material", "unknown"]}
+      }
+    },
+    "proposed_change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "description"],
+      "properties": {
+        "type": {
+          "enum": [
+            "denormalized_read_model",
+            "materialized_view",
+            "cached_aggregate",
+            "materialized_projection"
+          ]
+        },
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "business_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_of_truth", "consistency_invariant", "staleness_budget_ms"],
+      "properties": {
+        "source_of_truth": {"type": "string", "minLength": 1},
+        "consistency_invariant": {"type": "string", "minLength": 1},
+        "staleness_budget_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "maintenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "update_strategy",
+        "retry_semantics",
+        "partial_failure_strategy",
+        "reconciliation_strategy"
+      ],
+      "properties": {
+        "update_strategy": {
+          "enum": [
+            "same_transaction",
+            "transactional_outbox",
+            "cdc_projection",
+            "materialized_view_refresh",
+            "database_trigger",
+            "periodic_reconciliation",
+            "other"
+          ]
+        },
+        "retry_semantics": {"type": "string", "minLength": 1},
+        "partial_failure_strategy": {"type": "string", "minLength": 1},
+        "reconciliation_strategy": {"type": "string", "minLength": 1}
+      }
+    },
+    "cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["write_amplification", "operational_complexity", "new_failure_modes"],
+      "properties": {
+        "write_amplification": {"type": "string", "minLength": 1},
+        "storage": {"type": "string", "minLength": 1},
+        "operational_complexity": {"type": "string", "minLength": 1},
+        "new_failure_modes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "benefit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "metric", "before", "after"],
+      "properties": {
+        "basis": {
+          "enum": ["measured", "planner_experiment", "benchmark", "expected", "unknown"]
+        },
+        "metric": {"const": "read_latency_ms"},
+        "before": {"type": "number", "exclusiveMinimum": 0},
+        "after": {"type": "number", "minimum": 0},
+        "evidence_ref": {"type": "string", "minLength": 1}
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiment", "success_criteria", "rollback"],
+      "properties": {
+        "experiment": {"type": "string", "minLength": 1},
+        "success_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "rollback": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

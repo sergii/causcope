@@ -1,0 +1,62 @@
+{
+  "schema_version": "0.1",
+  "kind": "database_read_model_recommendation_context",
+  "system_id": "shop-production",
+  "revision": {
+    "type": "git",
+    "value": "recommendation-proof-r1",
+    "repository": "https://github.com/sergii/causcope"
+  },
+  "incident_id": "INC-READ-MODEL-001",
+  "evaluation_time": "2026-09-15T00:02:00Z",
+  "recommendation_id": "recommendation.database.denormalize_read_model",
+  "subject_resource": "db.orders.prod",
+  "provider_instance": "provider.pgbot.orders-prod",
+  "workload": {
+    "query_object": "query:orders-summary",
+    "request_path": "GET /reports/orders-summary",
+    "read_frequency_per_minute": 120,
+    "query_contribution": "dominant"
+  },
+  "proposed_change": {
+    "type": "materialized_projection",
+    "description": "Maintain an orders summary projection keyed by account and reporting window instead of aggregating the full order set on every request."
+  },
+  "business_semantics": {
+    "source_of_truth": "orders and order_line_items",
+    "consistency_invariant": "The projection must equal the committed source-of-truth totals for the same account and reporting window after the allowed lag.",
+    "staleness_budget_ms": 5000
+  },
+  "maintenance": {
+    "update_strategy": "transactional_outbox",
+    "retry_semantics": "Projection events are keyed by source transaction and consumer processing is idempotent.",
+    "partial_failure_strategy": "Failed projection updates remain in the outbox and are retried without changing the source transaction outcome.",
+    "reconciliation_strategy": "A periodic source-versus-projection checksum detects drift and rebuilds affected windows."
+  },
+  "cost": {
+    "write_amplification": "One outbox row and one projection upsert per source transaction affecting the summary.",
+    "storage": "One compact aggregate row per account and reporting window.",
+    "operational_complexity": "Adds an outbox consumer, lag monitoring, drift detection, and rebuild tooling.",
+    "new_failure_modes": [
+      "projection consumer lag",
+      "projection drift",
+      "reconciliation backlog"
+    ]
+  },
+  "benefit": {
+    "basis": "measured",
+    "metric": "read_latency_ms",
+    "before": 380,
+    "after": 42,
+    "evidence_ref": "experiment.orders-summary.shadow-read.v1"
+  },
+  "verification": {
+    "experiment": "Shadow-read the source aggregation and the projection for the same requests, compare results, and measure end-to-end database read latency before routing production reads.",
+    "success_criteria": [
+      "p95 read latency is below 80 ms",
+      "projection mismatch rate is zero after the 5 second staleness budget",
+      "projection consumer lag remains below 5 seconds"
+    ],
+    "rollback": "Keep the source aggregation path available behind a feature flag and route reads back to it if latency, lag, or correctness criteria regress."
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.2.0",
+  "collected_at": "2026-09-15T00:00:00Z",
+  "fingerprint": "orders-summary-read-path",
+  "server": {
+    "version_num": 170004,
+    "version_text": "PostgreSQL 17.4",
+    "database": "orders",
+    "uptime_seconds": 86400,
+    "extensions": ["pg_stat_statements"],
+    "capabilities": ["pg_stat_statements"],
+    "has_pg_monitor": true
+  },
+  "window": {
+    "sample_seconds": 10,
+    "window_age_seconds": 600
+  },
+  "findings": [
+    {
+      "id": "query_slowdown",
+      "object": "query:orders-summary",
+      "severity": "warn",
+      "title": "orders summary query became slower",
+      "detail": "Mean database execution time increased from 120 ms to 380 ms against the stored baseline.",
+      "evidence": ["mean_exec_ms 120 -> 380"],
+      "impact": {
+        "score": 84,
+        "dimension": "latency",
+        "estimate": "3.17x slower",
+        "basis": "pg_stat_statements baseline comparison"
+      },
+      "confidence": 0.98,
+      "caveats": [
+        "This finding establishes database-side query slowdown, not that denormalization is the correct design change."
+      ]
+    }
+  ]
+}
