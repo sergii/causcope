@@ -61,9 +61,29 @@ def load_facts(path: Path) -> dict[str, Any]:
     if not isinstance(document.get("system_id"), str) or not document["system_id"]:
         raise ValueError("concrete system facts do not contain a system_id")
     revision = document.get("revision")
-    if not isinstance(revision, dict) or not isinstance(revision.get("value"), str) or not revision["value"]:
+    if (
+        not isinstance(revision, dict)
+        or not isinstance(revision.get("value"), str)
+        or not revision["value"]
+    ):
         raise ValueError("concrete system facts do not contain a revision value")
     return document
+
+
+def require_single_active_record_pool(document: dict[str, Any]) -> dict[str, Any]:
+    pools = [
+        entity
+        for entity in document.get("entities", [])
+        if entity.get("kind") == "resource_pool"
+        and entity.get("attributes", {}).get("technology") == "active_record"
+    ]
+    if len(pools) != 1:
+        raise ValueError(
+            "portable Rails runtime currently requires exactly one ActiveRecord resource pool; "
+            f"the static scan discovered {len(pools)}. Static discovery remains valid, but "
+            "runtime role/shard binding is not supported yet."
+        )
+    return pools[0]
 
 
 def managed_file_action(path: Path, content: str, *, force: bool) -> str:
@@ -129,6 +149,7 @@ def install(args: argparse.Namespace) -> int:
     ensure_rails_root(root)
     static_path = facts_path(root, args.static_facts)
     document = load_facts(static_path)
+    require_single_active_record_pool(document)
 
     runtime_content = RUNTIME_SOURCE.read_text(encoding="utf-8")
     runtime_path = root / RUNTIME_TARGET
@@ -172,9 +193,12 @@ def run_rails(args: argparse.Namespace) -> int:
     ensure_rails_root(root)
     static_path = facts_path(root, args.static_facts)
     document = load_facts(static_path)
+    require_single_active_record_pool(document)
 
     if not (root / INITIALIZER_TARGET).is_file() or not (root / RUNTIME_TARGET).is_file():
-        raise ValueError("portable Rails runtime is not installed; run `causcope rails install <rails-root>` first")
+        raise ValueError(
+            "portable Rails runtime is not installed; run `causcope rails install <rails-root>` first"
+        )
 
     actual_revision = args.revision or current_git_revision(root)
     if not actual_revision:
@@ -218,19 +242,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command_name", required=True)
 
-    install_parser = subparsers.add_parser("install", help="Install the portable runtime into a scanned Rails repository")
+    install_parser = subparsers.add_parser(
+        "install", help="Install the portable runtime into a scanned Rails repository"
+    )
     install_parser.add_argument("path", type=Path)
     install_parser.add_argument("--static-facts", type=Path)
-    install_parser.add_argument("--force", action="store_true", help="Replace conflicting generated runtime files")
-    install_parser.add_argument("--no-gemfile", action="store_true", help="Do not add OpenTelemetry dependencies to Gemfile")
+    install_parser.add_argument(
+        "--force", action="store_true", help="Replace conflicting generated runtime files"
+    )
+    install_parser.add_argument(
+        "--no-gemfile", action="store_true", help="Do not add OpenTelemetry dependencies to Gemfile"
+    )
     install_parser.set_defaults(handler=install)
 
-    run_parser = subparsers.add_parser("run", help="Launch a Rails process only when its revision matches the scanned contract")
+    run_parser = subparsers.add_parser(
+        "run", help="Launch a Rails process only when its revision matches the scanned contract"
+    )
     run_parser.add_argument("path", type=Path)
     run_parser.add_argument("--static-facts", type=Path)
     run_parser.add_argument("--revision", help="Explicit running revision; defaults to git HEAD")
-    run_parser.add_argument("--otel-endpoint", help=f"Override OTLP traces endpoint; defaults to existing env or {DEFAULT_OTLP_ENDPOINT}")
-    run_parser.add_argument("--sync-export", action="store_true", help="Use synchronous span export for deterministic local tests")
+    run_parser.add_argument(
+        "--otel-endpoint",
+        help=f"Override OTLP traces endpoint; defaults to existing env or {DEFAULT_OTLP_ENDPOINT}",
+    )
+    run_parser.add_argument(
+        "--sync-export",
+        action="store_true",
+        help="Use synchronous span export for deterministic local tests",
+    )
     run_parser.add_argument("command", nargs="+", help="Application command; place it after `--`")
     run_parser.set_defaults(handler=run_rails)
     return parser
