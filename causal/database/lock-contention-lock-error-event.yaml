@@ -1,0 +1,11 @@
+id: causal.database.lock_contention.lock_error_event
+kind: causal_edge
+source: hypothesis.database.lock_contention
+target: observation.database.lock_error_event
+relation: causes
+strength: strong
+conditions:
+  - The inspected source reports lock acquisition failure, lock timeout, or an equivalent lock-conflict error for the affected operation or investigation window.
+explanation: Database lock contention can surface as an explicit lock acquisition or timeout error when an operation cannot obtain a conflicting lock within its allowed wait.
+limitations:
+  - Absence of a matching log event does not prove lock contention is impossible when the inspected source is incomplete, sampled, or does not emit lock errors.
