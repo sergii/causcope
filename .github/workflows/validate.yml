@@ -81,6 +81,9 @@ jobs:
       - name: Validate instrument router
         run: python scripts/test_instrument_router.py
 
+      - name: Validate routing-aware MCP resources
+        run: python scripts/test_routing_mcp_server.py
+
       - name: Validate pgbot and OpenTelemetry composition
         run: python scripts/test_pgbot_otel_composition.py
 
