@@ -72,6 +72,9 @@ jobs:
       - name: Validate pgbot diagnostic adapter
         run: python scripts/test_pgbot_adapter.py
 
+      - name: Validate pgbot autonomous provider
+        run: python scripts/test_pgbot_autonomous_provider.py
+
       - name: Validate pgbot and OpenTelemetry composition
         run: python scripts/test_pgbot_otel_composition.py
 
