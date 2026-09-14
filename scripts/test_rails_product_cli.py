@@ -62,6 +62,36 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="causcope-rails-product-") as temporary:
         temporary_root = Path(temporary)
 
+        multi_pool_app = temporary_root / "multi-pool-app"
+        multi_pool_gemfile = prepare_app(multi_pool_app)
+        (multi_pool_app / "config" / "database.yml").write_text(
+            "default: &default\n"
+            "  adapter: postgresql\n"
+            "  pool: 5\n"
+            "production:\n"
+            "  primary:\n"
+            "    <<: *default\n"
+            "    database: primary\n"
+            "  replica:\n"
+            "    <<: *default\n"
+            "    database: replica\n"
+            "    replica: true\n",
+            encoding="utf-8",
+        )
+        scan_app(
+            multi_pool_app,
+            system_id="multi-pool-product",
+            revision="revision-multi-pool",
+        )
+        multi_gemfile_before = multi_pool_gemfile.read_text(encoding="utf-8")
+        unsupported_runtime = run("rails", "install", str(multi_pool_app), check=False)
+        assert unsupported_runtime.returncode == 2
+        assert "requires exactly one ActiveRecord resource pool" in unsupported_runtime.stderr
+        assert "discovered 2" in unsupported_runtime.stderr
+        assert not (multi_pool_app / "lib" / "causcope" / "runtime.rb").exists()
+        assert not (multi_pool_app / "config" / "initializers" / "causcope.rb").exists()
+        assert multi_pool_gemfile.read_text(encoding="utf-8") == multi_gemfile_before
+
         conflict_app = temporary_root / "atomic-conflict-app"
         conflict_gemfile = prepare_app(conflict_app)
         scan_app(conflict_app, system_id="atomic-conflict", revision="revision-atomic")
