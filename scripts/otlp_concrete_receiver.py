@@ -71,6 +71,28 @@ def derive_overlaps(executions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return overlaps
 
 
+def protobuf_request_to_otlp_json(request: ExportTraceServiceRequest) -> dict[str, Any]:
+    payload = MessageToDict(request, preserving_proto_field_name=False)
+    resource_json = payload.get("resourceSpans", [])
+    for resource_index, resource_span in enumerate(request.resource_spans):
+        if resource_index >= len(resource_json):
+            continue
+        scope_json = resource_json[resource_index].get("scopeSpans", [])
+        for scope_index, scope_span in enumerate(resource_span.scope_spans):
+            if scope_index >= len(scope_json):
+                continue
+            spans_json = scope_json[scope_index].get("spans", [])
+            for span_index, span in enumerate(scope_span.spans):
+                if span_index >= len(spans_json):
+                    continue
+                rendered = spans_json[span_index]
+                rendered["traceId"] = span.trace_id.hex()
+                rendered["spanId"] = span.span_id.hex()
+                if span.parent_span_id:
+                    rendered["parentSpanId"] = span.parent_span_id.hex()
+    return payload
+
+
 def decode_otlp_payload(body: bytes, content_type: str) -> tuple[dict[str, Any], str]:
     if content_type == "application/json":
         try:
@@ -87,7 +109,7 @@ def decode_otlp_payload(body: bytes, content_type: str) -> tuple[dict[str, Any],
             request.ParseFromString(body)
         except Exception as exc:  # protobuf raises implementation-specific decode errors
             raise ValueError("request body must be a valid OTLP ExportTraceServiceRequest") from exc
-        return MessageToDict(request, preserving_proto_field_name=False), "protobuf"
+        return protobuf_request_to_otlp_json(request), "protobuf"
 
     raise UnsupportedMediaType(
         "OTLP receiver supports application/json and application/x-protobuf, "
