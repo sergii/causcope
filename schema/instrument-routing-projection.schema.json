@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/instrument-routing-projection.schema.json",
+  "title": "Causcope instrument routing projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "incident_id", "evidence_revision", "routes"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "instrument_routing_projection"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "evidence_revision": {"type": "integer", "minimum": 0},
+    "routes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/route"}
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entities": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "boundaries": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "attributes": {"type": "object", "additionalProperties": {"type": "string"}}
+      },
+      "minProperties": 1
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "execution_mode"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["host_executor", "diagnostic_provider"]},
+        "execution_mode": {"enum": ["session", "direct"]}
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "target", "probe_id", "decision", "agent_action"],
+      "properties": {
+        "scope": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/scope"}]},
+        "target": {"type": "string", "minLength": 1},
+        "probe_id": {"type": "string", "minLength": 1},
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["selected_instrument", "stop_reason", "selection_reason"],
+          "properties": {
+            "selected_instrument": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/instrument"}]},
+            "stop_reason": {"type": ["string", "null"]},
+            "selection_reason": {"type": ["string", "null"]}
+          }
+        },
+        "agent_action": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "mcp_execution_available", "reason"],
+          "properties": {
+            "kind": {"enum": ["begin_host_probe_session", "use_external_instrument", "stop"]},
+            "mcp_execution_available": {"type": "boolean"},
+            "reason": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    }
+  }
+}
