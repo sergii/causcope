@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/diagnostic-provider-capabilities.schema.json",
+  "title": "Causcope diagnostic provider capabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "providers"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "diagnostic_provider_capabilities"},
+    "providers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/provider"}
+    }
+  },
+  "$defs": {
+    "concept_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason"],
+      "properties": {
+        "state": {"enum": ["available", "unavailable", "unknown"]},
+        "reason": {"type": ["string", "null"]}
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe", "requires", "mapped_observations"],
+      "properties": {
+        "probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "title", "risk"],
+          "properties": {
+            "id": {"$ref": "#/$defs/concept_id"},
+            "title": {"type": "string", "minLength": 1},
+            "risk": {"const": "read_only"}
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "mapped_observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "instrument",
+        "transport",
+        "scope_mode",
+        "scope",
+        "availability",
+        "contract",
+        "evidence_semantics",
+        "probes"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/concept_id"},
+        "instrument": {"type": "string", "minLength": 1},
+        "transport": {"type": "string", "minLength": 1},
+        "scope_mode": {"enum": ["fixed_exact"]},
+        "scope": {"$ref": "#/$defs/scope"},
+        "availability": {"$ref": "#/$defs/availability"},
+        "contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "accepted_schema_versions"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "accepted_schema_versions": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"type": "string", "minLength": 1},
+              "uniqueItems": true
+            }
+          }
+        },
+        "evidence_semantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "positive_findings_only",
+            "missing_positive_finding",
+            "suppressed_positive_finding",
+            "provenance_preserved",
+            "causal_authority"
+          ],
+          "properties": {
+            "positive_findings_only": {"type": "boolean"},
+            "missing_positive_finding": {"const": "insufficient_evidence"},
+            "suppressed_positive_finding": {"const": "insufficient_evidence"},
+            "provenance_preserved": {"type": "boolean"},
+            "causal_authority": {"type": "boolean"}
+          }
+        },
+        "probes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/probe"}
+        }
+      }
+    }
+  }
+}

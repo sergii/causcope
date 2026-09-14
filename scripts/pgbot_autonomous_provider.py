@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -28,13 +30,34 @@ PGBOT_AUTONOMOUS_PROBE_ALLOWLIST = {
 ContextSupplier = Callable[[], dict[str, Any]]
 
 
-def file_context_supplier(path: Path) -> ContextSupplier:
-    """Create a supplier for an already-produced pgbot JSON report."""
+@dataclass(frozen=True)
+class FileContextSupplier:
+    """Read an already-produced pgbot JSON report without invoking pgbot."""
 
-    def supply() -> dict[str, Any]:
-        return load_context(path)
+    path: Path
 
-    return supply
+    def __call__(self) -> dict[str, Any]:
+        return load_context(self.path)
+
+    def availability(self, adapter: dict[str, Any]) -> tuple[bool, str | None]:
+        if not self.path.exists():
+            return False, f"pgbot report does not exist: {self.path}"
+        if not self.path.is_file():
+            return False, f"pgbot report is not a file: {self.path}"
+        if not os.access(self.path, os.R_OK):
+            return False, f"pgbot report is not readable: {self.path}"
+        try:
+            context = self()
+            validate_context_contract(adapter, context)
+        except (OSError, ValueError) as exc:
+            return False, str(exc)
+        return True, None
+
+
+def file_context_supplier(path: Path) -> FileContextSupplier:
+    """Create an availability-aware supplier for an existing pgbot JSON report."""
+
+    return FileContextSupplier(path)
 
 
 class PgbotAutonomousProbeProvider:
@@ -45,13 +68,13 @@ class PgbotAutonomousProbeProvider:
         *,
         adapter: dict[str, Any],
         concepts: dict[str, dict[str, Any]],
-        incident_id: str,
         context_supplier: ContextSupplier,
+        incident_id: str | None = None,
         source_uri: str = "pgbot://inspect",
         allowlist: set[str] | None = None,
     ) -> None:
-        if not incident_id:
-            raise ValueError("pgbot autonomous provider requires incident_id")
+        if incident_id is not None and not incident_id:
+            raise ValueError("pgbot autonomous provider incident_id must not be empty")
         validate_adapter_references(adapter, concepts)
 
         self.adapter = copy.deepcopy(adapter)
@@ -109,6 +132,74 @@ class PgbotAutonomousProbeProvider:
             if isinstance(mapping, dict) and mapping.get("observation") in produced
         ]
 
+    def _availability(self) -> dict[str, str | None]:
+        checker = getattr(self.context_supplier, "availability", None)
+        if not callable(checker):
+            return {
+                "state": "unknown",
+                "reason": (
+                    "context supplier does not expose a non-invasive availability check; "
+                    "discovery will not invoke an opaque supplier"
+                ),
+            }
+        try:
+            available, reason = checker(self.adapter)
+        except (OSError, ValueError) as exc:
+            return {"state": "unavailable", "reason": str(exc)}
+        if available:
+            return {"state": "available", "reason": None}
+        return {
+            "state": "unavailable",
+            "reason": reason or "provider transport is unavailable",
+        }
+
+    def capability_projection(self) -> dict[str, Any]:
+        probes: list[dict[str, Any]] = []
+        for probe_id in sorted(self._supported_probe_ids):
+            probe = self.concepts[probe_id]
+            mapped_observations = sorted(
+                {
+                    mapping["observation"]
+                    for mapping in self._relevant_mappings(probe_id)
+                }
+            )
+            probes.append(
+                {
+                    "probe": {
+                        "id": probe_id,
+                        "title": probe.get("title", probe_id),
+                        "risk": "read_only",
+                    },
+                    "requires": sorted(
+                        capability
+                        for capability in probe.get("requires", [])
+                        if isinstance(capability, str)
+                    ),
+                    "mapped_observations": mapped_observations,
+                }
+            )
+
+        return {
+            "id": PGBOT_PROVIDER_ID,
+            "instrument": "pgbot",
+            "transport": "context_supplier",
+            "scope_mode": "fixed_exact",
+            "scope": copy.deepcopy(self.adapter_scope),
+            "availability": self._availability(),
+            "contract": {
+                "name": "pgbot_json",
+                "accepted_schema_versions": sorted(self.adapter["accepted_schema_versions"]),
+            },
+            "evidence_semantics": {
+                "positive_findings_only": True,
+                "missing_positive_finding": "insufficient_evidence",
+                "suppressed_positive_finding": "insufficient_evidence",
+                "provenance_preserved": True,
+                "causal_authority": False,
+            },
+            "probes": probes,
+        }
+
     def _validate_scope(self, scope: dict[str, Any] | None) -> dict[str, Any]:
         normalized = normalize_scope(scope, self.concepts)
         if scope_key(normalized) != scope_key(self.adapter_scope):
@@ -124,6 +215,8 @@ class PgbotAutonomousProbeProvider:
         target: str,
         scope: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        if self.incident_id is None:
+            raise ValueError("pgbot autonomous provider execution requires incident_id")
         if probe_id not in self._supported_probe_ids:
             raise ValueError(f"unsupported pgbot autonomous probe: {probe_id}")
 
