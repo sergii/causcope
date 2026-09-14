@@ -66,6 +66,12 @@ jobs:
       - name: Validate OpenTelemetry trace adapter
         run: python scripts/test_opentelemetry_trace_adapter.py
 
+      - name: Validate pgbot diagnostic adapter
+        run: python scripts/test_pgbot_adapter.py
+
+      - name: Validate pgbot and OpenTelemetry composition
+        run: python scripts/test_pgbot_otel_composition.py
+
       - name: Validate OTLP HTTP receiver
         run: python scripts/test_otlp_http_receiver.py
 
