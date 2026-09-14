@@ -30,7 +30,11 @@ def validate_instrument_routing_projection(document: dict[str, Any]) -> None:
         )
 
 
-def _route_agent_action(decision: dict[str, Any]) -> dict[str, Any]:
+def _route_agent_action(
+    decision: dict[str, Any],
+    *,
+    external_mcp_execution_enabled: bool,
+) -> dict[str, Any]:
     selection = decision.get("selection")
     if not isinstance(selection, dict):
         return {
@@ -49,12 +53,22 @@ def _route_agent_action(decision: dict[str, Any]) -> dict[str, Any]:
             ),
         }
 
+    if external_mcp_execution_enabled and instrument.get("execution_mode") == "direct":
+        return {
+            "kind": "use_external_instrument",
+            "mcp_execution_available": True,
+            "reason": (
+                "selected external diagnostic provider is safe, exact-scope compatible, direct-execution "
+                "capable, and the revision-bound routed MCP mutation is enabled"
+            ),
+        }
+
     return {
         "kind": "use_external_instrument",
         "mcp_execution_available": False,
         "reason": (
             "selected external diagnostic provider is safe and scope-compatible, but direct provider "
-            "execution is not exposed as an MCP mutation in this slice"
+            "execution is not enabled as an MCP mutation"
         ),
     }
 
@@ -62,6 +76,8 @@ def _route_agent_action(decision: dict[str, Any]) -> dict[str, Any]:
 def build_instrument_routing_projection(
     snapshot: dict[str, Any],
     router: InstrumentRouter,
+    *,
+    external_mcp_execution_enabled: bool = False,
 ) -> dict[str, Any]:
     if snapshot.get("kind") != "diagnosis_snapshot":
         raise ValueError("instrument routing projection requires a diagnosis_snapshot")
@@ -112,7 +128,10 @@ def build_instrument_routing_projection(
                             selection.get("reason") if isinstance(selection, dict) else None
                         ),
                     },
-                    "agent_action": _route_agent_action(decision),
+                    "agent_action": _route_agent_action(
+                        decision,
+                        external_mcp_execution_enabled=external_mcp_execution_enabled,
+                    ),
                 }
             )
 
@@ -138,11 +157,6 @@ def overlay_agent_plan_routing(
     plan: dict[str, Any],
     routing_projection: dict[str, Any],
 ) -> dict[str, Any]:
-    """Add routing information without changing semantic probe ranking.
-
-    Existing host MCP operations remain authoritative.  External provider selection
-    is surfaced as a separate route and never masquerades as an MCP mutation tool.
-    """
     if plan.get("kind") != "agent_plan":
         raise ValueError("routing overlay requires an agent_plan")
     if routing_projection.get("incident_id") != plan.get("incident_id"):
