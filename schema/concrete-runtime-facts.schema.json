@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/concrete-runtime-facts.schema.json",
+  "title": "Causcope concrete runtime facts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "executions",
+    "overlaps"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "concrete_runtime_facts"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "executions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/execution"}
+    },
+    "overlaps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/overlap"}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "execution_id": {
+      "type": "string",
+      "pattern": "^execution\\.opentelemetry\\.[a-f0-9]{16}$"
+    },
+    "code_symbol": {
+      "type": "string",
+      "pattern": "^code:[^\\s]+$"
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code_symbol",
+        "start_time",
+        "end_time",
+        "duration_ms",
+        "trace_id",
+        "span_id",
+        "source"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/execution_id"},
+        "code_symbol": {"$ref": "#/$defs/code_symbol"},
+        "start_time": {"type": "string", "format": "date-time"},
+        "end_time": {"type": "string", "format": "date-time"},
+        "duration_ms": {"type": "number", "minimum": 0},
+        "trace_id": {"type": "string", "minLength": 1},
+        "span_id": {"type": "string", "minLength": 1},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name"],
+          "properties": {
+            "type": {"const": "trace"},
+            "name": {"const": "opentelemetry"},
+            "uri": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "overlap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "left_execution",
+        "right_execution",
+        "left_code_symbol",
+        "right_code_symbol",
+        "overlap_ms"
+      ],
+      "properties": {
+        "left_execution": {"$ref": "#/$defs/execution_id"},
+        "right_execution": {"$ref": "#/$defs/execution_id"},
+        "left_code_symbol": {"$ref": "#/$defs/code_symbol"},
+        "right_code_symbol": {"$ref": "#/$defs/code_symbol"},
+        "overlap_ms": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}
