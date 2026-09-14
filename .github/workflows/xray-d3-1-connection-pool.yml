@@ -1,0 +1,102 @@
+name: Validate D3.1 connection-pool X-Ray
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "xray/profiles/d3-1-connection-pool.yaml"
+      - "scripts/xray_engine.py"
+      - "scripts/run_lab.py"
+      - "schema/xray-profile.schema.json"
+      - "schema/empirical-evidence.schema.json"
+      - "experiments/database/connection-pool-exhaustion-python-postgres.yaml"
+      - "lab/database-connection-pool/**"
+      - "RFC/0054-third-xray-mechanism-connection-pool.md"
+      - ".github/workflows/xray-d3-1-connection-pool.yml"
+  pull_request:
+    paths:
+      - "xray/profiles/d3-1-connection-pool.yaml"
+      - "scripts/xray_engine.py"
+      - "scripts/run_lab.py"
+      - "schema/xray-profile.schema.json"
+      - "schema/empirical-evidence.schema.json"
+      - "experiments/database/connection-pool-exhaustion-python-postgres.yaml"
+      - "lab/database-connection-pool/**"
+      - "RFC/0054-third-xray-mechanism-connection-pool.md"
+      - ".github/workflows/xray-d3-1-connection-pool.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Run real D3.1 empirical experiment
+        run: |
+          python scripts/run_lab.py experiments/database/connection-pool-exhaustion-python-postgres.yaml
+          cp lab-results/experiment.database.connection_pool_exhaustion.python_postgres.json /tmp/d3-1-evidence.json
+
+      - name: Run declarative D3.1 X-Ray profile
+        run: |
+          python scripts/xray_engine.py \
+            --profile xray/profiles/d3-1-connection-pool.yaml \
+            --input evidence=/tmp/d3-1-evidence.json \
+            --require-state CAUSAL_DIAGNOSIS_CONFIRMED \
+            --output /tmp/d3-1-generic.json
+
+      - name: Verify third-family proof and fail-closed progression
+        run: |
+          python - <<'PY'
+          import copy
+          import json
+          from pathlib import Path
+
+          import yaml
+
+          from scripts.xray_engine import project
+
+          def load_json(path):
+              return json.loads(Path(path).read_text())
+
+          profile = yaml.safe_load(Path('xray/profiles/d3-1-connection-pool.yaml').read_text())
+          evidence = load_json('/tmp/d3-1-evidence.json')
+          result = load_json('/tmp/d3-1-generic.json')
+
+          assert result['epistemic_state'] == 'CAUSAL_DIAGNOSIS_CONFIRMED'
+          assert result['catalog_code'] == 'D3.1'
+          assert result['hypothesis'] == 'hypothesis.database.connection_pool_exhaustion'
+
+          no_explanation = copy.deepcopy(evidence)
+          no_explanation['assertions']['checkout_wait_explains_request_delta'] = False
+          assert project(profile, {'evidence': no_explanation})['epistemic_state'] == 'DATABASE_CAPACITY_DISTINGUISHED'
+
+          no_direct_control = copy.deepcopy(evidence)
+          no_direct_control['assertions']['database_still_accepts_direct_connections'] = False
+          assert project(profile, {'evidence': no_direct_control})['epistemic_state'] == 'CHECKOUT_WAIT_OBSERVED'
+
+          no_saturation = copy.deepcopy(evidence)
+          no_saturation['assertions']['application_pool_was_at_capacity'] = False
+          assert project(profile, {'evidence': no_saturation})['epistemic_state'] == 'PRECONDITIONS_PRESENT'
+
+          print(json.dumps({
+              'catalog_code': result['catalog_code'],
+              'state': result['epistemic_state'],
+              'tamper_checkout_explanation': 'rejected_confirmation',
+              'tamper_direct_database_control': 'rejected_database_distinction',
+              'tamper_pool_saturation': 'rejected_saturation',
+          }, indent=2, sort_keys=True))
+          PY
