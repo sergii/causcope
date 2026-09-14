@@ -10,6 +10,7 @@
     "system_id",
     "revision",
     "incident_id",
+    "evaluation_time",
     "recommendation_id",
     "subject_resource",
     "provider_instance",
@@ -30,6 +31,7 @@
       }
     },
     "incident_id": {"type": "string", "minLength": 1},
+    "evaluation_time": {"type": "string", "format": "date-time"},
     "recommendation_id": {"const": "recommendation.database.denormalize_read_model"},
     "subject_resource": {"type": "string", "minLength": 1},
     "provider_instance": {"type": "string", "minLength": 1},
