@@ -10,9 +10,14 @@ on:
       - "scripts/validate_testbed.py"
       - "scripts/structured_log_evidence.py"
       - "scripts/test_structured_log_evidence.py"
+      - "scripts/autonomous_investigation.py"
+      - "scripts/test_autonomous_investigation.py"
       - "knowledge/client/**"
+      - "knowledge/database/**"
       - "knowledge/observations/http-*.yaml"
+      - "knowledge/observations/database-lock-error-event.yaml"
       - "knowledge/probes/compare-client-cohorts.yaml"
+      - "knowledge/probes/inspect-database-lock-errors.yaml"
       - "causal/client/**"
       - "causal/database/**"
       - "vocabulary/capabilities.yaml"
@@ -41,31 +46,56 @@ jobs:
       - name: Validate structured-log evidence adapter
         run: python scripts/test_structured_log_evidence.py
 
+      - name: Validate autonomous read-only loop
+        run: python scripts/test_autonomous_investigation.py
+
       - name: Build and start happy path
         run: python testbed/shop/testbed.py up
 
       - name: Verify happy path
         run: python testbed/shop/testbed.py smoke
 
-      - name: Verify SQLite write-lock incident and Causcope diagnosis
+      - name: Reset reference system before incidents
+        run: |
+          python testbed/shop/testbed.py down
+          python testbed/shop/testbed.py up
+
+      - name: Verify SQLite incident through autonomous Causcope loop
         run: |
           python testbed/shop/testbed.py scenario start sqlite-write-lock --duration 20
           python testbed/shop/testbed.py scenario verify sqlite-write-lock
-          python testbed/shop/testbed.py causcope --incident-id incident.ci.sqlite-lock --workspace /tmp/causcope-sqlite --json > /tmp/sqlite-summary.json
+          python testbed/shop/testbed.py causcope --autonomous --max-steps 4 --incident-id incident.ci.sqlite-lock --workspace /tmp/causcope-sqlite --json > /tmp/sqlite-summary.json
           python - <<'PY'
           import json
           from pathlib import Path
 
           evidence = json.loads(Path('/tmp/causcope-sqlite/runtime-evidence.json').read_text())
-          observations = {item['observation'] for item in evidence['instances'] if item['state'] == 'observed'}
-          assert 'observation.http.request_failure' in observations
-          assert 'observation.database.lock_wait_event' in observations
+          observed = [item for item in evidence['instances'] if item['state'] == 'observed']
+          assert any(item['observation'] == 'observation.http.request_failure' for item in observed)
+          lock = next(item for item in observed if item['observation'] == 'observation.database.lock_error_event')
+          assert lock['source']['type'] == 'probe'
+          assert lock['source']['name'] == 'probe.database.inspect_lock_error_events'
+          assert lock['labels']['scope_correlation'] == 'request_metadata'
+
+          run = json.loads(Path('/tmp/causcope-sqlite/autonomous-run.json').read_text())
+          assert any(
+              step['probe_id'] == 'probe.database.inspect_lock_error_events' and step['status'] == 'completed'
+              for step in run['steps']
+          )
+          assert any(
+              step['probe_id'] == 'probe.http.compare_client_cohorts' and step['status'] == 'insufficient_evidence'
+              for step in run['steps']
+          )
 
           summary = json.loads(Path('/tmp/sqlite-summary.json').read_text())
-          lock = next(item for item in summary['diagnoses'] if item['target'] == 'observation.database.lock_wait_event')
-          assert lock['top_hypothesis'] == 'hypothesis.database.lock_contention'
-          request = next(item for item in summary['diagnoses'] if item['target'] == 'observation.http.request_failure' and item['candidate_count'] >= 2)
-          assert request['next_probe'] is not None
+          failing = next(
+              item for item in summary['diagnoses']
+              if item['target'] == 'observation.http.request_failure'
+              and item['scope']['attributes'].get('client_platform') == 'web'
+              and item['scope']['attributes'].get('path') == '/orders'
+          )
+          assert failing['top_hypothesis'] == 'hypothesis.database.lock_contention'
+          assert summary['autonomous']['final_evidence_revision'] >= 2
           PY
           python testbed/shop/testbed.py scenario stop sqlite-write-lock
 
@@ -74,27 +104,48 @@ jobs:
           python testbed/shop/testbed.py down
           python testbed/shop/testbed.py up
 
-      - name: Verify mobile cohort incident and Causcope diagnosis
+      - name: Verify mobile incident through autonomous Causcope loop
         run: |
           python testbed/shop/testbed.py scenario start mobile-bad-payload
           python testbed/shop/testbed.py scenario verify mobile-bad-payload
           sleep 3
-          python testbed/shop/testbed.py causcope --incident-id incident.ci.mobile-payload --workspace /tmp/causcope-mobile --json > /tmp/mobile-summary.json
+          python testbed/shop/testbed.py causcope --autonomous --max-steps 4 --incident-id incident.ci.mobile-payload --workspace /tmp/causcope-mobile --json > /tmp/mobile-summary.json
           python - <<'PY'
           import json
           from pathlib import Path
 
           evidence = json.loads(Path('/tmp/causcope-mobile/runtime-evidence.json').read_text())
-          skew = [
+          ios_scope = {
+              'method': 'POST',
+              'path': '/orders',
+              'client_platform': 'iOS',
+              'app_version': '7.42.0',
+          }
+          scoped = [
               item for item in evidence['instances']
-              if item['observation'] == 'observation.http.client_cohort_failure_skew' and item['state'] == 'observed'
+              if item.get('scope', {}).get('attributes') == ios_scope
           ]
-          assert skew
-          assert 'iOS@7.42.0' in {item['labels']['failing_cohort'] for item in skew}
+          skew = next(item for item in scoped if item['observation'] == 'observation.http.client_cohort_failure_skew')
+          assert skew['state'] == 'observed'
+          assert skew['labels']['failing_cohort'] == 'iOS@7.42.0'
+          assert skew['source']['type'] == 'probe'
+          lock = next(item for item in scoped if item['observation'] == 'observation.database.lock_error_event')
+          assert lock['state'] == 'absent'
+          assert lock['source']['type'] == 'probe'
+
+          run = json.loads(Path('/tmp/causcope-mobile/autonomous-run.json').read_text())
+          completed = {step['probe_id'] for step in run['steps'] if step['status'] == 'completed'}
+          assert 'probe.http.compare_client_cohorts' in completed
+          assert 'probe.database.inspect_lock_error_events' in completed
 
           summary = json.loads(Path('/tmp/mobile-summary.json').read_text())
-          cohort = next(item for item in summary['diagnoses'] if item['target'] == 'observation.http.client_cohort_failure_skew')
-          assert cohort['top_hypothesis'] == 'hypothesis.client.payload_contract_mismatch'
+          failing = next(
+              item for item in summary['diagnoses']
+              if item['target'] == 'observation.http.request_failure'
+              and item['scope']['attributes'] == ios_scope
+          )
+          assert failing['top_hypothesis'] == 'hypothesis.client.payload_contract_mismatch'
+          assert summary['autonomous']['final_evidence_revision'] >= 3
           PY
           python testbed/shop/testbed.py scenario stop mobile-bad-payload
 
