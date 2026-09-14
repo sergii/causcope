@@ -8,11 +8,16 @@ on:
       - "scripts/verify_rubydex_concrete_system_extractor.py"
       - "scripts/rails_concrete_system_enrichment.py"
       - "scripts/verify_rails_deadlock_enrichment.py"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/d2_2_xray_projection.py"
+      - "scripts/verify_d2_2_runtime_projection.py"
       - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
       - "scripts/concrete_system_facts.py"
       - "lab/rubydex-concrete-system/**"
       - "RFC/0047-rubydex-concrete-system-extractor.md"
       - "RFC/0048-rails-deadlock-static-enrichment.md"
+      - "RFC/0049-concrete-runtime-execution-projection.md"
       - ".github/workflows/rubydex-concrete-system.yml"
   pull_request:
     paths:
@@ -20,11 +25,16 @@ on:
       - "scripts/verify_rubydex_concrete_system_extractor.py"
       - "scripts/rails_concrete_system_enrichment.py"
       - "scripts/verify_rails_deadlock_enrichment.py"
+      - "scripts/otel_concrete_runtime_facts.py"
+      - "scripts/d2_2_xray_projection.py"
+      - "scripts/verify_d2_2_runtime_projection.py"
       - "schema/concrete-system-facts.schema.json"
+      - "schema/concrete-runtime-facts.schema.json"
       - "scripts/concrete_system_facts.py"
       - "lab/rubydex-concrete-system/**"
       - "RFC/0047-rubydex-concrete-system-extractor.md"
       - "RFC/0048-rails-deadlock-static-enrichment.md"
+      - "RFC/0049-concrete-runtime-execution-projection.md"
       - ".github/workflows/rubydex-concrete-system.yml"
 
 permissions:
@@ -96,3 +106,43 @@ jobs:
 
       - name: Verify D2.2 structural precondition without runtime overclaim
         run: python scripts/verify_rails_deadlock_enrichment.py /tmp/rails-facts-a.json
+
+      - name: Project revision-bound OTel executions twice
+        run: |
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/rails-facts-a.json \
+            --otlp lab/rubydex-concrete-system/runtime/overlapping-code-paths.otlp.json \
+            --incident-id INC-D2-2-XRAY \
+            --source-uri fixture:overlapping-code-paths \
+            --output /tmp/runtime-facts-a.json
+
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/rails-facts-a.json \
+            --otlp lab/rubydex-concrete-system/runtime/overlapping-code-paths.otlp.json \
+            --incident-id INC-D2-2-XRAY \
+            --source-uri fixture:overlapping-code-paths \
+            --output /tmp/runtime-facts-b.json
+
+          diff -u /tmp/runtime-facts-a.json /tmp/runtime-facts-b.json
+
+      - name: Derive D2.2 X-Ray runtime risk twice
+        run: |
+          python scripts/d2_2_xray_projection.py \
+            --static-facts /tmp/rails-facts-a.json \
+            --runtime-facts /tmp/runtime-facts-a.json \
+            --output /tmp/d2-2-xray-a.json
+
+          python scripts/d2_2_xray_projection.py \
+            --static-facts /tmp/rails-facts-a.json \
+            --runtime-facts /tmp/runtime-facts-a.json \
+            --output /tmp/d2-2-xray-b.json
+
+          diff -u /tmp/d2-2-xray-a.json /tmp/d2-2-xray-b.json
+
+      - name: Verify revision binding and D2.2 epistemic boundary
+        run: |
+          python scripts/verify_d2_2_runtime_projection.py \
+            --static-facts /tmp/rails-facts-a.json \
+            --runtime-facts /tmp/runtime-facts-a.json \
+            --projection /tmp/d2-2-xray-a.json \
+            --otlp lab/rubydex-concrete-system/runtime/overlapping-code-paths.otlp.json
