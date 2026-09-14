@@ -107,10 +107,14 @@ jobs:
 
       - name: Release lock-contention workload
         run: |
+          docker compose -f lab/pgbot-live/compose.yml exec -T db \
+            psql -U causcope_admin -d causcope -v ON_ERROR_STOP=1 -c \
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = 'causcope_app' AND pid <> pg_backend_pid();"
+
           docker compose -f lab/pgbot-live/compose.yml stop -t 1 contention
 
           count=4
-          for attempt in $(seq 1 20); do
+          for attempt in $(seq 1 10); do
             count="$(docker compose -f lab/pgbot-live/compose.yml exec -T db \
               psql -U causcope_admin -d causcope -Atc \
               "SELECT count(*) FROM pg_stat_activity WHERE usename = 'causcope_app';")"
