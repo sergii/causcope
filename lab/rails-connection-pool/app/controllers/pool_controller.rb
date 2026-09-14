@@ -1,5 +1,6 @@
 class PoolController < ApplicationController
   CODE_SYMBOL = "code:PoolController#work()"
+  MULTI_POOL_CODE_SYMBOL = "code:PoolController#multi_pool()"
 
   def health
     render json: { ok: true, pool_size: pool.stat.fetch(:size) }
@@ -48,6 +49,33 @@ class PoolController < ApplicationController
       request_latency_ms: request_latency_ms,
       dependency_latency_ms: dependency_latency_ms,
       dependency_backend_id: dependency_backend_id
+    }
+  end
+
+  def multi_pool
+    span = OpenTelemetry::Trace.current_span
+    raise "Causcope portable runtime span is not recording" unless span.recording?
+
+    backend_ids = {}
+
+    ApplicationRecord.connected_to(role: :writing) do
+      ApplicationRecord.connection_pool.with_connection do |connection|
+        backend_ids[:writing] = connection.select_value("SELECT pg_backend_pid()").to_s
+      end
+    end
+
+    ApplicationRecord.connected_to(role: :reading, prevent_writes: true) do
+      ApplicationRecord.connection_pool.with_connection do |connection|
+        backend_ids[:reading] = connection.select_value("SELECT pg_backend_pid()").to_s
+      end
+    end
+
+    render json: {
+      code_symbol: MULTI_POOL_CODE_SYMBOL,
+      trace_id: span.context.hex_trace_id,
+      span_id: span.context.hex_span_id,
+      writing_backend_id: backend_ids.fetch(:writing),
+      reading_backend_id: backend_ids.fetch(:reading)
     }
   end
 
