@@ -23,6 +23,8 @@ services:
       DB_NAME: causcope
       APP_PORT: "8080"
       POOL_SIZE: "1"
+      CAUSCOPE_SYSTEM_ID: "${CAUSCOPE_SYSTEM_ID:-database-connection-pool-app}"
+      CAUSCOPE_REVISION: "${CAUSCOPE_REVISION:-fixture-revision}"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2).read()"]
       interval: 1s
@@ -39,6 +41,30 @@ services:
       APP_HOST: app
       APP_PORT: "8080"
       HOLD_MS: "300"
+    depends_on:
+      app:
+        condition: service_healthy
+
+  concrete-probe:
+    image: causcope-database-connection-pool-lab
+    command: ["python", "/lab/concrete_probe.py"]
+    environment:
+      APP_HOST: app
+      APP_PORT: "8080"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: causcope
+      DB_PASSWORD: causcope
+      DB_NAME: causcope
+      HOLD_MS: "500"
+      CAUSCOPE_SYSTEM_ID: "${CAUSCOPE_SYSTEM_ID:-database-connection-pool-app}"
+      CAUSCOPE_REVISION: "${CAUSCOPE_REVISION:-fixture-revision}"
+      CAUSCOPE_REPOSITORY: "${CAUSCOPE_REPOSITORY:-https://github.com/sergii/causcope}"
+      CAUSCOPE_INCIDENT_ID: "${CAUSCOPE_INCIDENT_ID:-INC-D3-1-CONCRETE}"
+      CAUSCOPE_CODE_SYMBOL: "code:Handler#do_GET()"
+      CAUSCOPE_POOL_ID: "pool:application_database"
+      CAUSCOPE_DEPENDENCY_ID: "dependency:postgresql"
+      CAUSCOPE_POOL_CAPACITY: "1"
     depends_on:
       app:
         condition: service_healthy

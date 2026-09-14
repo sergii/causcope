@@ -43,6 +43,9 @@
       "type": "string",
       "pattern": "^fact\\.[a-z0-9_]+(?:\\.[a-z0-9_]+)+$"
     },
+    "scalar": {
+      "type": ["string", "number", "integer", "boolean", "null"]
+    },
     "revision": {
       "type": "object",
       "additionalProperties": false,
@@ -101,6 +104,7 @@
             "code_symbol",
             "transaction",
             "data_resource",
+            "resource_pool",
             "service",
             "job",
             "external_dependency"
@@ -113,7 +117,7 @@
         "source_location": {"$ref": "#/$defs/source_location"},
         "attributes": {
           "type": "object",
-          "additionalProperties": {"type": "string"}
+          "additionalProperties": {"$ref": "#/$defs/scalar"}
         }
       }
     },
@@ -129,7 +133,7 @@
         },
         "attributes": {
           "type": "object",
-          "additionalProperties": {"type": "string"}
+          "additionalProperties": {"$ref": "#/$defs/scalar"}
         }
       },
       "minProperties": 1
