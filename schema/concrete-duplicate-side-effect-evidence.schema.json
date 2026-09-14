@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/concrete-duplicate-side-effect-evidence.schema.json",
+  "title": "Causcope concrete duplicate side-effect evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "code_symbol",
+    "unsafe",
+    "protected",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "concrete_duplicate_side_effect_evidence"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "code_symbol": {"type": "string", "pattern": "^code:[^\\s]+$"},
+    "unsafe": {"$ref": "#/$defs/scenario"},
+    "protected": {"$ref": "#/$defs/scenario"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": {"const": "experiment"},
+        "name": {"const": "duplicate-side-effect-live-lab"}
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "nullable_string": {"type": ["string", "null"]},
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt",
+        "job_id",
+        "business_event_id",
+        "trace_id",
+        "span_id",
+        "start_time_unix_nano",
+        "end_time_unix_nano",
+        "client_outcome",
+        "provider_effect_committed",
+        "idempotency_key"
+      ],
+      "properties": {
+        "attempt": {"type": "integer", "minimum": 1},
+        "job_id": {"type": "string", "minLength": 1},
+        "business_event_id": {"type": "string", "minLength": 1},
+        "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "span_id": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+        "start_time_unix_nano": {"type": "integer", "minimum": 0},
+        "end_time_unix_nano": {"type": "integer", "minimum": 0},
+        "client_outcome": {"enum": ["timeout", "success", "error"]},
+        "provider_effect_committed": {"type": "boolean"},
+        "idempotency_key": {"$ref": "#/$defs/nullable_string"},
+        "provider_effect_id": {"$ref": "#/$defs/nullable_string"},
+        "provider_deduplicated": {"type": "boolean"}
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect_id",
+        "job_id",
+        "business_event_id",
+        "trace_id",
+        "span_id",
+        "idempotency_key"
+      ],
+      "properties": {
+        "effect_id": {"type": "string", "minLength": 1},
+        "job_id": {"type": "string", "minLength": 1},
+        "business_event_id": {"type": "string", "minLength": 1},
+        "trace_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "span_id": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+        "idempotency_key": {"$ref": "#/$defs/nullable_string"}
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "business_event_id",
+        "attempts",
+        "provider_effects",
+        "expected_effect_count"
+      ],
+      "properties": {
+        "job_id": {"type": "string", "minLength": 1},
+        "business_event_id": {"type": "string", "minLength": 1},
+        "attempts": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/attempt"}
+        },
+        "provider_effects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/effect"}
+        },
+        "expected_effect_count": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

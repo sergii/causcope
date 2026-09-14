@@ -1,0 +1,164 @@
+name: Validate duplicate side-effect X-Ray
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lab/duplicate-side-effect/**"
+      - "scripts/duplicate_side_effect_enrichment.py"
+      - "scripts/duplicate_side_effect_xray_projection.py"
+      - "scripts/duplicate_side_effect_live_lab.py"
+      - "scripts/duplicate_side_effect_causal_confirmation.py"
+      - "scripts/verify_duplicate_side_effect_xray.py"
+      - "schema/concrete-duplicate-side-effect-evidence.schema.json"
+      - "RFC/0052-concrete-retry-duplicate-side-effect-xray.md"
+      - ".github/workflows/duplicate-side-effect-xray.yml"
+  pull_request:
+    paths:
+      - "lab/duplicate-side-effect/**"
+      - "scripts/duplicate_side_effect_enrichment.py"
+      - "scripts/duplicate_side_effect_xray_projection.py"
+      - "scripts/duplicate_side_effect_live_lab.py"
+      - "scripts/duplicate_side_effect_causal_confirmation.py"
+      - "scripts/verify_duplicate_side_effect_xray.py"
+      - "schema/concrete-duplicate-side-effect-evidence.schema.json"
+      - "RFC/0052-concrete-retry-duplicate-side-effect-xray.md"
+      - ".github/workflows/duplicate-side-effect-xray.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+
+      - name: Install Rubydex fixture dependencies
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: bundle install
+
+      - name: Build duplicate-effect concrete static facts twice
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: |
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/duplicate-side-effect \
+            --system-id duplicate-side-effect-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/duplicate-rubydex-a.json
+
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/duplicate-side-effect \
+            --system-id duplicate-side-effect-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/duplicate-rubydex-b.json
+
+          diff -u /tmp/duplicate-rubydex-a.json /tmp/duplicate-rubydex-b.json
+
+          python scripts/duplicate_side_effect_enrichment.py \
+            --input /tmp/duplicate-rubydex-a.json \
+            --workspace lab/duplicate-side-effect \
+            --output /tmp/duplicate-static-a.json
+
+          python scripts/duplicate_side_effect_enrichment.py \
+            --input /tmp/duplicate-rubydex-a.json \
+            --workspace lab/duplicate-side-effect \
+            --output /tmp/duplicate-static-b.json
+
+          diff -u /tmp/duplicate-static-a.json /tmp/duplicate-static-b.json
+
+      - name: Derive deterministic static duplicate-effect X-Ray
+        run: |
+          python scripts/duplicate_side_effect_xray_projection.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --output /tmp/duplicate-xray-a.json
+
+          python scripts/duplicate_side_effect_xray_projection.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --output /tmp/duplicate-xray-b.json
+
+          diff -u /tmp/duplicate-xray-a.json /tmp/duplicate-xray-b.json
+
+      - name: Run real Ruby HTTP ambiguous-outcome and retry lab
+        run: |
+          python scripts/duplicate_side_effect_live_lab.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --workspace lab/duplicate-side-effect \
+            --otlp-output /tmp/duplicate-runtime.otlp.json \
+            --evidence-output /tmp/duplicate-effect-evidence.json \
+            --runtime-evidence-output /tmp/duplicate-runtime-evidence.json
+
+      - name: Bind live attempts to exact concrete OTel executions
+        run: |
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --otlp /tmp/duplicate-runtime.otlp.json \
+            --incident-id INC-DUP-EFFECT-XRAY \
+            --source-uri live:duplicate-side-effect \
+            --output /tmp/duplicate-runtime-facts.json
+
+      - name: Confirm retry-induced duplicate business effect twice
+        run: |
+          python scripts/duplicate_side_effect_causal_confirmation.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --runtime-facts /tmp/duplicate-runtime-facts.json \
+            --xray /tmp/duplicate-xray-a.json \
+            --effect-evidence /tmp/duplicate-effect-evidence.json \
+            --runtime-evidence /tmp/duplicate-runtime-evidence.json \
+            --output /tmp/duplicate-confirmation-a.json
+
+          python scripts/duplicate_side_effect_causal_confirmation.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --runtime-facts /tmp/duplicate-runtime-facts.json \
+            --xray /tmp/duplicate-xray-a.json \
+            --effect-evidence /tmp/duplicate-effect-evidence.json \
+            --runtime-evidence /tmp/duplicate-runtime-evidence.json \
+            --output /tmp/duplicate-confirmation-b.json
+
+          diff -u /tmp/duplicate-confirmation-a.json /tmp/duplicate-confirmation-b.json
+
+      - name: Verify fail-closed identities and idempotency boundary
+        run: |
+          python scripts/verify_duplicate_side_effect_xray.py \
+            --static-facts /tmp/duplicate-static-a.json \
+            --runtime-facts /tmp/duplicate-runtime-facts.json \
+            --xray /tmp/duplicate-xray-a.json \
+            --effect-evidence /tmp/duplicate-effect-evidence.json \
+            --runtime-evidence /tmp/duplicate-runtime-evidence.json \
+            --confirmation /tmp/duplicate-confirmation-a.json
+
+      - name: Show duplicate-effect confirmation summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/duplicate-confirmation-a.json').read_text())
+          print(json.dumps({
+              'epistemic_state': result['epistemic_state'],
+              'causal_diagnosis': result['causal_diagnosis']['state'],
+              'code_symbol': result['binding']['code_symbol'],
+              'unsafe_provider_effects': len(result['binding']['provider_effect_ids']),
+              'protected_provider_effects': result['counterfactual_recovery']['provider_effect_count'],
+          }, indent=2, sort_keys=True))
+          PY
