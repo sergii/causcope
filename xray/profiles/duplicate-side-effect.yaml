@@ -1,0 +1,238 @@
+schema_version: "0.1"
+kind: xray_profile
+id: xray.q2_1.retry_duplicate_effect
+catalog_code: Q2.1
+hypothesis: hypothesis.messaging.duplicate_delivery
+symptom: symptom.messaging.duplicate_business_effect_observed
+observation: observation.application.duplicate_side_effect
+max_emitted_bindings: 10
+inputs:
+  static:
+    kind: concrete_system_facts
+    required: true
+  runtime:
+    kind: concrete_runtime_facts
+    required: false
+  canonical:
+    kind: runtime_evidence
+    required: false
+  effect:
+    kind: concrete_duplicate_side_effect_evidence
+    required: false
+identity_groups:
+  - name: system_id
+    refs:
+      - static.system_id
+      - runtime.system_id
+      - effect.system_id
+  - name: revision
+    refs:
+      - static.revision
+      - runtime.revision
+      - effect.revision
+  - name: incident_id
+    refs:
+      - runtime.incident_id
+      - canonical.incident_id
+      - effect.incident_id
+stages:
+  - id: PRECONDITIONS_PRESENT
+    description: A revision-pinned retryable job invokes an external charge path with bounded source evidence that the supported client path has no idempotency key.
+    clauses:
+      - source: static
+        path: facts
+        where:
+          relation: maps_to
+        bind:
+          code_symbol: subject
+          job: object
+      - source: static
+        path: entities
+        where:
+          id:
+            var: code_symbol
+          kind: code_symbol
+      - source: static
+        path: entities
+        where:
+          id:
+            var: job
+          kind: job
+      - source: static
+        path: facts
+        where:
+          relation: depends_on
+          subject:
+            var: job
+          context.attributes.retry_enabled: "true"
+          context.attributes.effect_operation: charge
+          context.attributes.idempotency_key: absent_in_supported_client_source
+        bind:
+          dependency: object
+          dependency_fact: id
+      - source: static
+        path: entities
+        where:
+          id:
+            var: dependency
+          kind: external_dependency
+  - id: AMBIGUOUS_OUTCOME_OBSERVED
+    description: The first exact job execution commits the provider effect while the caller observes a timeout.
+    clauses:
+      - source: effect
+        path: $
+        where:
+          code_symbol:
+            var: code_symbol
+      - source: effect
+        path: unsafe.attempts
+        where:
+          attempt: 1
+          client_outcome: timeout
+          provider_effect_committed: true
+          idempotency_key: null
+        bind:
+          job_id: job_id
+          business_event_id: business_event_id
+          trace_first: trace_id
+          span_first: span_id
+      - source: runtime
+        path: executions
+        where:
+          code_symbol:
+            var: code_symbol
+          trace_id:
+            var: trace_first
+          span_id:
+            var: span_first
+        bind:
+          execution_first: id
+  - id: RETRY_OBSERVED
+    description: The same stable job and business identity execute again after the ambiguous first outcome.
+    clauses:
+      - source: effect
+        path: unsafe.attempts
+        where:
+          attempt: 2
+          job_id:
+            var: job_id
+          business_event_id:
+            var: business_event_id
+          client_outcome: success
+          provider_effect_committed: true
+          idempotency_key: null
+        bind:
+          trace_retry: trace_id
+          span_retry: span_id
+      - source: runtime
+        path: executions
+        where:
+          code_symbol:
+            var: code_symbol
+          trace_id:
+            var: trace_retry
+          span_id:
+            var: span_retry
+        bind:
+          execution_retry: id
+    constraints:
+      - op: neq
+        left:
+          var: execution_first
+        right:
+          var: execution_retry
+  - id: EVENT_OBSERVED
+    description: The retry applies a second distinct provider effect for the same business identity and canonical evidence records the duplicate side effect.
+    clauses:
+      - source: effect
+        path: unsafe.provider_effects
+        where:
+          job_id:
+            var: job_id
+          business_event_id:
+            var: business_event_id
+          trace_id:
+            var: trace_first
+          span_id:
+            var: span_first
+          idempotency_key: null
+        bind:
+          provider_effect_first: effect_id
+      - source: effect
+        path: unsafe.provider_effects
+        where:
+          job_id:
+            var: job_id
+          business_event_id:
+            var: business_event_id
+          trace_id:
+            var: trace_retry
+          span_id:
+            var: span_retry
+          idempotency_key: null
+        bind:
+          provider_effect_retry: effect_id
+      - source: canonical
+        path: instances
+        where:
+          observation: observation.application.duplicate_side_effect
+          state: observed
+          measurement.value: 2
+    constraints:
+      - op: neq
+        left:
+          var: provider_effect_first
+        right:
+          var: provider_effect_retry
+    cardinality:
+      - source: effect
+        path: unsafe.provider_effects
+        where:
+          business_event_id:
+            var: business_event_id
+        exact: 2
+  - id: CAUSAL_DIAGNOSIS_CONFIRMED
+    description: A stable idempotency key preserves the same timeout and retry shape while reducing the protected provider effect count to one.
+    clauses:
+      - source: effect
+        path: protected.attempts
+        where:
+          attempt: 1
+          client_outcome: timeout
+          provider_effect_committed: true
+        bind:
+          protected_job_id: job_id
+          protected_business_event_id: business_event_id
+          idempotency_key: idempotency_key
+      - source: effect
+        path: protected.attempts
+        where:
+          attempt: 2
+          job_id:
+            var: protected_job_id
+          business_event_id:
+            var: protected_business_event_id
+          idempotency_key:
+            var: idempotency_key
+          client_outcome: success
+          provider_effect_committed: true
+          provider_deduplicated: true
+      - source: effect
+        path: protected.provider_effects
+        where:
+          business_event_id:
+            var: protected_business_event_id
+          idempotency_key:
+            var: idempotency_key
+    constraints:
+      - op: neq
+        left:
+          var: idempotency_key
+        right: null
+    cardinality:
+      - source: effect
+        path: protected.provider_effects
+        where:
+          business_event_id:
+            var: protected_business_event_id
+        exact: 1

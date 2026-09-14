@@ -1,0 +1,234 @@
+schema_version: "0.1"
+kind: xray_profile
+id: xray.d2_2.deadlock
+catalog_code: D2.2
+hypothesis: hypothesis.database.deadlock
+max_emitted_bindings: 10
+inputs:
+  static:
+    kind: concrete_system_facts
+    required: true
+  runtime:
+    kind: concrete_runtime_facts
+    required: false
+  canonical:
+    kind: runtime_evidence
+    required: false
+  correlation:
+    kind: concrete_database_deadlock_evidence
+    required: false
+identity_groups:
+  - name: system_id
+    refs:
+      - static.system_id
+      - runtime.system_id
+      - correlation.system_id
+  - name: revision
+    refs:
+      - static.revision
+      - runtime.revision
+      - correlation.revision
+  - name: incident_id
+    refs:
+      - runtime.incident_id
+      - canonical.incident_id
+      - correlation.incident_id
+stages:
+  - id: PRECONDITIONS_PRESENT
+    description: Two concrete code paths have revision-pinned opposing resource access order.
+    clauses:
+      - source: static
+        path: facts
+        where:
+          relation: accesses_before
+        bind:
+          fact_left: id
+          resource_a: subject
+          resource_b: object
+          code_left: context.code_path
+          transaction_left: context.transaction
+      - source: static
+        path: facts
+        where:
+          relation: accesses_before
+          subject:
+            var: resource_b
+          object:
+            var: resource_a
+        bind:
+          fact_right: id
+          code_right: context.code_path
+          transaction_right: context.transaction
+    constraints:
+      - op: lt
+        left:
+          var: fact_left
+        right:
+          var: fact_right
+      - op: neq
+        left:
+          var: code_left
+        right:
+          var: code_right
+  - id: RISK_DETECTED
+    description: The two concrete risky code paths were observed executing concurrently.
+    clauses:
+      - source: runtime
+        path: overlaps
+        bind:
+          overlap_left: left_code_symbol
+          overlap_right: right_code_symbol
+    constraints:
+      - op: set_eq
+        left:
+          list:
+            - var: overlap_left
+            - var: overlap_right
+        right:
+          list:
+            - var: code_left
+            - var: code_right
+  - id: CONTENTION_OBSERVED
+    description: Canonical runtime evidence observes PostgreSQL lock waiting in the same incident.
+    clauses:
+      - source: canonical
+        path: instances
+        where:
+          observation: observation.database.lock_wait_time
+          state: observed
+  - id: EVENT_OBSERVED
+    description: Canonical runtime evidence observes a PostgreSQL deadlock event.
+    clauses:
+      - source: canonical
+        path: instances
+        where:
+          observation: observation.database.deadlock_error
+          state: observed
+  - id: CAUSAL_DIAGNOSIS_CONFIRMED
+    description: Exact OTel executions bind to the two PostgreSQL backends forming the mutual wait-for cycle and one exact participant receives 40P01.
+    clauses:
+      - source: runtime
+        path: executions
+        where:
+          code_symbol:
+            var: code_left
+        bind:
+          execution_left: id
+          trace_left: trace_id
+          span_left: span_id
+      - source: runtime
+        path: executions
+        where:
+          code_symbol:
+            var: code_right
+        bind:
+          execution_right: id
+          trace_right: trace_id
+          span_right: span_id
+      - source: correlation
+        path: participants
+        where:
+          execution_id:
+            var: execution_left
+          trace_id:
+            var: trace_left
+          span_id:
+            var: span_left
+          code_symbol:
+            var: code_left
+          transaction:
+            var: transaction_left
+          resource_order:
+            list:
+              - var: resource_a
+              - var: resource_b
+        bind:
+          backend_left: backend_pid
+      - source: correlation
+        path: participants
+        where:
+          execution_id:
+            var: execution_right
+          trace_id:
+            var: trace_right
+          span_id:
+            var: span_right
+          code_symbol:
+            var: code_right
+          transaction:
+            var: transaction_right
+          resource_order:
+            list:
+              - var: resource_b
+              - var: resource_a
+        bind:
+          backend_right: backend_pid
+      - source: correlation
+        path: wait_edges
+        where:
+          waiter_backend_pid:
+            var: backend_left
+          blocker_backend_pid:
+            var: backend_right
+          waiter_execution_id:
+            var: execution_left
+          blocker_execution_id:
+            var: execution_right
+          waiting_on_resource:
+            var: resource_b
+      - source: correlation
+        path: wait_edges
+        where:
+          waiter_backend_pid:
+            var: backend_right
+          blocker_backend_pid:
+            var: backend_left
+          waiter_execution_id:
+            var: execution_right
+          blocker_execution_id:
+            var: execution_left
+          waiting_on_resource:
+            var: resource_a
+      - source: correlation
+        path: cycle
+        where:
+          state: observed
+      - source: correlation
+        path: deadlock_event
+        where:
+          state: observed
+          sqlstate: 40P01
+          victim_execution_id:
+            one_of_vars:
+              - execution_left
+              - execution_right
+        bind:
+          victim_execution: victim_execution_id
+          victim_backend: victim_backend_pid
+      - source: correlation
+        path: participants
+        where:
+          execution_id:
+            var: victim_execution
+          backend_pid:
+            var: victim_backend
+          outcome: deadlock_aborted
+          sqlstate: 40P01
+    constraints:
+      - op: neq
+        left:
+          var: execution_left
+        right:
+          var: execution_right
+      - op: neq
+        left:
+          var: backend_left
+        right:
+          var: backend_right
+    cardinality:
+      - source: correlation
+        path: participants
+        exact: 2
+      - source: correlation
+        path: wait_edges
+        min: 2
