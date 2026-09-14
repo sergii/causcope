@@ -12,8 +12,8 @@ from d2_2_xray_projection import project
 from otel_concrete_runtime_facts import build_document, load_json, validate_runtime_document
 
 EXPECTED_SYMBOLS = {
-    "code:CheckoutService#call",
-    "code:SettlementJob#perform",
+    "code:CheckoutService#call()",
+    "code:SettlementJob#perform()",
 }
 
 
