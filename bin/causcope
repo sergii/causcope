@@ -2,9 +2,19 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-if [ "${1:-}" = "scan" ]; then
-  shift
-  exec python3 "$ROOT/scripts/causcope_scan.py" "$@"
-fi
+case "${1:-}" in
+  scan)
+    shift
+    exec python3 "$ROOT/scripts/causcope_scan.py" "$@"
+    ;;
+  rails)
+    shift
+    exec python3 "$ROOT/scripts/causcope_rails.py" "$@"
+    ;;
+  runtime)
+    shift
+    exec python3 "$ROOT/scripts/causcope_runtime.py" "$@"
+    ;;
+esac
 
 exec python3 "$ROOT/scripts/causcope_cli.py" "$@"
