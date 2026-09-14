@@ -84,6 +84,9 @@ jobs:
       - name: Validate routing-aware MCP resources
         run: python scripts/test_routing_mcp_server.py
 
+      - name: Validate crash-recoverable incident commits
+        run: python scripts/test_incident_state_commit.py
+
       - name: Validate routed instrument MCP execution
         run: python scripts/test_routed_instrument_mcp_tool.py
 
