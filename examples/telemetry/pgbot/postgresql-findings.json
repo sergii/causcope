@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.2.0",
+  "collected_at": "2026-09-14T00:30:00Z",
+  "fingerprint": "demo-postgresql-checkout",
+  "server": {
+    "version_num": 170004,
+    "version_text": "PostgreSQL 17.4",
+    "database": "app_production",
+    "uptime_seconds": 86400,
+    "extensions": ["pg_stat_statements"],
+    "capabilities": ["pg_stat_statements"],
+    "has_pg_monitor": true
+  },
+  "window": {
+    "sample_seconds": 10,
+    "window_age_seconds": 21600
+  },
+  "findings": [
+    {
+      "id": "query_slowdown",
+      "object": "query:424242",
+      "severity": "warn",
+      "title": "orders query became slower",
+      "detail": "Mean execution time increased from 8 ms to 26 ms against the stored baseline.",
+      "evidence": ["mean_exec_ms 8 -> 26"],
+      "impact": {
+        "score": 72,
+        "dimension": "latency",
+        "estimate": "3.25x slower",
+        "basis": "pg_stat_statements baseline comparison"
+      },
+      "confidence": 0.96,
+      "caveats": ["The finding describes database-side query latency, not upstream request latency."]
+    },
+    {
+      "id": "connection_saturation",
+      "severity": "warn",
+      "title": "connection usage is high",
+      "detail": "87 percent of configured connection slots are currently in use.",
+      "evidence": ["87/100 connection slots used"],
+      "impact": {
+        "score": 65,
+        "dimension": "risk",
+        "estimate": "13 percent headroom",
+        "basis": "current connection slots versus configured maximum"
+      },
+      "confidence": 0.99
+    },
+    {
+      "id": "seq_scan_heavy",
+      "object": "public.orders",
+      "severity": "warn",
+      "title": "orders relies heavily on sequential scans",
+      "detail": "Sequential scan activity is materially high for the orders relation.",
+      "evidence": ["seq scans materially exceed the expected indexed-access pattern"],
+      "impact": {
+        "score": 58,
+        "dimension": "latency",
+        "estimate": "relation-level scan pressure",
+        "basis": "table scan counters"
+      },
+      "confidence": 0.91,
+      "caveats": ["Sequential scans can be correct for small tables or queries that read most rows."]
+    },
+    {
+      "id": "wait_lock_contention",
+      "object": "transactionid",
+      "severity": "warn",
+      "title": "transaction lock contention dominates sampled waits",
+      "detail": "A sustained named transaction blocker is present in the sampled wait profile.",
+      "evidence": ["Lock:transactionid dominates active sampled waits"],
+      "impact": {
+        "score": 80,
+        "dimension": "latency",
+        "estimate": "material lock-wait contribution",
+        "basis": "sampled active-session wait profile"
+      },
+      "confidence": 0.94
+    },
+    {
+      "id": "txid_wraparound",
+      "object": "app_production",
+      "severity": "critical",
+      "title": "transaction ID age is close to wraparound",
+      "detail": "The oldest transaction ID age is 1.8 billion, close to PostgreSQL's wraparound safety wall.",
+      "evidence": ["max xid age 1800000000"],
+      "impact": {
+        "score": 95,
+        "dimension": "risk",
+        "estimate": "1.8B transaction ID age",
+        "basis": "age(datfrozenxid)"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "unused_indexes",
+      "object": "public.idx_legacy_export",
+      "severity": "info",
+      "title": "legacy index has not been used",
+      "detail": "This finding is intentionally suppressed in the source policy.",
+      "impact": {
+        "score": 20,
+        "dimension": "storage",
+        "estimate": "2 GB",
+        "basis": "index size and scan counter"
+      },
+      "confidence": 0.9,
+      "suppressed": true,
+      "suppression_reason": "backs the quarterly export"
+    }
+  ]
+}

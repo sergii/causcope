@@ -1,0 +1,4 @@
+id: observation.database.transaction_id_age
+kind: observation
+title: Database transaction ID age
+summary: The oldest transaction ID age is materially close to the database wraparound safety limit.

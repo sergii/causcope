@@ -1,0 +1,26 @@
+schema_version: "0.1"
+kind: opentelemetry_trace_adapter
+id: adapter.opentelemetry.postgresql_dependency
+default_ttl_seconds: 300
+default_confidence: high
+
+mappings:
+  - id: database_query_latency
+    observation: observation.database.query_latency
+    match:
+      span_kind: SPAN_KIND_CLIENT
+      attributes:
+        db.system: postgresql
+    signal:
+      type: duration_ms
+      operator: gt
+      threshold: 100
+    state_when_true: observed
+    state_when_false: absent
+    unit: ms
+    scope:
+      boundary_attributes:
+        - causcope.boundary
+      attribute_map:
+        service: service.name
+        dependency: peer.service

@@ -1,0 +1,4 @@
+id: observation.database.sequential_scan_pressure
+kind: observation
+title: Database sequential scan pressure
+summary: Sequential scan activity on a database relation is materially high relative to indexed access or the expected workload.

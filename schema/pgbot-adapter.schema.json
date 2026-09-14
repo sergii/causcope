@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/pgbot-adapter.schema.json",
+  "title": "Causcope pgbot diagnostic adapter mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "scope", "mappings"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "pgbot_adapter"},
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "default_ttl_seconds": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "default_confidence": {
+      "enum": ["low", "moderate", "high"]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source_finding", "observation"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "source_finding": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observation": {
+            "$ref": "#/$defs/concept_id"
+          },
+          "confidence": {
+            "enum": ["low", "moderate", "high"]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "concept_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    }
+  }
+}

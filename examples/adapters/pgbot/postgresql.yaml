@@ -1,0 +1,33 @@
+schema_version: "0.1"
+kind: pgbot_adapter
+id: adapter.pgbot.postgresql
+default_ttl_seconds: 300
+default_confidence: high
+
+scope:
+  boundaries:
+    - boundary.application.external_dependency
+  attributes:
+    service: checkout-api
+    dependency: postgresql
+
+mappings:
+  - id: query_slowdown
+    source_finding: query_slowdown
+    observation: observation.database.query_latency
+
+  - id: connection_saturation
+    source_finding: connection_saturation
+    observation: observation.database.connection_utilization
+
+  - id: sequential_scan_pressure
+    source_finding: seq_scan_heavy
+    observation: observation.database.sequential_scan_pressure
+
+  - id: lock_contention
+    source_finding: wait_lock_contention
+    observation: observation.database.lock_wait_time
+
+  - id: transaction_id_age
+    source_finding: txid_wraparound
+    observation: observation.database.transaction_id_age

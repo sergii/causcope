@@ -1,0 +1,32 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "checkout-api"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "example.postgresql"},
+          "spans": [
+            {
+              "traceId": "11111111111111111111111111111111",
+              "spanId": "2222222222222222",
+              "name": "SELECT orders",
+              "kind": "SPAN_KIND_CLIENT",
+              "startTimeUnixNano": "1789345800000000000",
+              "endTimeUnixNano": "1789345800250000000",
+              "status": {"code": "STATUS_CODE_OK"},
+              "attributes": [
+                {"key": "db.system", "value": {"stringValue": "postgresql"}},
+                {"key": "peer.service", "value": {"stringValue": "postgresql"}},
+                {"key": "causcope.boundary", "value": {"stringValue": "boundary.application.external_dependency"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

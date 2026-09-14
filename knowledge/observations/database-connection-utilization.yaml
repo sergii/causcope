@@ -1,0 +1,4 @@
+id: observation.database.connection_utilization
+kind: observation
+title: Database connection utilization
+summary: The share of configured database connection capacity currently in use compared with the available connection limit.
