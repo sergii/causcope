@@ -1,0 +1,6 @@
+id: observation.database.lock_error_event
+kind: observation
+title: Database lock error event
+summary: Whether the observed application or database diagnostic stream reports an explicit lock acquisition or lock timeout error during the scoped investigation window.
+explanation:
+  short: An explicit lock error is stronger evidence of lock contention than a generic request failure, while absence only means the inspected source did not report such an error in its covered window.
