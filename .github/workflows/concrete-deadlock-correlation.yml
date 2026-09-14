@@ -1,0 +1,148 @@
+name: Validate concrete D2.2 causal confirmation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/postgres_concrete_deadlock_lab.py"
+      - "scripts/d2_2_causal_confirmation.py"
+      - "scripts/verify_d2_2_causal_confirmation.py"
+      - "schema/concrete-database-deadlock-evidence.schema.json"
+      - "RFC/0051-concrete-postgresql-deadlock-correlation.md"
+      - "lab/rubydex-concrete-system/**"
+      - ".github/workflows/concrete-deadlock-correlation.yml"
+  pull_request:
+    paths:
+      - "scripts/postgres_concrete_deadlock_lab.py"
+      - "scripts/d2_2_causal_confirmation.py"
+      - "scripts/verify_d2_2_causal_confirmation.py"
+      - "schema/concrete-database-deadlock-evidence.schema.json"
+      - "RFC/0051-concrete-postgresql-deadlock-correlation.md"
+      - "lab/rubydex-concrete-system/**"
+      - ".github/workflows/concrete-deadlock-correlation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema "psycopg[binary]"
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+
+      - name: Install Rubydex fixture dependencies
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: bundle install
+
+      - name: Build revision-pinned concrete static facts
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rubydex-concrete-system/Gemfile
+        run: |
+          bundle exec ruby scripts/rubydex_concrete_system_facts.rb \
+            --workspace lab/rubydex-concrete-system \
+            --system-id rubydex-fixture \
+            --revision fixture-revision \
+            --repository sergii/causcope \
+            --output /tmp/rubydex-facts.json
+
+          python scripts/rails_concrete_system_enrichment.py \
+            --input /tmp/rubydex-facts.json \
+            --workspace lab/rubydex-concrete-system \
+            --output /tmp/rails-facts.json
+
+      - name: Build exact concrete OTel executions
+        run: |
+          python scripts/otel_concrete_runtime_facts.py \
+            --static-facts /tmp/rails-facts.json \
+            --otlp lab/rubydex-concrete-system/runtime/overlapping-code-paths.otlp.json \
+            --incident-id INC-D2-2-XRAY \
+            --source-uri fixture:overlapping-code-paths \
+            --output /tmp/runtime-facts.json
+
+          python scripts/d2_2_xray_projection.py \
+            --static-facts /tmp/rails-facts.json \
+            --runtime-facts /tmp/runtime-facts.json \
+            --output /tmp/d2-2-xray.json
+
+      - name: Run live PostgreSQL deadlock with exact trace/span correlation
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55433/postgres
+        run: |
+          python scripts/postgres_concrete_deadlock_lab.py \
+            --static-facts /tmp/rails-facts.json \
+            --runtime-facts /tmp/runtime-facts.json \
+            --correlation-output /tmp/concrete-db-correlation.json \
+            --runtime-evidence-output /tmp/concrete-db-runtime-evidence.json
+
+      - name: Derive canonical EVENT_OBSERVED stage from the live database evidence
+        run: |
+          AS_OF=$(python -c 'import json; print(json.load(open("/tmp/concrete-db-correlation.json"))["observed_at"])')
+          python scripts/d2_2_database_evidence_projection.py \
+            --xray /tmp/d2-2-xray.json \
+            --evidence /tmp/concrete-db-runtime-evidence.json \
+            --as-of "$AS_OF" \
+            --scope-attribute service=checkout-api \
+            --scope-attribute dependency=postgresql \
+            --output /tmp/d2-2-database.json
+
+      - name: Confirm the exact concrete D2.2 causal diagnosis
+        run: |
+          python scripts/d2_2_causal_confirmation.py \
+            --static-facts /tmp/rails-facts.json \
+            --runtime-facts /tmp/runtime-facts.json \
+            --database-projection /tmp/d2-2-database.json \
+            --correlation-evidence /tmp/concrete-db-correlation.json \
+            --output /tmp/d2-2-confirmed.json
+
+          python scripts/verify_d2_2_causal_confirmation.py \
+            --static-facts /tmp/rails-facts.json \
+            --runtime-facts /tmp/runtime-facts.json \
+            --database-projection /tmp/d2-2-database.json \
+            --correlation-evidence /tmp/concrete-db-correlation.json \
+            --confirmation /tmp/d2-2-confirmed.json
+
+      - name: Show confirmation summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/d2-2-confirmed.json').read_text())
+          print(json.dumps({
+              'epistemic_state': result['epistemic_state'],
+              'causal_diagnosis': result['causal_diagnosis']['state'],
+              'participant_symbols': [item['code_symbol'] for item in result['binding']['participants']],
+              'wait_edges': len(result['binding']['wait_edges']),
+              'victim_execution_id': result['binding']['victim_execution_id'],
+          }, indent=2, sort_keys=True))
+          PY
