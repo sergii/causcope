@@ -204,8 +204,6 @@ def observe(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("concrete system facts do not contain a revision value")
 
     application_command = list(args.application_command)
-    if application_command and application_command[0] == "--":
-        application_command = application_command[1:]
     if not application_command:
         raise ValueError("missing bounded application command after `--`")
 
@@ -312,18 +310,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force-seed", action="store_true")
     parser.add_argument("--verbose-receiver", action="store_true")
     parser.add_argument("--json", action="store_true")
-    parser.add_argument(
-        "application_command",
-        nargs=argparse.REMAINDER,
-        help="Bounded application command; place it after `--` and make it exit on its own.",
-    )
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def parse_control_and_application(argv: list[str] | None) -> tuple[argparse.Namespace, list[str]]:
+    arguments = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
-    args = parser.parse_args(argv)
+    if "-h" in arguments or "--help" in arguments:
+        parser.parse_args(arguments)
+        raise AssertionError("argparse help should exit")
     try:
+        separator = arguments.index("--")
+    except ValueError as error:
+        raise ValueError("missing bounded application command separator `--`") from error
+    control = arguments[:separator]
+    application = arguments[separator + 1 :]
+    if not application:
+        raise ValueError("missing bounded application command after `--`")
+    return parser.parse_args(control), application
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        args, application = parse_control_and_application(argv)
+        args.application_command = application
         result = observe(args)
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
