@@ -11,19 +11,53 @@
     "bindings": {
       "type": "array",
       "minItems": 1,
-      "items": {"$ref": "#/$defs/pgbot_file_binding"}
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/pgbot_file_binding"},
+          {"$ref": "#/$defs/pgbot_cli_binding"}
+        ]
+      }
     }
   },
   "$defs": {
+    "provider_instance": {
+      "type": "string",
+      "minLength": 1
+    },
+    "adapter_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environment_variable": {
+      "type": "string",
+      "pattern": "^[A-Z_][A-Z0-9_]*$"
+    },
     "pgbot_file_binding": {
       "type": "object",
       "additionalProperties": false,
       "required": ["provider_instance", "driver", "adapter", "context"],
       "properties": {
-        "provider_instance": {"type": "string", "minLength": 1},
+        "provider_instance": {"$ref": "#/$defs/provider_instance"},
         "driver": {"const": "pgbot_file"},
-        "adapter": {"type": "string", "minLength": 1},
+        "adapter": {"$ref": "#/$defs/adapter_path"},
         "context": {"type": "string", "minLength": 1}
+      }
+    },
+    "pgbot_cli_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_instance", "driver", "adapter", "database_url_env"],
+      "properties": {
+        "provider_instance": {"$ref": "#/$defs/provider_instance"},
+        "driver": {"const": "pgbot_cli"},
+        "adapter": {"$ref": "#/$defs/adapter_path"},
+        "database_url_env": {"$ref": "#/$defs/environment_variable"},
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30
+        }
       }
     }
   }
