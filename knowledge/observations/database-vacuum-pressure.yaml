@@ -1,0 +1,6 @@
+id: observation.database.vacuum_pressure
+kind: observation
+title: Database vacuum pressure
+summary: One or more user tables currently have estimated dead tuples at or above their effective autovacuum vacuum trigger.
+explanation:
+  short: The PostgreSQL trigger is derived from the effective vacuum threshold plus scale factor times pg_class.reltuples, including per-table reloptions. Crossing the trigger means the table is eligible for vacuum work; it is evidence of pressure, not by itself proof that autovacuum is malfunctioning.
