@@ -58,8 +58,8 @@ jobs:
         image: postgres:17
         env:
           POSTGRES_USER: causcope
-          POSTGRES_PASSWORD: causcope
           POSTGRES_DB: causcope
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -81,12 +81,12 @@ jobs:
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema 'psycopg[binary]'
 
       - name: Validate semantic knowledge
-        run: python scripts/validate_knowledge.py
+        run: python scripts/validate.py
 
       - name: Validate PostgreSQL health provider
         run: python scripts/test_postgresql_health_provider.py
 
       - name: Validate live PostgreSQL catalog evidence
         env:
-          POSTGRESQL_HEALTH_DATABASE_URL: postgresql://causcope:causcope@127.0.0.1:5432/causcope
+          POSTGRESQL_HEALTH_DATABASE_URL: postgresql://causcope@127.0.0.1:5432/causcope
         run: python scripts/verify_postgresql_health_live.py
