@@ -19,5 +19,20 @@
   "causal_notes": [
     "Client version is a cohort discriminator before it is a cause.",
     "The causal claim becomes strong only after comparing otherwise equivalent working and failing payloads."
-  ]
+  ],
+  "expected_causcope": {
+    "target": "observation.http.request_failure",
+    "scope_contains": {
+      "method": "POST",
+      "path": "/orders",
+      "client_platform": "iOS",
+      "app_version": "7.42.0"
+    },
+    "top_hypothesis": "hypothesis.client.payload_contract_mismatch",
+    "required_completed_probes": [
+      "probe.http.compare_client_cohorts",
+      "probe.database.inspect_lock_error_events"
+    ],
+    "minimum_evidence_revision": 3
+  }
 }
