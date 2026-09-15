@@ -1,0 +1,11 @@
+id: probe.database.inspect_long_running_transactions
+kind: probe
+title: Inspect long-running database transactions
+summary: Inspect current client transactions and identify transactions older than the configured diagnostic threshold.
+produces:
+  - observation.database.long_running_transaction
+requires:
+  - capability.database.inspect_activity
+preferred_tools:
+  - tool.postgresql
+risk: read_only
