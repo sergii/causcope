@@ -101,6 +101,7 @@ def _step_record(
         "previous_evidence_revision": previous_revision,
         "evidence_revision": evidence_revision,
         "added_instance_ids": sorted(result.get("added_instance_ids", [])),
+        "acquisition": copy.deepcopy(result),
     }
 
 
