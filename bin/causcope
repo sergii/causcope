@@ -21,7 +21,7 @@ case "${1:-}" in
     ;;
   why)
     shift
-    exec python3 "$ROOT/scripts/causcope_why.py" "$@"
+    exec python3 "$ROOT/scripts/causcope_why_entry.py" "$@"
     ;;
 esac
 
