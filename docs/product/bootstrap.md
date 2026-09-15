@@ -8,6 +8,7 @@ This document is the product projection of:
 RFC/0079-agent-first-rails-postgresql-bootstrap.md
 RFC/0080-observed-rails-incident-bootstrap.md
 RFC/0081-workspace-incident-objectives.md
+RFC/0082-bounded-runtime-observation-session.md
 ```
 
 ## Product boundary
@@ -95,7 +96,7 @@ Raw DSNs are not stored in the workspace. `provider-bindings.yaml` stores only t
 
 ## Workspace objectives
 
-The bounded incident bootstrap now persists its explicit comparison objectives instead of requiring the same numbers on every seed command:
+The bounded incident bootstrap persists explicit comparison objectives instead of requiring the same numbers on every seed command:
 
 ```bash
 causcope objectives set ./my-rails-app \
@@ -150,7 +151,9 @@ while RFC 0076 defines `Investigation` as the intended Causcope-owned parent con
 
 ## Runtime observation
 
-The portable Rails runtime and OTLP receiver can now reuse the active Investigation identity automatically:
+### Manual receiver path
+
+The portable Rails runtime and OTLP receiver can reuse the active Investigation identity automatically:
 
 ```bash
 causcope runtime start ./my-rails-app
@@ -162,11 +165,43 @@ Unless explicitly overridden, the command reads the current identity from the wo
 .causcope/runtime/<investigation-id>.json
 ```
 
-The user then reproduces the observed behavior while Rails instrumentation emits exact request and ActiveRecord pool identity.
+The user can then reproduce the observed behavior while Rails instrumentation emits exact request and ActiveRecord pool identity.
+
+### Bounded observation session
+
+RFC 0082 now composes receiver lifecycle, one revision-bound application command, runtime capture, and revision-1 seed into one bounded command:
+
+```bash
+causcope runtime observe ./my-rails-app -- <application-command>
+```
+
+The first slice is deliberately bounded: the supplied application command must exit on its own with status `0`.
+
+The orchestration path is:
+
+```text
+current Investigation
+  -> validate workspace objectives
+  -> start existing OTLP receiver
+  -> wait for receiver readiness
+  -> run application command through existing Rails runtime wrapper
+  -> collect exact concrete runtime facts
+  -> stop receiver
+  -> run existing incident seed
+  -> write diagnosis revision 1
+```
+
+This command does not add a second runtime-evidence model or a second diagnosis engine.
+
+If objectives are missing, the application command is not started. If the application command exits non-zero, no seed is attempted. If no explicitly bound runtime facts were captured, no diagnosis is created.
+
+The local application command is explicitly chosen by the local CLI user. This does not create a generic remote-command capability for Cloud or Relay.
+
+Interactive long-running Rails server supervision, signal forwarding, explicit stop/finalize, and multi-process observation remain separate future work.
 
 ## Incident bootstrap
 
-With workspace objectives configured, the first implemented incident seed is now:
+With workspace objectives configured, the underlying seed command remains available directly:
 
 ```bash
 causcope runtime seed ./my-rails-app
@@ -234,7 +269,7 @@ The resolved objective becomes the comparison baseline in the emitted measuremen
 
 ## Candidate model
 
-The repository now has empirical causal grounding for two distinct explanations of the same slow request.
+The repository has empirical causal grounding for two distinct explanations of the same slow request.
 
 ### Application-side pool contention
 
@@ -364,42 +399,47 @@ Rails repo
   -> system bootstrap
   -> explicit workspace objectives
   -> Investigation creation
-  -> runtime receiver bound to same Investigation
+  -> bounded receiver + application lifecycle orchestration
   -> concrete slow request + exact pool checkout observation
-  -> incident seed revision 1 without repeated threshold flags
+  -> automatic incident seed revision 1
   -> D3.1 vs database-latency alternatives
   -> query-latency discriminator
   -> exact PostgreSQL target
   -> persisted `causcope why` projection
 ```
 
+The manual `runtime start -> reproduce -> runtime seed` path still exists for debugging and unbounded workflows, but it is no longer required for the proven bounded command path.
+
 Negative paths include:
 
 ```text
-missing workspace objective and no CLI override -> no seed
+missing workspace objective -> application command not started
+non-zero bounded application exit -> no seed
+no explicitly bound runtime facts -> no seed
 low checkout wait below objective -> no seed
 runtime facts from another Investigation -> no seed
 ambiguous/unbound target -> no seed
-overwrite without --force -> rejected
+overwrite without explicit force -> rejected
 ```
 
 ## What remains
 
-Bootstrap is no longer the main missing reasoning link for this bounded Rails/PostgreSQL slice.
+Bootstrap and first bounded observation are no longer the main missing reasoning links for this Rails/PostgreSQL slice.
 
 The remaining product work is primarily ergonomics and breadth:
 
 ```text
-orchestrate receiver + instrumented Rails process more cleanly
-reduce manual reproduce/start/seed steps
+compose bounded observation directly from `causcope why`
+add interactive long-running Rails server observation only with explicit lifecycle semantics
+converge the generic persisted Investigation path further with the confirmed D3.1 X-Ray proof
 support more observed symptom shapes
-support additional runtime/provider targets when a concrete use case requires them
+support additional runtime/provider targets only for concrete use cases
 connect the same contracts to Dashboard/Cloud/Relay later
 ```
 
 The important invariant remains:
 
-> Automation may reduce setup steps, but it must not weaken provenance, explicit objectives, exact runtime identity, or target resolution.
+> Automation may reduce setup steps, but it must not weaken provenance, explicit objectives, exact runtime identity, target resolution, or execution authorization boundaries.
 
 ## Relationship to future Cloud and Relay
 
@@ -418,3 +458,5 @@ Diagnosis Snapshot
 ```
 
 A Helm chart, Relay daemon, Dashboard, or managed Cloud setup wizard may automate discovery, configuration, and lifecycle management, but the Investigation engine should see the same semantic objects.
+
+The local `runtime observe -- <command>` surface is not a precedent for remote arbitrary shell. Relay/Cloud must remain capability-constrained and typed.
