@@ -172,11 +172,11 @@ class InformationGainInstrumentRouterTest(unittest.TestCase):
             attributes["routing.selection_policy"],
         )
 
-    def test_probe_candidate_must_match_routed_probe(self) -> None:
+    def test_probe_candidate_requires_causal_outcome_analysis(self) -> None:
         _, router, pgbot = self.routers()
         broken = copy.deepcopy(PROBE_CANDIDATE)
-        broken["probe"]["id"] = "probe.database.inspect_lock_waits"
-        with self.assertRaises(ValueError):
+        broken.pop("outcome_analysis")
+        with self.assertRaisesRegex(ValueError, "outcome_analysis"):
             router.route(
                 broken,
                 copy.deepcopy(pgbot.adapter_scope),
