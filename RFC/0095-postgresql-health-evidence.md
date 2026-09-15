@@ -19,13 +19,16 @@ instrument = postgresql
 transport = postgresql_catalog
 ```
 
-It exposes exactly three canonical probes:
+It supports three canonical diagnostic questions:
 
 ```text
-probe.database.inspect_blocking_chains
+probe.database.inspect_lock_waits
+  -> adds blocking-chain evidence to the existing lock-wait question
 probe.database.inspect_long_running_transactions
 probe.database.inspect_vacuum_health
 ```
+
+Blocking chains deliberately reuse the existing lock-wait probe instead of introducing a competing semantic probe. This preserves the established discriminator identity while making its direct PostgreSQL implementation richer.
 
 The provider is intentionally distinct from `provider.pgbot.postgresql`.
 
@@ -45,31 +48,23 @@ Neither provider is causal authority. Causcope owns the semantic question, exact
 
 ## Blocking chains
 
-The provider reads current activity metadata and `pg_blocking_pids(pid)`. It reconstructs blocker-to-blocked paths and retains maximal dependency chains.
+The provider reads current activity metadata and `pg_blocking_pids(pid)`. It reconstructs blocker-to-blocked paths and retains maximal dependency chains. It does not collect SQL query text.
 
-It does not collect SQL query text.
-
-The canonical observation is:
+The existing `probe.database.inspect_lock_waits` now also produces:
 
 ```text
 observation.database.blocking_chain
 ```
 
-The existing lock-contention hypothesis now treats a current blocking chain as strong supporting evidence and a complete snapshot with no chain as decreasing evidence.
+The direct PostgreSQL provider maps that probe to `blocking_chain` and `lock_wait_event`; it does not claim to measure `lock_wait_time`, which remains available to other instruments that can measure duration correctly.
 
-`pg_blocking_pids` can report both hard blockers and sessions ahead in the lock wait queue. The provider therefore describes a blocking dependency chain, not an inferred business-level ownership relationship.
+The lock-contention hypothesis treats a current blocking chain as strong supporting evidence and a complete snapshot with no chain as decreasing evidence. `pg_blocking_pids` can report both hard blockers and sessions ahead in the lock wait queue, so the provider describes a blocking dependency chain, not an inferred business-level ownership relationship.
 
 ## Long-running transactions
 
-The provider reads `pg_stat_activity.xact_start` for current client backends and compares transaction age with an explicit collection threshold.
+The provider reads `pg_stat_activity.xact_start` for current client backends and compares transaction age with an explicit collection threshold. The default is 60 seconds.
 
-Default:
-
-```text
-60 seconds
-```
-
-The threshold is provider policy, not universal pathology. Evidence preserves the threshold and the maximum observed transaction age so later reasoning can distinguish "old enough to inspect" from "proven root cause".
+The threshold is provider policy, not universal pathology. Evidence preserves the threshold and maximum observed transaction age so later reasoning can distinguish "old enough to inspect" from "proven root cause".
 
 The canonical observation is:
 
@@ -77,18 +72,11 @@ The canonical observation is:
 observation.database.long_running_transaction
 ```
 
-No SQL text is required. `idle in transaction` remains visible through the session state because an idle transaction can still retain locks or an old snapshot.
+No SQL text is required. `idle in transaction` remains visible through session state because an idle transaction can still retain locks or an old snapshot.
 
 ## Vacuum and autovacuum health
 
-The provider reads:
-
-```text
-pg_stat_user_tables
-pg_class.reltuples
-pg_class.reloptions
-current autovacuum settings
-```
+The provider reads `pg_stat_user_tables`, `pg_class.reltuples`, `pg_class.reloptions`, and current autovacuum settings.
 
 For PostgreSQL versions before the max-threshold setting exists, the effective dead-tuple trigger is:
 
@@ -98,7 +86,7 @@ vacuum_trigger =
   + autovacuum_vacuum_scale_factor * pg_class.reltuples
 ```
 
-Per-table reloptions override global threshold and scale-factor settings. When `autovacuum_vacuum_max_threshold` exists, the provider also applies its global or per-table cap unless it is disabled with `-1`.
+Per-table reloptions override global threshold and scale-factor settings. When `autovacuum_vacuum_max_threshold` exists, the provider also applies its global or per-table cap unless disabled with `-1`.
 
 The provider emits two distinct observations:
 
@@ -107,9 +95,7 @@ observation.database.vacuum_pressure
 observation.database.autovacuum_disabled
 ```
 
-This separation is deliberate. Crossing the effective vacuum trigger means that a table currently has maintenance pressure. It does not prove that autovacuum is broken: an eligible table may be waiting for or already approaching normal maintenance. Conversely, explicit autovacuum disablement is configuration evidence and is preserved separately.
-
-Even when routine autovacuum is disabled, PostgreSQL can still launch vacuum work for transaction-ID wraparound prevention. Causcope must not translate `autovacuum=false` into "vacuum never runs".
+Crossing the effective vacuum trigger means a table currently has maintenance pressure. It does not prove that autovacuum is broken. Explicit routine-autovacuum disablement is separate configuration evidence. Even with routine autovacuum disabled, PostgreSQL can still launch vacuum work for transaction-ID wraparound prevention.
 
 ## Exact target and privacy
 
@@ -119,18 +105,7 @@ Every emitted evidence instance binds:
 scope.attributes.target_resource = exact PostgreSQL resource
 ```
 
-The provider source also records the exact target resource and database identity.
-
-The collector deliberately excludes:
-
-```text
-SQL query text
-connection URL
-credentials
-application row contents
-```
-
-Only bounded catalog metadata, counts, ages, configuration, and relation statistics become evidence.
+The provider source also records the exact target resource and database identity. The collector excludes SQL query text, connection URLs, credentials, and application row contents. Only bounded catalog metadata, counts, ages, configuration, and relation statistics become evidence.
 
 ## Provider binding
 
@@ -149,19 +124,11 @@ Workspace provider bindings gain:
       dependency: postgresql
 ```
 
-The exact target resource is not duplicated in this binding. It comes from the provider instance in resource topology and is attached to runtime evidence by the provider.
-
-The database URL remains environment-only.
+The exact target resource comes from the provider instance in resource topology and is attached to runtime evidence by the provider. The database URL remains environment-only.
 
 ## Safety
 
-The collector starts its PostgreSQL transaction with:
-
-```sql
-SET TRANSACTION READ ONLY
-```
-
-All three probes are canonical `read_only` probes. The slice authorizes no `VACUUM`, cancellation, termination, lock release, configuration change, or other remediation.
+The collector starts its PostgreSQL transaction with `SET TRANSACTION READ ONLY`. All supported probes are canonical `read_only` probes. The slice authorizes no `VACUUM`, cancellation, termination, lock release, configuration change, or remediation.
 
 ## Verification
 
@@ -172,13 +139,6 @@ The proof has two layers:
 
 ## Non-goals
 
-This RFC does not yet claim:
-
-- historical blocking-chain reconstruction;
-- long-transaction business impact without correlation to an affected execution;
-- autovacuum worker starvation or saturation from trigger crossing alone;
-- table/index bloat measurement;
-- automatic remediation;
-- replacement of pgbot.
+This RFC does not yet claim historical blocking-chain reconstruction, long-transaction business impact without correlation to an affected execution, autovacuum worker starvation or saturation from trigger crossing alone, table/index bloat measurement, automatic remediation, or replacement of pgbot.
 
 A later slice can add worker saturation/starvation only when it has evidence that distinguishes "eligible for vacuum" from "unable to receive sufficient vacuum work" over time.
