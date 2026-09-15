@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/causal-verification-projection.schema.json",
+  "title": "Causcope causal verification projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "incident_id", "evidence_revision", "claims"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "causal_verification_projection"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "evidence_revision": {"type": "integer", "minimum": 0},
+    "claims": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/claim"}
+    }
+  },
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "hypothesis", "status", "baseline_evidence_revision",
+        "verified_at_evidence_revision", "target_resource", "scope",
+        "intervention", "evidence_ids", "predicted_outcomes", "controls", "reasons"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^verification\\.[A-Za-z0-9_.-]+$"},
+        "hypothesis": {"type": ["string", "null"]},
+        "status": {"enum": ["verified", "incomplete"]},
+        "baseline_evidence_revision": {"type": "integer"},
+        "verified_at_evidence_revision": {"type": "integer", "minimum": 0},
+        "target_resource": {"type": ["string", "null"]},
+        "scope": {"type": ["object", "null"]},
+        "intervention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "resource"],
+          "properties": {
+            "kind": {"type": ["string", "null"]},
+            "resource": {"type": ["string", "null"]}
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "predicted_outcomes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/outcome"}
+        },
+        "controls": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/outcome"}
+        },
+        "reasons": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation", "state", "phase"],
+      "properties": {
+        "observation": {"type": "string", "minLength": 1},
+        "state": {"enum": ["observed", "absent"]},
+        "phase": {"enum": ["pre_intervention", "control", "post_intervention"]}
+      }
+    }
+  }
+}
