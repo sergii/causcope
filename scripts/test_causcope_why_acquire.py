@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 
 import causcope_why
+from execution_set_selection import select_ready_execution_set
 from test_causcope_why import run, write_json
 from test_multi_target_execution_set import MultiTargetExecutionSetTest
 
@@ -78,9 +79,170 @@ def assert_ready_route_before_acquisition(workspace: Path) -> None:
     assert route["agent_action"]["mcp_execution_available"] is False
 
 
+def _probe_candidate(
+    probe_id: str,
+    *,
+    top_two_sided: int,
+    top_contrast: int,
+    top_discriminated: int,
+    two_sided_pairs: int,
+    contrast_components: int,
+    discriminated_pairs: int,
+    hypotheses_tested: int,
+) -> dict:
+    return {
+        "rank": 1,
+        "probe": {"id": probe_id},
+        "risk": "read_only",
+        "hypotheses_tested": [f"hypothesis.{probe_id}.{index}" for index in range(hypotheses_tested)],
+        "factors": {
+            "top_candidate_two_sided_alternatives": [
+                f"hypothesis.alt.{index}" for index in range(top_two_sided)
+            ],
+            "top_candidate_contrast_components": top_contrast,
+            "top_candidate_discriminated_alternatives": [
+                f"hypothesis.discriminated.{index}" for index in range(top_discriminated)
+            ],
+            "two_sided_candidate_pairs": [
+                [f"hypothesis.left.{index}", f"hypothesis.right.{index}"]
+                for index in range(two_sided_pairs)
+            ],
+            "contrast_components": contrast_components,
+            "discriminated_candidate_pairs": [
+                [f"hypothesis.pair-left.{index}", f"hypothesis.pair-right.{index}"]
+                for index in range(discriminated_pairs)
+            ],
+        },
+    }
+
+
+def _selection_fixture(
+    left_candidate: dict,
+    right_candidate: dict,
+) -> tuple[dict, dict]:
+    left_scope = {"attributes": {"cohort": "checkout"}}
+    right_scope = {"attributes": {"cohort": "billing"}}
+    snapshot = {
+        "kind": "diagnosis_snapshot",
+        "incident_id": "incident.multi-ready",
+        "evidence_revision": 4,
+        "partitions": [
+            {
+                "scope": left_scope,
+                "diagnoses": [
+                    {
+                        "target": "observation.http.request_latency",
+                        "probe_ranking": {"found": True, "probes": [left_candidate]},
+                    }
+                ],
+            },
+            {
+                "scope": right_scope,
+                "diagnoses": [
+                    {
+                        "target": "observation.payment.failure_rate",
+                        "probe_ranking": {"found": True, "probes": [right_candidate]},
+                    }
+                ],
+            },
+        ],
+    }
+    execution_sets = {
+        "kind": "routed_execution_sets",
+        "incident_id": "incident.multi-ready",
+        "evidence_revision": 4,
+        "sets": [
+            {
+                "id": "execution-set.billing",
+                "scope": right_scope,
+                "diagnosis_target": "observation.payment.failure_rate",
+                "probe_id": right_candidate["probe"]["id"],
+                "state": "ready",
+                "arguments": {"executionSetId": "execution-set.billing"},
+            },
+            {
+                "id": "execution-set.checkout",
+                "scope": left_scope,
+                "diagnosis_target": "observation.http.request_latency",
+                "probe_id": left_candidate["probe"]["id"],
+                "state": "ready",
+                "arguments": {"executionSetId": "execution-set.checkout"},
+            },
+            {
+                "id": "execution-set.blocked",
+                "scope": left_scope,
+                "diagnosis_target": "observation.http.request_latency",
+                "probe_id": "probe.blocked",
+                "state": "blocked",
+                "arguments": None,
+            },
+        ],
+    }
+    return snapshot, execution_sets
+
+
+def assert_bounded_multi_set_selection() -> None:
+    stronger = _probe_candidate(
+        "probe.checkout.strong",
+        top_two_sided=2,
+        top_contrast=6,
+        top_discriminated=2,
+        two_sided_pairs=3,
+        contrast_components=9,
+        discriminated_pairs=4,
+        hypotheses_tested=2,
+    )
+    weaker = _probe_candidate(
+        "probe.billing.weaker",
+        top_two_sided=1,
+        top_contrast=8,
+        top_discriminated=3,
+        two_sided_pairs=4,
+        contrast_components=12,
+        discriminated_pairs=5,
+        hypotheses_tested=3,
+    )
+    snapshot, execution_sets = _selection_fixture(stronger, weaker)
+    selection = select_ready_execution_set(snapshot, execution_sets)
+    assert selection["state"] == "selected"
+    assert selection["selected_execution_set_id"] == "execution-set.checkout"
+    assert selection["reason"] == "unique_best_semantic_probe_priority"
+    assert len(selection["candidates"]) == 2
+
+    tied_left = _probe_candidate(
+        "probe.checkout.tie-a",
+        top_two_sided=1,
+        top_contrast=4,
+        top_discriminated=2,
+        two_sided_pairs=2,
+        contrast_components=6,
+        discriminated_pairs=3,
+        hypotheses_tested=2,
+    )
+    tied_right = _probe_candidate(
+        "probe.billing.tie-z",
+        top_two_sided=1,
+        top_contrast=4,
+        top_discriminated=2,
+        two_sided_pairs=2,
+        contrast_components=6,
+        discriminated_pairs=3,
+        hypotheses_tested=2,
+    )
+    snapshot, execution_sets = _selection_fixture(tied_left, tied_right)
+    ambiguous = select_ready_execution_set(snapshot, execution_sets)
+    assert ambiguous["state"] == "ambiguous"
+    assert ambiguous["selected_execution_set_id"] is None
+    assert ambiguous["reason"] == "semantic_priority_tie"
+    assert {
+        item["execution_set_id"] for item in ambiguous["candidates"] if item["best"]
+    } == {"execution-set.checkout", "execution-set.billing"}
+
+
 def main() -> int:
     help_result = run("why", "--help")
     assert "--acquire" not in help_result.stdout
+    assert_bounded_multi_set_selection()
 
     with tempfile.TemporaryDirectory(prefix="causcope-why-acquire-") as temporary:
         workspace = Path(temporary) / ".causcope"
