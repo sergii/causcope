@@ -1,4 +1,4 @@
-name: Validate Rails X-Ray compatibility demo
+name: Validate canonical golden product demo
 
 on:
   push:
@@ -7,35 +7,43 @@ on:
       - "bin/causcope"
       - "scripts/causcope_why_entry.py"
       - "scripts/causcope_why.py"
-      - "scripts/demo_rails_pool.sh"
+      - "scripts/causal_verification.py"
+      - "scripts/causal_verification_source.py"
+      - "scripts/causal_verification_surfaces.py"
+      - "scripts/runtime_incident_seed.py"
+      - "scripts/rails_pool_evidence_import.py"
+      - "scripts/demo_canonical_rails_pool.sh"
+      - "scripts/causcope_bootstrap.py"
       - "scripts/causcope_scan.py"
       - "scripts/otlp_concrete_receiver.py"
-      - "scripts/rails_pool_vertical_slice.py"
       - "integrations/rails/**"
       - "lab/rails-connection-pool/**"
-      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
-      - "RFC/0089-canonical-verification-authority.md"
+      - "RFC/0090-canonical-golden-product-demo.md"
       - ".github/workflows/golden-rails-demo.yml"
   pull_request:
     paths:
       - "bin/causcope"
       - "scripts/causcope_why_entry.py"
       - "scripts/causcope_why.py"
-      - "scripts/demo_rails_pool.sh"
+      - "scripts/causal_verification.py"
+      - "scripts/causal_verification_source.py"
+      - "scripts/causal_verification_surfaces.py"
+      - "scripts/runtime_incident_seed.py"
+      - "scripts/rails_pool_evidence_import.py"
+      - "scripts/demo_canonical_rails_pool.sh"
+      - "scripts/causcope_bootstrap.py"
       - "scripts/causcope_scan.py"
       - "scripts/otlp_concrete_receiver.py"
-      - "scripts/rails_pool_vertical_slice.py"
       - "integrations/rails/**"
       - "lab/rails-connection-pool/**"
-      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
-      - "RFC/0089-canonical-verification-authority.md"
+      - "RFC/0090-canonical-golden-product-demo.md"
       - ".github/workflows/golden-rails-demo.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: rails-xray-compatibility-${{ github.event.pull_request.number || github.ref }}
+  group: canonical-golden-product-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -76,8 +84,34 @@ jobs:
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
 
-      - name: Run the explicit Rails X-Ray compatibility proof
+      - name: Run canonical product demo
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
-          CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-golden-workspace
-        run: bash scripts/demo_rails_pool.sh
+          CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-canonical-golden
+        run: bash scripts/demo_canonical_rails_pool.sh
+
+      - name: Assert canonical verification authority
+        env:
+          CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-canonical-golden
+        run: |
+          ./bin/causcope why "checkout is slow" \
+            --workspace "$CAUSCOPE_WORKSPACE" \
+            --require-confirmed \
+            --json > "$RUNNER_TEMP/canonical-why.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          document = json.loads((Path(os.environ["RUNNER_TEMP"]) / "canonical-why.json").read_text())
+          assert document["kind"] == "causcope_why"
+          assert document["status"] == "diagnosis_available"
+          assert document["diagnosis"]["evidence_revision"] == 2
+          claims = document["causal_verification"]["claims"]
+          assert len(claims) == 1
+          claim = claims[0]
+          assert claim["status"] == "verified"
+          assert claim["hypothesis"] == "hypothesis.database.connection_pool_exhaustion"
+          assert claim["intervention"]["kind"] == "resource_capacity_release"
+          assert claim["intervention"]["resource"] == "pool:active_record.primary"
+          PY
