@@ -32,7 +32,8 @@ DEFAULT_RUNTIME_EVIDENCE = "runtime-evidence.json"
 DEFAULT_RUNTIME_RELATIONSHIPS = "runtime-relationships.json"
 DEFAULT_DIAGNOSIS = "diagnosis.json"
 REQUEST_LATENCY_OBSERVATION = "observation.http.request_latency"
-SELECTION_POLICY = "slowest_above_objective_with_exact_single_target_runtime_binding"
+POOL_WAIT_OBSERVATION = "observation.database.connection_pool_wait_time"
+SELECTION_POLICY = "slowest_request_with_elevated_pool_wait_and_exact_single_target_binding"
 
 
 def workspace_path(root: Path, configured: Path | None) -> Path:
@@ -105,16 +106,29 @@ def execution_relationship_targets(
     return matched, targets
 
 
+def interactions_for_execution(
+    runtime: dict[str, Any], execution_id: str
+) -> dict[str, dict[str, Any]]:
+    return {
+        item["id"]: item
+        for item in runtime.get("pool_interactions", [])
+        if item.get("execution_id") == execution_id and isinstance(item.get("id"), str)
+    }
+
+
 def choose_execution(
     runtime: dict[str, Any],
     relationships: dict[str, Any],
     topology: ResourceTopology,
     *,
-    threshold_ms: float,
+    request_threshold_ms: float,
+    pool_wait_threshold_ms: float,
     code_symbol: str | None,
     trace_id: str | None,
-) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
-    candidates: list[tuple[dict[str, Any], list[dict[str, Any]], str]] = []
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], str]:
+    candidates: list[
+        tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], str]
+    ] = []
     rejected_multi_target: list[str] = []
     rejected_unbound: list[str] = []
 
@@ -126,8 +140,9 @@ def choose_execution(
         duration = execution.get("duration_ms")
         if not isinstance(duration, (int, float)) or isinstance(duration, bool):
             continue
-        if float(duration) <= threshold_ms:
+        if float(duration) <= request_threshold_ms:
             continue
+
         try:
             matched_relationships, targets = execution_relationship_targets(
                 execution["id"], relationships, topology
@@ -140,7 +155,30 @@ def choose_execution(
         if len(targets) != 1:
             rejected_multi_target.append(execution["id"])
             continue
-        candidates.append((execution, matched_relationships, next(iter(targets))))
+
+        interactions = interactions_for_execution(runtime, execution["id"])
+        relevant_interactions = [
+            interactions[relationship["evidence_ref"]]
+            for relationship in matched_relationships
+            if relationship.get("evidence_ref") in interactions
+            and float(interactions[relationship["evidence_ref"]].get("checkout_wait_ms", 0.0))
+            > pool_wait_threshold_ms
+        ]
+        if not relevant_interactions:
+            continue
+
+        relevant_interactions.sort(
+            key=lambda item: (-float(item["checkout_wait_ms"]), item["id"])
+        )
+        selected_interaction = relevant_interactions[0]
+        candidates.append(
+            (
+                execution,
+                selected_interaction,
+                matched_relationships,
+                next(iter(targets)),
+            )
+        )
 
     if not candidates:
         details: list[str] = []
@@ -156,38 +194,37 @@ def choose_execution(
         suffix = f" for {', '.join(selector)}" if selector else ""
         detail_suffix = f" ({'; '.join(details)})" if details else ""
         raise ValueError(
-            f"no request execution above {threshold_ms:g} ms had an exact single-target runtime binding{suffix}{detail_suffix}"
+            "no request execution satisfied both explicit objectives "
+            f"(request > {request_threshold_ms:g} ms, pool wait > {pool_wait_threshold_ms:g} ms) "
+            f"with an exact single-target runtime binding{suffix}{detail_suffix}"
         )
 
     candidates.sort(
         key=lambda item: (
             -float(item[0]["duration_ms"]),
+            -float(item[1]["checkout_wait_ms"]),
             item[0]["id"],
         )
     )
     return candidates[0]
 
 
-def evidence_instance_id(incident_id: str, execution: dict[str, Any]) -> str:
-    payload = "\0".join(
-        (
-            incident_id,
-            execution["id"],
-            REQUEST_LATENCY_OBSERVATION,
-        )
-    )
+def evidence_instance_id(
+    incident_id: str, execution: dict[str, Any], observation: str
+) -> str:
+    payload = "\0".join((incident_id, execution["id"], observation))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-    return f"evidence.runtime.request_latency.{digest}"
+    suffix = "request_latency" if observation == REQUEST_LATENCY_OBSERVATION else "pool_wait"
+    return f"evidence.runtime.{suffix}.{digest}"
 
 
-def build_request_latency_evidence(
+def trace_source(
     *,
-    incident_id: str,
     system_id: str,
     revision: str,
     execution: dict[str, Any],
-    threshold_ms: float,
     target_resource: str,
+    pool_id: str,
 ) -> dict[str, Any]:
     source: dict[str, Any] = {
         "type": "trace",
@@ -199,6 +236,7 @@ def build_request_latency_evidence(
             "causcope.code_symbol": str(execution["code_symbol"]),
             "causcope.system_id": system_id,
             "causcope.revision": revision,
+            "causcope.runtime_resource": pool_id,
             "causcope.target_resource": target_resource,
         },
     }
@@ -207,31 +245,60 @@ def build_request_latency_evidence(
         uri = execution_source.get("uri")
         if isinstance(uri, str) and uri:
             source["uri"] = uri
+    return source
 
+
+def build_initial_evidence(
+    *,
+    incident_id: str,
+    system_id: str,
+    revision: str,
+    execution: dict[str, Any],
+    interaction: dict[str, Any],
+    request_threshold_ms: float,
+    pool_wait_threshold_ms: float,
+    target_resource: str,
+) -> dict[str, Any]:
+    scope = {
+        "attributes": {
+            "service": system_id,
+            "code_symbol": str(execution["code_symbol"]),
+            "runtime_resource": str(interaction["pool_id"]),
+        }
+    }
+    source = trace_source(
+        system_id=system_id,
+        revision=revision,
+        execution=execution,
+        target_resource=target_resource,
+        pool_id=str(interaction["pool_id"]),
+    )
     duration_ms = float(execution["duration_ms"])
-    evidence = {
+    pool_wait_ms = float(interaction["checkout_wait_ms"])
+
+    return {
         "schema_version": "0.1",
         "kind": "runtime_evidence",
         "incident_id": incident_id,
-        "description": "Initial incident evidence projected from one exact Rails runtime execution.",
+        "description": (
+            "Initial incident evidence projected from one exact Rails request and its "
+            "ActiveRecord pool checkout interaction."
+        ),
         "instances": [
             {
-                "id": evidence_instance_id(incident_id, execution),
+                "id": evidence_instance_id(
+                    incident_id, execution, REQUEST_LATENCY_OBSERVATION
+                ),
                 "observation": REQUEST_LATENCY_OBSERVATION,
                 "state": "observed",
                 "observed_at": execution["end_time"],
                 "confidence": "high",
-                "source": source,
-                "scope": {
-                    "attributes": {
-                        "service": system_id,
-                        "code_symbol": str(execution["code_symbol"]),
-                    }
-                },
+                "source": dict(source),
+                "scope": dict(scope),
                 "measurement": {
                     "value": duration_ms,
-                    "baseline": threshold_ms,
-                    "delta": duration_ms - threshold_ms,
+                    "baseline": request_threshold_ms,
+                    "delta": duration_ms - request_threshold_ms,
                     "unit": "ms",
                     "comparison": "above_baseline",
                 },
@@ -239,17 +306,48 @@ def build_request_latency_evidence(
                     "selection_policy": SELECTION_POLICY,
                     "target_resource": target_resource,
                 },
-                "note": "Request duration exceeded the explicit latency objective; mechanism remains unknown.",
-            }
+                "note": (
+                    "Request duration exceeded the explicit latency objective; this is symptom "
+                    "evidence and does not identify a mechanism by itself."
+                ),
+            },
+            {
+                "id": evidence_instance_id(
+                    incident_id, execution, POOL_WAIT_OBSERVATION
+                ),
+                "observation": POOL_WAIT_OBSERVATION,
+                "state": "observed",
+                "observed_at": interaction["observed_at"],
+                "confidence": "high",
+                "source": dict(source),
+                "scope": dict(scope),
+                "measurement": {
+                    "value": pool_wait_ms,
+                    "baseline": pool_wait_threshold_ms,
+                    "delta": pool_wait_ms - pool_wait_threshold_ms,
+                    "unit": "ms",
+                    "comparison": "above_baseline",
+                },
+                "labels": {
+                    "selection_policy": SELECTION_POLICY,
+                    "target_resource": target_resource,
+                    "pool_interaction_id": str(interaction["id"]),
+                },
+                "note": (
+                    "ActiveRecord checkout wait exceeded the explicit pool-wait objective on the "
+                    "same request trace; database execution health remains unproven."
+                ),
+            },
         ],
     }
-    return evidence
 
 
 def atomic_write_json(path: Path, document: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     temporary.replace(path)
 
 
@@ -258,21 +356,28 @@ def seed_workspace(
     root: Path,
     workspace: Path,
     runtime_path: Path,
-    threshold_ms: float,
+    request_threshold_ms: float,
+    pool_wait_threshold_ms: float,
     code_symbol: str | None,
     trace_id: str | None,
     force: bool,
 ) -> dict[str, Any]:
-    if threshold_ms <= 0:
+    if request_threshold_ms <= 0:
         raise ValueError("request latency threshold must be positive")
+    if pool_wait_threshold_ms < 0:
+        raise ValueError("pool wait threshold must be non-negative")
 
     incident_id = load_workspace_incident_id(workspace)
     static_path = workspace / DEFAULT_STATIC_FACTS
     topology_path = workspace / DEFAULT_TOPOLOGY
     if not static_path.is_file():
-        raise ValueError(f"static facts not found at {static_path}; run `causcope bootstrap` first")
+        raise ValueError(
+            f"static facts not found at {static_path}; run `causcope bootstrap` first"
+        )
     if not topology_path.is_file():
-        raise ValueError(f"resource topology not found at {topology_path}; run `causcope bootstrap` first")
+        raise ValueError(
+            f"resource topology not found at {topology_path}; run `causcope bootstrap` first"
+        )
     if not runtime_path.is_file():
         raise ValueError(
             f"runtime facts not found at {runtime_path}; start the receiver and reproduce the problem first"
@@ -288,23 +393,26 @@ def seed_workspace(
 
     relationships = project_runtime_relationships(static, runtime)
     topology = load_resource_topology(topology_path)
-    execution, matched_relationships, target_resource = choose_execution(
+    execution, interaction, matched_relationships, target_resource = choose_execution(
         runtime,
         relationships,
         topology,
-        threshold_ms=threshold_ms,
+        request_threshold_ms=request_threshold_ms,
+        pool_wait_threshold_ms=pool_wait_threshold_ms,
         code_symbol=code_symbol,
         trace_id=trace_id,
     )
 
     concepts = load_concepts(ROOT)
     edges = load_edges(ROOT)
-    evidence = build_request_latency_evidence(
+    evidence = build_initial_evidence(
         incident_id=incident_id,
         system_id=static["system_id"],
         revision=static["revision"]["value"],
         execution=execution,
-        threshold_ms=threshold_ms,
+        interaction=interaction,
+        request_threshold_ms=request_threshold_ms,
+        pool_wait_threshold_ms=pool_wait_threshold_ms,
         target_resource=target_resource,
     )
     validate_runtime_evidence_document(evidence, concepts)
@@ -323,16 +431,22 @@ def seed_workspace(
         relationships,
         topology,
     )
+    pool_wait_resolutions = [
+        resolution
+        for resolution in target_resolution.get("resolutions", [])
+        if resolution.get("diagnosis_target") == POOL_WAIT_OBSERVATION
+        and resolution.get("status") == "resolved"
+    ]
     resolved_targets = {
         binding["target_resource"]
-        for resolution in target_resolution.get("resolutions", [])
-        if resolution.get("status") == "resolved"
+        for resolution in pool_wait_resolutions
         for binding in resolution.get("target_bindings", [])
     }
     if resolved_targets != {target_resource}:
         rendered = ", ".join(sorted(resolved_targets)) or "none"
         raise ValueError(
-            f"initial diagnosis could not be proven to resolve only to {target_resource}; resolved targets: {rendered}"
+            f"initial pool-wait diagnosis could not be proven to resolve only to {target_resource}; "
+            f"resolved targets: {rendered}"
         )
 
     output_paths = {
@@ -356,15 +470,20 @@ def seed_workspace(
     top_probe = None
     for partition in diagnosis.get("partitions", []):
         for item in partition.get("diagnoses", []):
-            if item.get("target") != REQUEST_LATENCY_OBSERVATION:
+            if item.get("target") != POOL_WAIT_OBSERVATION:
                 continue
-            paths = item.get("ranking", {}).get("paths", [])
-            if paths:
-                leading_hypothesis = paths[0].get("source")
+            candidates = item.get("ranking", {}).get("candidates", [])
+            if candidates:
+                leading_hypothesis = candidates[0].get("source", {}).get("id")
             probes = item.get("probe_ranking", {}).get("probes", [])
             if probes:
                 top_probe = probes[0].get("probe", {}).get("id")
             break
+
+    if leading_hypothesis is None:
+        raise ValueError(
+            "initial pool-wait observation produced no causal candidate; knowledge graph is incomplete"
+        )
 
     return {
         "schema_version": "0.1",
@@ -373,11 +492,17 @@ def seed_workspace(
         "evidence_revision": 1,
         "selection_policy": SELECTION_POLICY,
         "selected_execution": execution["id"],
+        "selected_pool_interaction": interaction["id"],
         "code_symbol": execution["code_symbol"],
         "trace_id": execution["trace_id"],
-        "duration_ms": float(execution["duration_ms"]),
-        "latency_threshold_ms": threshold_ms,
-        "runtime_relationship_ids": sorted(item["id"] for item in matched_relationships),
+        "request_duration_ms": float(execution["duration_ms"]),
+        "request_latency_threshold_ms": request_threshold_ms,
+        "pool_wait_ms": float(interaction["checkout_wait_ms"]),
+        "pool_wait_threshold_ms": pool_wait_threshold_ms,
+        "runtime_resource": interaction["pool_id"],
+        "runtime_relationship_ids": sorted(
+            item["id"] for item in matched_relationships
+        ),
         "target_resource": target_resource,
         "leading_hypothesis": leading_hypothesis,
         "next_probe": top_probe,
@@ -387,12 +512,16 @@ def seed_workspace(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Seed diagnosis revision 1 from exact Rails runtime evidence without guessing a mechanism."
+        description=(
+            "Seed diagnosis revision 1 from one exact slow Rails request and its "
+            "elevated ActiveRecord pool checkout wait."
+        )
     )
     parser.add_argument("path", type=Path, nargs="?", default=Path("."))
     parser.add_argument("--workspace", type=Path)
     parser.add_argument("--runtime-facts", type=Path)
     parser.add_argument("--request-latency-threshold-ms", type=float, required=True)
+    parser.add_argument("--pool-wait-threshold-ms", type=float, required=True)
     parser.add_argument("--code-symbol")
     parser.add_argument("--trace-id")
     parser.add_argument("--force", action="store_true")
@@ -421,7 +550,8 @@ def main(argv: list[str] | None = None) -> int:
             root=root,
             workspace=workspace,
             runtime_path=runtime_path,
-            threshold_ms=args.request_latency_threshold_ms,
+            request_threshold_ms=args.request_latency_threshold_ms,
+            pool_wait_threshold_ms=args.pool_wait_threshold_ms,
             code_symbol=args.code_symbol,
             trace_id=args.trace_id,
             force=args.force,
@@ -431,10 +561,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Investigation: {result['incident_id']}")
             print(f"Selected execution: {result['selected_execution']}")
-            print(f"Request latency: {result['duration_ms']:.3f} ms")
-            print(f"Objective: {result['latency_threshold_ms']:.3f} ms")
+            print(f"Request latency: {result['request_duration_ms']:.3f} ms")
+            print(f"Request objective: {result['request_latency_threshold_ms']:.3f} ms")
+            print(f"Pool wait: {result['pool_wait_ms']:.3f} ms")
+            print(f"Pool-wait objective: {result['pool_wait_threshold_ms']:.3f} ms")
+            print(f"Runtime resource: {result['runtime_resource']}")
             print(f"Exact target: {result['target_resource']}")
-            print(f"Leading hypothesis: {result['leading_hypothesis'] or '<none>'}")
+            print(f"Leading hypothesis: {result['leading_hypothesis']}")
             print(f"Next probe: {result['next_probe'] or '<none>'}")
             print("Wrote diagnosis revision 1")
         return 0
