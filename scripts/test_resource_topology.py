@@ -67,6 +67,18 @@ class ResourceTopologyTest(unittest.TestCase):
             self.topology.provider_type("provider_type.prometheus.metrics")["runner_capabilities"],
         )
 
+    def test_runtime_resources_require_explicit_target_bindings(self) -> None:
+        self.assertEqual(
+            "db.orders.prod",
+            self.topology.target_for_runtime_resource("pool:active_record.primary"),
+        )
+        self.assertEqual(
+            "db.payments.prod",
+            self.topology.target_for_runtime_resource("pool:active_record.replica"),
+        )
+        with self.assertRaisesRegex(ValueError, "no explicit topology target binding"):
+            self.topology.target_for_runtime_resource("pool:active_record.unknown")
+
     def test_canonical_document_is_deterministically_sorted(self) -> None:
         document = self.topology.canonical_document()
         self.assertEqual(
@@ -77,11 +89,27 @@ class ResourceTopologyTest(unittest.TestCase):
             sorted(instance["id"] for instance in document["provider_instances"]),
             [instance["id"] for instance in document["provider_instances"]],
         )
+        self.assertEqual(
+            sorted(binding["runtime_resource"] for binding in document["runtime_bindings"]),
+            [binding["runtime_resource"] for binding in document["runtime_bindings"]],
+        )
 
     def test_duplicate_ids_fail_closed(self) -> None:
         document = copy.deepcopy(self.document)
         document["resources"].append(copy.deepcopy(document["resources"][0]))
         with self.assertRaisesRegex(ValueError, "duplicate topology id"):
+            ResourceTopology(document)
+
+    def test_duplicate_runtime_resource_binding_fails_closed(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["runtime_bindings"].append(copy.deepcopy(document["runtime_bindings"][0]))
+        with self.assertRaisesRegex(ValueError, "duplicate runtime resource binding"):
+            ResourceTopology(document)
+
+    def test_dangling_runtime_target_binding_fails_closed(self) -> None:
+        document = copy.deepcopy(self.document)
+        document["runtime_bindings"][0]["target_resource"] = "db.unknown.prod"
+        with self.assertRaisesRegex(ValueError, "unknown target resource"):
             ResourceTopology(document)
 
     def test_dangling_provider_target_fails_closed(self) -> None:
