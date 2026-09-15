@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/recommendation-session-event.schema.json",
+  "title": "Causcope recommendation session event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "sequence",
+    "event_type",
+    "recorded_at",
+    "session_id",
+    "identity",
+    "data",
+    "previous_hash",
+    "event_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "recommendation_session_event"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "event_type": {"enum": ["session_started", "action_result_recorded"]},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "session_id": {"type": "string", "pattern": "^recommendation-session\\.[0-9a-f]{16}$"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "data": {"type": "object"},
+    "previous_hash": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      ]
+    },
+    "event_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"event_type": {"const": "session_started"}}},
+      "then": {"properties": {"data": {"$ref": "#/$defs/start_data"}}}
+    },
+    {
+      "if": {"properties": {"event_type": {"const": "action_result_recorded"}}},
+      "then": {"properties": {"data": {"$ref": "#/$defs/action_result_data"}}}
+    }
+  ],
+  "$defs": {
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_id",
+        "revision",
+        "incident_id",
+        "recommendation_id",
+        "subject_resource",
+        "query_object"
+      ],
+      "properties": {
+        "system_id": {"type": "string", "minLength": 1},
+        "revision": {"$ref": "#/$defs/revision"},
+        "incident_id": {"type": "string", "minLength": 1},
+        "recommendation_id": {"type": "string", "minLength": 1},
+        "subject_resource": {"type": "string", "minLength": 1},
+        "query_object": {"type": "string", "minLength": 1}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boundaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "prompt", "reason", "execution_boundary"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "operator_question",
+            "read_only_probe",
+            "safe_experiment",
+            "human_decision",
+            "stop_candidate"
+          ]
+        },
+        "gap_id": {"type": "string", "pattern": "^information_gap\\.[a-z0-9_.-]+$"},
+        "prompt": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "execution_boundary": {
+          "enum": [
+            "question_only",
+            "existing_read_only_probe",
+            "experiment_plan_only",
+            "human_decision_required",
+            "stop_without_more_evidence"
+          ]
+        },
+        "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
+        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"},
+        "scope": {"$ref": "#/$defs/scope"}
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recommendation_projection", "information_gap_projection"],
+      "properties": {
+        "recommendation_projection": {"type": "object"},
+        "information_gap_projection": {"type": "object"}
+      }
+    },
+    "start_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot"],
+      "properties": {
+        "snapshot": {"$ref": "#/$defs/snapshot"}
+      }
+    },
+    "read_only_probe_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "acquisition_result"],
+      "properties": {
+        "kind": {"const": "read_only_probe"},
+        "acquisition_result": {"type": "object"}
+      }
+    },
+    "operator_question_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "gap_id", "source", "answer"],
+      "properties": {
+        "kind": {"const": "operator_question"},
+        "gap_id": {"type": "string", "pattern": "^information_gap\\.[a-z0-9_.-]+$"},
+        "source": {"const": "human"},
+        "answer": {"type": "string", "minLength": 1}
+      }
+    },
+    "safe_experiment_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "gap_id", "result_ref", "reported_outcome"],
+      "properties": {
+        "kind": {"const": "safe_experiment"},
+        "gap_id": {"type": "string", "pattern": "^information_gap\\.[a-z0-9_.-]+$"},
+        "result_ref": {"type": "string", "minLength": 1},
+        "reported_outcome": {"enum": ["demonstrated", "not_demonstrated", "inconclusive"]},
+        "summary": {"type": "string", "minLength": 1}
+      }
+    },
+    "human_decision_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "decision"],
+      "properties": {
+        "kind": {"const": "human_decision"},
+        "decision": {"enum": ["approved", "rejected"]},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "stop_candidate_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reason"],
+      "properties": {
+        "kind": {"const": "stop_candidate"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "action_result": {
+      "oneOf": [
+        {"$ref": "#/$defs/read_only_probe_result"},
+        {"$ref": "#/$defs/operator_question_result"},
+        {"$ref": "#/$defs/safe_experiment_result"},
+        {"$ref": "#/$defs/human_decision_result"},
+        {"$ref": "#/$defs/stop_candidate_result"}
+      ]
+    },
+    "action_result_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_session_revision", "action", "result", "snapshot"],
+      "properties": {
+        "expected_session_revision": {"type": "integer", "minimum": 1},
+        "action": {"$ref": "#/$defs/action"},
+        "result": {"$ref": "#/$defs/action_result"},
+        "snapshot": {"$ref": "#/$defs/snapshot"}
+      }
+    }
+  }
+}
