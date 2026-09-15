@@ -18,6 +18,9 @@ on:
       - "scripts/test_acceptance_benchmark.py"
       - "scripts/run_mcp_acceptance_benchmark.py"
       - "scripts/test_mcp_acceptance_benchmark.py"
+      - "scripts/openai_mcp_client.py"
+      - "scripts/test_openai_mcp_client.py"
+      - "scripts/run_openai_mcp_acceptance_benchmark.py"
       - "scripts/routing_mcp_server.py"
       - "scripts/routed_instrument_mcp_tool.py"
       - "scripts/ranked_routable_mcp_tool.py"
@@ -66,6 +69,9 @@ jobs:
 
       - name: Validate MCP acceptance benchmark policy
         run: python scripts/test_mcp_acceptance_benchmark.py
+
+      - name: Validate OpenAI MCP client policy without network
+        run: python scripts/test_openai_mcp_client.py
 
       - name: Build and start happy path
         run: python testbed/shop/testbed.py up
