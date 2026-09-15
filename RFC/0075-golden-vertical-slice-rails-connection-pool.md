@@ -1,4 +1,4 @@
-# RFC 0073: Golden vertical slice - Rails connection-pool exhaustion
+# RFC 0075: Golden vertical slice - Rails connection-pool exhaustion
 
 - Status: In progress
 - Date: 2026-09-15

@@ -7,14 +7,14 @@ on:
       - "scripts/rails_pool_vertical_slice.py"
       - "scripts/test_rails_pool_vertical_slice.py"
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
-      - "RFC/0073-golden-vertical-slice-rails-connection-pool.md"
+      - "RFC/0075-golden-vertical-slice-rails-connection-pool.md"
       - ".github/workflows/golden-vertical-slice.yml"
   pull_request:
     paths:
       - "scripts/rails_pool_vertical_slice.py"
       - "scripts/test_rails_pool_vertical_slice.py"
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
-      - "RFC/0073-golden-vertical-slice-rails-connection-pool.md"
+      - "RFC/0075-golden-vertical-slice-rails-connection-pool.md"
       - ".github/workflows/golden-vertical-slice.yml"
 
 permissions:
