@@ -22,6 +22,8 @@ next-probe ranking
 safe read-only execution
 provider capability discovery
 instrument routing
+exact runtime target resolution
+workspace provider bindings
 MCP and HTTP projections
 persistent investigation/scoping state
 bounded autonomous investigation
@@ -58,15 +60,13 @@ That behavior is intentional and product-defining: unknown evidence remains unkn
 
 ## Product front door
 
-The repository now exposes:
+The repository exposes:
 
 ```text
 causcope why "checkout is slow"
 ```
 
-as an initial thin product front door.
-
-Current behavior:
+as a thin product front door over existing investigation contracts.
 
 ### No diagnostic evidence yet
 
@@ -74,9 +74,98 @@ Current behavior:
 
 It does not invent a root cause from the problem statement.
 
+### Generic workspace diagnosis available
+
+When the workspace contains:
+
+```text
+.causcope/diagnosis.json
+```
+
+`causcope why` consumes the existing canonical `diagnosis_snapshot` and exposes:
+
+```text
+target
+leading hypothesis
+supporting observations
+contradictions
+next ranked probe
+selected instrument or explicit routing stop
+```
+
+It reuses the existing probe ranking and InstrumentRouter. It does not implement another diagnosis engine.
+
+The diagnosis snapshot is identity-checked against the local investigation. A snapshot for another `incident_id` fails closed instead of being silently attached to the current case.
+
+### Exact operational target resolution
+
+When the workspace additionally contains:
+
+```text
+runtime-evidence.json
+runtime-relationships.json
+resource-topology.yaml
+```
+
+`causcope why` can reuse the existing runtime-target resolution contract:
+
+```text
+active observation
+  -> exact trace
+  -> runtime resolved relationship
+  -> concrete runtime resource
+  -> topology runtime binding
+  -> exact operational target
+```
+
+For example:
+
+```text
+observation.database.query_latency
+  -> trace-1
+  -> pool:active_record.primary
+  -> db.orders.prod
+```
+
+If the exact target cannot be proven, Causcope preserves the unresolved state rather than routing a target-specific provider heuristically.
+
+### Workspace provider binding
+
+`RFC/0078-workspace-provider-bindings.md` adds the first small runtime binding contract:
+
+```text
+.causcope/provider-bindings.yaml
+```
+
+The first supported driver is `pgbot_file`, which binds a topology-declared provider instance to an already-produced pgbot report through the existing `PgbotAutonomousProbeProvider`.
+
+This closes the current deterministic path:
+
+```text
+diagnosis
+  -> ranked next probe
+  -> exact operational target
+  -> topology provider instance
+  -> runtime provider binding
+  -> InstrumentRouter
+  -> selected safe instrument
+```
+
+A proven test resolves `pool:active_record.primary` to `db.orders.prod` and selects:
+
+```text
+provider.pgbot.orders-prod
+```
+
+for the canonical read-only query-latency probe.
+
+Provider selection does not itself execute the provider. `why` reports the handoff while preserving the existing execution/authorization boundary.
+
+The pgbot binding also verifies database identity. A pgbot report for a different database is rejected instead of being relabeled as evidence for the selected target.
+
 ### Canonical Rails D3.1 artifacts available
 
-The same command can consume:
+The same command can still consume the bounded D3.1 proof inputs directly:
 
 ```text
 Concrete System Facts
@@ -86,19 +175,24 @@ Resource-pool Runtime Evidence
 
 and delegate to the already-proven Rails D3.1 product projection.
 
-The command does not implement another causal-ranking algorithm.
+That specialized path can reach `CAUSAL_DIAGNOSIS_CONFIRMED` because it includes the stronger D3.1 causal verification contract.
 
-Current technical bridge:
+Current product composition is therefore:
 
 ```text
 causcope why
-  -> causcope_cli investigation/scoping contracts
+  -> investigation/scoping state
   OR
-  -> rails_pool_vertical_slice
+  -> generic diagnosis_snapshot
+       -> probe ranking
+       -> exact target resolution when available
+       -> InstrumentRouter
+       -> workspace provider bindings when configured
+  OR
+  -> Rails D3.1 concrete proof
        -> generic X-Ray engine
+       -> confirmed product diagnosis
 ```
-
-This is an intentionally narrow first product bridge. Automatic evidence acquisition from a plain problem statement remains future work.
 
 ## Roadmap mapping
 
@@ -121,7 +215,7 @@ This area is mature enough to support product proofs but not complete across all
 
 ### Local Investigator
 
-State: **implemented for scoping, partially productized for diagnosis**
+State: **implemented for scoping and increasingly productized for diagnosis/routing**
 
 Implemented:
 
@@ -136,7 +230,9 @@ causcope why
 
 Scoping is durable under `.causcope/`.
 
-The diagnosis front door currently has a proven D3.1 path but is not yet a generic automatic bridge from every symptom to evidence acquisition.
+`why` can now consume generic diagnosis state, expose the next discriminating probe, resolve exact operational targets when the required runtime identity artifacts exist, and select configured provider instances through the existing router.
+
+It does not yet automatically create all required evidence artifacts from only a natural-language problem statement.
 
 ### Agent integration
 
@@ -151,7 +247,8 @@ Existing repository work includes:
 - bounded autonomous investigation;
 - workflow recovery/journaling;
 - provider capability discovery;
-- instrument routing.
+- instrument routing;
+- exact target-aware routing.
 
 The remaining work is product consolidation and ergonomic use of this machinery, not inventing agent support from scratch.
 
@@ -167,6 +264,8 @@ Existing providers/adapters include:
 - Rails repository/runtime evidence;
 - structured logs;
 - selected local probe executors.
+
+Workspace provider bindings currently support only the initial `pgbot_file` driver. Other provider transports should be added only as concrete product slices require them.
 
 Provider breadth is not the immediate goal. Complete product-shaped investigations are preferred over adding more adapters without a demonstrated use case.
 
@@ -254,7 +353,7 @@ State: **validator implemented, historical cleanup deferred**
 
 `RFC/0077-rfc-identity-governance.md` defines the direction.
 
-The repository now contains:
+The repository contains:
 
 ```text
 vocabulary/rfc-id-exceptions.yaml
@@ -265,32 +364,49 @@ and CI prevents new unregistered numeric collisions while grandfathering the kno
 
 ## Immediate product gap
 
-The largest remaining gap is no longer the causal proof itself.
+The largest remaining gap has moved again.
 
-It is the bridge:
+Causcope can now deterministically join:
 
 ```text
-plain user problem
-  -> investigation state
-  -> capability discovery
-  -> evidence acquisition
-  -> generic diagnosis projection
+canonical diagnosis
+  -> next probe
+  -> exact operational target
+  -> configured provider instance
 ```
 
-without requiring the user to manually identify or pass subsystem-specific artifact files.
+The next gap is turning that safe routing decision into a coherent **evidence-acquisition/resume loop from the same user-facing command**, without weakening the existing execution policy.
 
-The existing repository contains most of the pieces for that path. The next work should compose those pieces rather than add another generic reasoning layer.
+Today, the repository already has safe read-only execution, autonomous loops, agent-plan state, and provider execution APIs. The work is to compose those existing contracts behind the product front door rather than create another executor.
+
+The desired next progression is:
+
+```text
+causcope why
+  -> investigation
+  -> current diagnosis
+  -> next discriminator
+  -> exact target
+  -> safe instrument
+  -> explicit execution authorization
+  -> new canonical evidence
+  -> re-diagnosis
+  -> verification or next discriminator
+```
+
+For external providers, future binding drivers also need practical secret/transport resolution without storing raw credentials in the workspace contract.
 
 ## Current priority
 
 Near-term work should therefore favor:
 
 ```text
-1. consolidate `causcope why` around canonical investigation state;
-2. bridge `why` to existing provider/capability routing;
-3. make the D3.1 live proof reachable through that same front door;
-4. generalize only after the product path is clean;
-5. keep Dashboard/Cloud architecture compatible but secondary.
+1. keep `causcope why` as the product-level projection;
+2. reuse the existing safe execution/session machinery for the selected next probe;
+3. compose returned evidence into the canonical workspace and re-run diagnosis;
+4. add the next provider binding driver only when required by a real slice;
+5. make the Rails D3.1 live proof reachable through the same persisted workspace path;
+6. keep Dashboard/Cloud architecture compatible but secondary.
 ```
 
 ## Guardrail
