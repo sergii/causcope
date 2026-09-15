@@ -23,6 +23,7 @@ The first useful product should work locally with an engineer or autonomous agen
 
 ### Product
 
+- [Current product state](product/current-state.md) - what is actually implemented today, the Rails D3.1 golden proof, the current `causcope why` front door, and the remaining product-integration gap.
 - [Agent-first roadmap](product/agent-first-roadmap.md) - recommended product sequence from local investigator to dashboard and enterprise distribution.
 - [Operational terminology](product/operational-terminology.md) - concise distinction between signal, symptom, context, observation, evidence, mechanism, hypothesis, investigation, incident, diagnosis, mitigation, and verification.
 - [Repository strategy](product/repository-strategy.md) - why the project remains in `sergii/causcope` for now and the criteria for a future organization/repository split.
@@ -58,6 +59,7 @@ RFC/0001-semantic-foundation.md
 RFC/0003-diagnostic-catalog-codes.md
 RFC/0005-runtime-evidence-instances.md
 RFC/0012-recommended-next-probe.md
+RFC/0075-golden-vertical-slice-rails-connection-pool.md
 ```
 
 The documents in `docs/` describe how that core becomes an end-user product without making SaaS infrastructure a prerequisite for useful diagnosis.
