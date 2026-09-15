@@ -7,56 +7,11 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
-from test_causcope_why import run, target_aware_documents, write_json
+from test_causcope_why import run, write_json
+from test_causcope_why_acquire import prepare_workspace
 
 ROOT = Path(__file__).resolve().parents[1]
-TOPOLOGY = ROOT / "examples" / "topology" / "shop.yaml"
-PGBOT_ADAPTER = ROOT / "examples" / "adapters" / "pgbot" / "postgresql.yaml"
 PGBOT_REPORT = ROOT / "examples" / "telemetry" / "pgbot" / "postgresql-findings.json"
-
-
-def write_binding(workspace: Path) -> None:
-    (workspace / "pgbot-postgresql.yaml").write_text(
-        PGBOT_ADAPTER.read_text(encoding="utf-8"), encoding="utf-8"
-    )
-    report = json.loads(PGBOT_REPORT.read_text(encoding="utf-8"))
-    report["server"]["database"] = "orders"
-    report["collected_at"] = (
-        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    )
-    write_json(workspace / "pgbot-orders.json", report)
-    bindings = {
-        "schema_version": "0.1",
-        "kind": "provider_bindings",
-        "bindings": [
-            {
-                "provider_instance": "provider.pgbot.orders-prod",
-                "driver": "pgbot_file",
-                "adapter": "pgbot-postgresql.yaml",
-                "context": "pgbot-orders.json",
-            }
-        ],
-    }
-    (workspace / "provider-bindings.yaml").write_text(
-        yaml.safe_dump(bindings, sort_keys=False), encoding="utf-8"
-    )
-
-
-def prepare_bound_workspace(workspace: Path) -> None:
-    run("why", "database requests are slow", "--workspace", str(workspace))
-    context = yaml.safe_load(
-        (workspace / "incident-context.yaml").read_text(encoding="utf-8")
-    )
-    snapshot, evidence, relationships = target_aware_documents(context["incident_id"])
-    write_json(workspace / "diagnosis.json", snapshot)
-    write_json(workspace / "runtime-evidence.json", evidence)
-    write_json(workspace / "runtime-relationships.json", relationships)
-    (workspace / "resource-topology.yaml").write_text(
-        TOPOLOGY.read_text(encoding="utf-8"), encoding="utf-8"
-    )
-    write_binding(workspace)
 
 
 def main() -> int:
@@ -64,13 +19,15 @@ def main() -> int:
         root = Path(temporary)
 
         human_workspace = root / "human" / ".causcope"
-        prepare_bound_workspace(human_workspace)
+        human_workspace.mkdir(parents=True)
+        prepare_workspace(human_workspace)
         human = run("why", "--workspace", str(human_workspace))
         assert "Evidence acquisition" in human.stdout
         assert "target: db.orders.prod via provider.pgbot.orders-prod" in human.stdout
 
         machine_workspace = root / "machine" / ".causcope"
-        prepare_bound_workspace(machine_workspace)
+        machine_workspace.mkdir(parents=True)
+        prepare_workspace(machine_workspace)
         machine = run("why", "--workspace", str(machine_workspace), "--json")
         document = json.loads(machine.stdout)
         acquisition = document["acquisition"]
@@ -82,7 +39,8 @@ def main() -> int:
         assert member["target_resource"] == "db.orders.prod"
 
         mismatch_workspace = root / "mismatch" / ".causcope"
-        prepare_bound_workspace(mismatch_workspace)
+        mismatch_workspace.mkdir(parents=True)
+        prepare_workspace(mismatch_workspace)
         wrong_report = json.loads(PGBOT_REPORT.read_text(encoding="utf-8"))
         wrong_report["collected_at"] = (
             datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
