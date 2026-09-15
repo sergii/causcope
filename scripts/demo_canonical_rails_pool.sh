@@ -3,12 +3,10 @@ set -euo pipefail
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
-
 WORKSPACE=${CAUSCOPE_WORKSPACE:-$ROOT/.causcope-canonical-demo}
 APP_ROOT=$ROOT/lab/rails-connection-pool
 APP_URL=${APP_URL:-http://127.0.0.1:4567}
 OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://127.0.0.1:4318/v1/traces}
-
 export BUNDLE_GEMFILE=${BUNDLE_GEMFILE:-$APP_ROOT/Gemfile}
 export RAILS_ENV=${RAILS_ENV:-production}
 export RAILS_MAX_THREADS=${RAILS_MAX_THREADS:-5}
@@ -26,45 +24,29 @@ export CAUSCOPE_REPOSITORY=${CAUSCOPE_REPOSITORY:-https://github.com/sergii/caus
 export CAUSCOPE_OTEL_SYNC=${CAUSCOPE_OTEL_SYNC:-1}
 export OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-causcope-rails-connection-pool}
 export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=$OTLP_ENDPOINT
-
 STATIC_FACTS="$WORKSPACE/concrete-system-facts.json"
 POOL_EVIDENCE="$WORKSPACE/resource-pool-runtime-evidence.json"
 OTLP_LOG="$WORKSPACE/otlp.log"
 PUMA_LOG="$WORKSPACE/puma.log"
-
 rm -rf "$WORKSPACE"
 mkdir -p "$WORKSPACE"
-
 PUMA_PID=""
 OTLP_PID=""
 cleanup() {
-  if [ -n "$PUMA_PID" ]; then
-    kill "$PUMA_PID" 2>/dev/null || true
-  fi
-  if [ -n "$OTLP_PID" ]; then
-    kill "$OTLP_PID" 2>/dev/null || true
-  fi
+  if [ -n "$PUMA_PID" ]; then kill "$PUMA_PID" 2>/dev/null || true; fi
+  if [ -n "$OTLP_PID" ]; then kill "$OTLP_PID" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
-printf '\n[1/7] Bootstrapping canonical system state\n'
-./bin/causcope bootstrap "$APP_ROOT" \
-  --workspace "$WORKSPACE" \
-  --environment production \
-  --env-file deployment.yml \
-  --system-id "$CAUSCOPE_SYSTEM_ID" \
-  --revision "$CAUSCOPE_REVISION" \
-  --repository "$CAUSCOPE_REPOSITORY" \
-  --database "$DB_NAME" \
-  --database-url-env CAUSCOPE_DEMO_DATABASE_URL
+printf '\n[1/6] Bootstrapping canonical system state\n'
+./bin/causcope bootstrap "$APP_ROOT" --workspace "$WORKSPACE" --environment production --env-file deployment.yml --system-id "$CAUSCOPE_SYSTEM_ID" --revision "$CAUSCOPE_REVISION" --repository "$CAUSCOPE_REPOSITORY" --database "$DB_NAME" --database-url-env CAUSCOPE_DEMO_DATABASE_URL
 
-printf '\n[2/7] Starting one Investigation from the product front door\n'
+printf '\n[2/6] Starting one Investigation from the product front door\n'
 ./bin/causcope why "checkout is slow" --workspace "$WORKSPACE" >/dev/null
 CAUSCOPE_INCIDENT_ID=$(python - "$WORKSPACE/incident-context.yaml" <<'PY'
 import sys
 from pathlib import Path
 import yaml
-
 context = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
 print(context["incident_id"])
 PY
@@ -74,75 +56,39 @@ RUNTIME_FACTS="$WORKSPACE/runtime/$CAUSCOPE_INCIDENT_ID.json"
 export CAUSCOPE_STATIC_FACTS="$STATIC_FACTS"
 printf '  Investigation: %s\n' "$CAUSCOPE_INCIDENT_ID"
 
-printf '\n[3/7] Observing the real Rails request and exact ActiveRecord pool\n'
-python scripts/otlp_concrete_receiver.py \
-  --static-facts "$STATIC_FACTS" \
-  --incident-id "$CAUSCOPE_INCIDENT_ID" \
-  --snapshot "$RUNTIME_FACTS" \
-  --source-uri otlp:http:rails-active-record \
-  >"$OTLP_LOG" 2>&1 &
+printf '\n[3/6] Observing the real Rails request and exact ActiveRecord pool\n'
+python scripts/otlp_concrete_receiver.py --static-facts "$STATIC_FACTS" --incident-id "$CAUSCOPE_INCIDENT_ID" --snapshot "$RUNTIME_FACTS" --source-uri otlp:http:rails-active-record >"$OTLP_LOG" 2>&1 &
 OTLP_PID=$!
-
 for _ in $(seq 1 30); do
-  if curl --fail --silent http://127.0.0.1:4318/health >/dev/null; then
-    break
-  fi
+  if curl --fail --silent http://127.0.0.1:4318/health >/dev/null; then break; fi
   sleep 1
 done
-curl --fail --silent http://127.0.0.1:4318/health >/dev/null || {
-  cat "$OTLP_LOG"
-  exit 1
-}
-
+curl --fail --silent http://127.0.0.1:4318/health >/dev/null || { cat "$OTLP_LOG"; exit 1; }
 (
   cd "$APP_ROOT"
   bundle exec puma -C config/puma.rb
 ) >"$PUMA_LOG" 2>&1 &
 PUMA_PID=$!
-
 for _ in $(seq 1 60); do
-  if curl --fail --silent "$APP_URL/health" >/dev/null; then
-    break
-  fi
+  if curl --fail --silent "$APP_URL/health" >/dev/null; then break; fi
   sleep 1
 done
-curl --fail --silent "$APP_URL/health" >/dev/null || {
-  cat "$PUMA_LOG"
-  exit 1
-}
-
-APP_URL="$APP_URL" HOLD_MS=${HOLD_MS:-2000} \
-  bundle exec ruby lab/rails-connection-pool/concrete_probe.rb >"$POOL_EVIDENCE"
-
+curl --fail --silent "$APP_URL/health" >/dev/null || { cat "$PUMA_LOG"; exit 1; }
+APP_URL="$APP_URL" HOLD_MS=${HOLD_MS:-2000} bundle exec ruby lab/rails-connection-pool/concrete_probe.rb >"$POOL_EVIDENCE"
 for _ in $(seq 1 30); do
-  if [ -s "$RUNTIME_FACTS" ]; then
-    break
-  fi
+  if [ -s "$RUNTIME_FACTS" ]; then break; fi
   sleep 1
 done
-[ -s "$RUNTIME_FACTS" ] || {
-  cat "$OTLP_LOG"
-  exit 1
-}
+[ -s "$RUNTIME_FACTS" ] || { cat "$OTLP_LOG"; exit 1; }
 
-printf '\n[4/7] Seeding canonical diagnosis revision 1\n'
-./bin/causcope runtime seed "$APP_ROOT" \
-  --workspace "$WORKSPACE" \
-  --runtime-facts "$RUNTIME_FACTS" \
-  --request-latency-threshold-ms 200 \
-  --pool-wait-threshold-ms 50
+printf '\n[4/6] Seeding canonical diagnosis revision 1\n'
+./bin/causcope runtime seed "$APP_ROOT" --workspace "$WORKSPACE" --runtime-facts "$RUNTIME_FACTS" --request-latency-threshold-ms 200 --pool-wait-threshold-ms 50
 
-printf '\n[5/7] Importing mechanism, control, and recovery as canonical evidence\n'
-./bin/causcope runtime import-pool \
-  --workspace "$WORKSPACE" \
-  --pool-evidence "$POOL_EVIDENCE"
+printf '\n[5/6] Letting Causcope select and execute the current semantic probe\n\n'
+./bin/causcope why "checkout is slow" --workspace "$WORKSPACE" --acquire --require-confirmed
 
-printf '\n[6/7] Requiring canonical causal verification\n\n'
-./bin/causcope why "checkout is slow" \
-  --workspace "$WORKSPACE" \
-  --require-confirmed
-
-printf '\n[7/7] Canonical product proof complete\n'
+printf '\n[6/6] Canonical autonomous product proof complete\n'
 printf '  workspace: %s\n' "$WORKSPACE"
 printf '  authority: diagnosis.json + runtime-evidence.json -> causal_verification\n'
+printf '  manual resource-pool import used: no\n'
 printf '  legacy X-Ray artifact flags used: no\n'
