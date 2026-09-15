@@ -217,6 +217,10 @@ def main(argv: list[str] | None = None) -> int:
         from runtime_observe import main as observe_main
 
         return observe_main(arguments[1:])
+    if arguments and arguments[0] == "import-pool":
+        from rails_pool_evidence_import import main as import_pool_main
+
+        return import_pool_main(arguments[1:])
     if arguments and arguments[0] == "seed":
         from runtime_incident_seed import main as seed_main
 
