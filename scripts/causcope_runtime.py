@@ -111,6 +111,77 @@ def start(args: argparse.Namespace) -> int:
     return completed.returncode
 
 
+def seed_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("path", type=Path, nargs="?", default=Path("."))
+    parser.add_argument("--workspace", type=Path)
+    parser.add_argument("--runtime-facts", type=Path)
+    parser.add_argument("--request-latency-threshold-ms", type=float)
+    parser.add_argument("--pool-wait-threshold-ms", type=float)
+    parser.add_argument("--code-symbol")
+    parser.add_argument("--trace-id")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    return parser
+
+
+def enrich_seed_arguments(arguments: list[str]) -> list[str]:
+    from runtime_incident_seed import workspace_path
+    from workspace_objectives import (
+        DEFAULT_FILENAME,
+        POOL_WAIT_OBSERVATION,
+        REQUEST_LATENCY_OBSERVATION,
+        load_workspace_objectives,
+        objective_threshold_ms,
+    )
+
+    if "-h" in arguments or "--help" in arguments:
+        return arguments
+
+    parsed = seed_argument_parser().parse_args(arguments)
+    if (
+        parsed.request_latency_threshold_ms is not None
+        and parsed.pool_wait_threshold_ms is not None
+    ):
+        return arguments
+
+    root = parsed.path.expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"application root does not exist: {root}")
+    workspace = workspace_path(root, parsed.workspace)
+    objectives_path = workspace / DEFAULT_FILENAME
+    try:
+        objectives = load_workspace_objectives(objectives_path)
+    except ValueError as error:
+        missing = []
+        if parsed.request_latency_threshold_ms is None:
+            missing.append("--request-latency-threshold-ms")
+        if parsed.pool_wait_threshold_ms is None:
+            missing.append("--pool-wait-threshold-ms")
+        raise ValueError(
+            "missing incident bootstrap objectives "
+            + ", ".join(missing)
+            + f"; configure {objectives_path} with `causcope objectives set {root}` or pass explicit CLI overrides"
+        ) from error
+
+    enriched = list(arguments)
+    if parsed.request_latency_threshold_ms is None:
+        enriched.extend(
+            [
+                "--request-latency-threshold-ms",
+                str(objective_threshold_ms(objectives, REQUEST_LATENCY_OBSERVATION)),
+            ]
+        )
+    if parsed.pool_wait_threshold_ms is None:
+        enriched.extend(
+            [
+                "--pool-wait-threshold-ms",
+                str(objective_threshold_ms(objectives, POOL_WAIT_OBSERVATION)),
+            ]
+        )
+    return enriched
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="causcope runtime",
@@ -145,7 +216,11 @@ def main(argv: list[str] | None = None) -> int:
     if arguments and arguments[0] == "seed":
         from runtime_incident_seed import main as seed_main
 
-        return seed_main(arguments[1:])
+        try:
+            return seed_main(enrich_seed_arguments(arguments[1:]))
+        except (ValueError, OSError) as error:
+            print(f"causcope runtime seed: {error}", file=sys.stderr)
+            return 2
 
     try:
         args = build_parser().parse_args(arguments)
