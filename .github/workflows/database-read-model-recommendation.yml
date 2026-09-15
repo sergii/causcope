@@ -7,11 +7,16 @@ on:
       - "schema/database-read-model-recommendation-context.schema.json"
       - "schema/architectural-recommendation-projection.schema.json"
       - "schema/recommendation-information-gap-projection.schema.json"
+      - "schema/recommendation-evidence-acquisition-result.schema.json"
       - "scripts/database_read_model_recommendation.py"
       - "scripts/recommendation_information_gaps.py"
+      - "scripts/recommendation_evidence_acquisition.py"
       - "scripts/test_database_read_model_recommendation.py"
       - "scripts/test_recommendation_information_gaps.py"
+      - "scripts/test_recommendation_evidence_acquisition.py"
+      - "scripts/instrument_router.py"
       - "scripts/pgbot_adapter.py"
+      - "scripts/pgbot_autonomous_provider.py"
       - "scripts/resource_topology.py"
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/topology/shop.yaml"
@@ -20,17 +25,23 @@ on:
       - "RFC/0064-causally-justified-architecture-advice.md"
       - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
       - "RFC/0067-recommendation-information-gap-ranking.md"
+      - "RFC/0070-recommendation-evidence-acquisition-bridge.md"
       - ".github/workflows/database-read-model-recommendation.yml"
   pull_request:
     paths:
       - "schema/database-read-model-recommendation-context.schema.json"
       - "schema/architectural-recommendation-projection.schema.json"
       - "schema/recommendation-information-gap-projection.schema.json"
+      - "schema/recommendation-evidence-acquisition-result.schema.json"
       - "scripts/database_read_model_recommendation.py"
       - "scripts/recommendation_information_gaps.py"
+      - "scripts/recommendation_evidence_acquisition.py"
       - "scripts/test_database_read_model_recommendation.py"
       - "scripts/test_recommendation_information_gaps.py"
+      - "scripts/test_recommendation_evidence_acquisition.py"
+      - "scripts/instrument_router.py"
       - "scripts/pgbot_adapter.py"
+      - "scripts/pgbot_autonomous_provider.py"
       - "scripts/resource_topology.py"
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/topology/shop.yaml"
@@ -39,6 +50,7 @@ on:
       - "RFC/0064-causally-justified-architecture-advice.md"
       - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
       - "RFC/0067-recommendation-information-gap-ranking.md"
+      - "RFC/0070-recommendation-evidence-acquisition-bridge.md"
       - ".github/workflows/database-read-model-recommendation.yml"
 
 permissions:
@@ -66,6 +78,9 @@ jobs:
 
       - name: Verify recommendation information-gap progression
         run: python scripts/test_recommendation_information_gaps.py
+
+      - name: Verify recommendation evidence acquisition bridge
+        run: python scripts/test_recommendation_evidence_acquisition.py
 
       - name: Project insufficient-context case
         run: |
@@ -133,3 +148,59 @@ jobs:
           PY
 
           cat /tmp/read-model-measured.json
+
+      - name: Close stale recommendation evidence gap through routed provider
+        run: |
+          python scripts/database_read_model_recommendation.py \
+            --context examples/recommendations/database-read-model/stale-evidence-context.json \
+            --topology examples/topology/shop.yaml \
+            --adapter examples/adapters/pgbot/postgresql.yaml \
+            --pgbot-context examples/recommendations/database-read-model/pgbot-orders-findings.json \
+            --output /tmp/read-model-stale.json \
+            --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          current = json.loads(Path('/tmp/read-model-stale.json').read_text())
+          assert current['state'] == 'NO_PROBLEM_EVIDENCE'
+          assert current['evidence_scope']['boundaries'] == ['boundary.application.database']
+          PY
+
+          python scripts/recommendation_evidence_acquisition.py \
+            --context examples/recommendations/database-read-model/stale-evidence-context.json \
+            --current-projection /tmp/read-model-stale.json \
+            --topology examples/topology/shop.yaml \
+            --pgbot-adapter examples/adapters/pgbot/postgresql.yaml \
+            --pgbot-context examples/recommendations/database-read-model/pgbot-orders-findings-fresh.json \
+            --as-of 2026-09-15T00:10:00Z \
+            --output /tmp/recommendation-acquisition.json \
+            --evidence-output /tmp/recommendation-acquired-evidence.json \
+            --recommendation-output /tmp/recommendation-refreshed.json \
+            --gaps-output /tmp/recommendation-refreshed-gaps.json \
+            --updated-context-output /tmp/recommendation-refreshed-context.json \
+            --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/recommendation-acquisition.json').read_text())
+          projection = json.loads(Path('/tmp/recommendation-refreshed.json').read_text())
+          gaps = json.loads(Path('/tmp/recommendation-refreshed-gaps.json').read_text())
+          evidence = json.loads(Path('/tmp/recommendation-acquired-evidence.json').read_text())
+
+          assert result['previous_state'] == 'NO_PROBLEM_EVIDENCE'
+          assert result['recommendation_state'] == 'INSUFFICIENT_CONTEXT'
+          assert result['information_gap_status'] == 'INFORMATION_GAP'
+          assert result['progressed'] is True
+          assert result['routing']['instrument_id'] == 'provider.pgbot.orders-prod'
+          assert result['routing']['target_resource'] == 'db.orders.prod'
+          assert result['next_action']['kind'] == 'operator_question'
+          assert projection['state'] == 'INSUFFICIENT_CONTEXT'
+          assert gaps['next_action']['gap_id'] == 'information_gap.business_semantics.consistency_contract'
+          assert evidence['incident_id'] == 'INC-READ-MODEL-001'
+          PY
+
+          cat /tmp/recommendation-acquisition.json
