@@ -1,0 +1,6 @@
+id: observation.database.autovacuum_disabled
+kind: observation
+title: Database autovacuum disabled
+summary: Routine PostgreSQL autovacuum is disabled globally or explicitly disabled for one or more user tables.
+explanation:
+  short: This records effective configuration for routine autovacuum. PostgreSQL may still launch anti-wraparound vacuum work even when routine autovacuum is disabled, so this observation must not be interpreted as no vacuum activity of any kind.
