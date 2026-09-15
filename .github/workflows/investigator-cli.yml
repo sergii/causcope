@@ -32,5 +32,8 @@ jobs:
       - name: Validate why provider bindings
         run: python scripts/test_causcope_why_provider_binding.py
 
+      - name: Validate why explicit evidence acquisition
+        run: python scripts/test_causcope_why_acquire.py
+
       - name: Validate recommendation investigator CLI
         run: python scripts/test_causcope_recommendation.py
