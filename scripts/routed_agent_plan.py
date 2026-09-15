@@ -16,6 +16,7 @@ from instrument_routing_projection import (
     validate_instrument_routing_projection,
 )
 from instrument_router import InstrumentRouter
+from routed_execution_sets import build_routed_execution_sets
 
 SCHEMA_PATH = ROOT / "schema" / "routed-agent-plan.schema.json"
 
@@ -41,6 +42,7 @@ def build_routed_agent_plan(
     router: InstrumentRouter,
     *,
     external_mcp_execution_enabled: bool = False,
+    routing_projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validate_agent_plan(base_plan)
     if base_plan.get("incident_id") != snapshot.get("incident_id"):
@@ -48,12 +50,21 @@ def build_routed_agent_plan(
     if base_plan.get("evidence_revision") != snapshot.get("evidence_revision"):
         raise ValueError("agent plan and diagnosis snapshot evidence_revision differ")
 
-    routing = build_instrument_routing_projection(
-        snapshot,
-        router,
-        external_mcp_execution_enabled=external_mcp_execution_enabled,
-    )
+    if routing_projection is None:
+        routing = build_instrument_routing_projection(
+            snapshot,
+            router,
+            external_mcp_execution_enabled=external_mcp_execution_enabled,
+        )
+    else:
+        routing = copy.deepcopy(routing_projection)
+        if routing.get("incident_id") != base_plan["incident_id"]:
+            raise ValueError("routing projection belongs to another incident")
+        if routing.get("evidence_revision") != base_plan["evidence_revision"]:
+            raise ValueError("routing projection revision does not match agent plan")
     validate_instrument_routing_projection(routing)
+
+    execution_projection = build_routed_execution_sets(routing)
     document = {
         "schema_version": "0.1",
         "kind": "routed_agent_plan",
@@ -61,6 +72,7 @@ def build_routed_agent_plan(
         "evidence_revision": base_plan["evidence_revision"],
         "plan": copy.deepcopy(base_plan),
         "routing": routing,
+        "execution_sets": copy.deepcopy(execution_projection["sets"]),
     }
     validate_routed_agent_plan(document)
     return document
