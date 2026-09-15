@@ -62,9 +62,10 @@
         "scope": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/scope"}]},
         "target": {"type": "string", "minLength": 1},
         "probe_id": {"type": "string", "minLength": 1},
+        "probe_rank": {"type": "integer", "minimum": 1},
         "target_resource": {"type": ["string", "null"]},
         "routing_strategy": {
-          "enum": ["legacy_safe_route", "target_aware_safe_route", "target_aware_information_gain"]
+          "enum": ["legacy_safe_route", "target_aware_safe_route", "target_aware_information_gain", "ranked_routable_fallback"]
         },
         "target_resolution": {"$ref": "#/$defs/target_resolution"},
         "decision": {
