@@ -14,20 +14,16 @@
       "items": {
         "oneOf": [
           {"$ref": "#/$defs/pgbot_file_binding"},
-          {"$ref": "#/$defs/pgbot_cli_binding"}
+          {"$ref": "#/$defs/pgbot_cli_binding"},
+          {"$ref": "#/$defs/rails_pool_file_binding"}
         ]
       }
     }
   },
   "$defs": {
-    "provider_instance": {
-      "type": "string",
-      "minLength": 1
-    },
-    "adapter_path": {
-      "type": "string",
-      "minLength": 1
-    },
+    "provider_instance": {"type": "string", "minLength": 1},
+    "adapter_path": {"type": "string", "minLength": 1},
+    "file_path": {"type": "string", "minLength": 1},
     "environment_variable": {
       "type": "string",
       "pattern": "^[A-Z_][A-Z0-9_]*$"
@@ -40,7 +36,7 @@
         "provider_instance": {"$ref": "#/$defs/provider_instance"},
         "driver": {"const": "pgbot_file"},
         "adapter": {"$ref": "#/$defs/adapter_path"},
-        "context": {"type": "string", "minLength": 1}
+        "context": {"$ref": "#/$defs/file_path"}
       }
     },
     "pgbot_cli_binding": {
@@ -58,6 +54,18 @@
           "maximum": 300,
           "default": 30
         }
+      }
+    },
+    "rails_pool_file_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_instance", "driver", "pool_evidence", "runtime_evidence", "diagnosis"],
+      "properties": {
+        "provider_instance": {"$ref": "#/$defs/provider_instance"},
+        "driver": {"const": "rails_pool_file"},
+        "pool_evidence": {"$ref": "#/$defs/file_path"},
+        "runtime_evidence": {"$ref": "#/$defs/file_path"},
+        "diagnosis": {"$ref": "#/$defs/file_path"}
       }
     }
   }

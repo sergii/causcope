@@ -11,53 +11,41 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-
       - name: Install dependencies
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema opentelemetry-proto
-
       - name: Validate launcher
         run: ./bin/causcope --help >/dev/null
-
       - name: Validate investigator CLI
         run: python scripts/test_causcope_cli.py
-
       - name: Validate Rails PostgreSQL bootstrap
         run: python scripts/test_causcope_bootstrap.py
-
+      - name: Validate autonomous Rails verification contract
+        run: python scripts/test_canonical_rails_autonomous_acquisition.py
       - name: Validate workspace objectives
         run: python scripts/test_workspace_objectives.py
-
       - name: Validate observed Rails incident bootstrap
         run: python scripts/test_runtime_incident_seed.py
-
+      - name: Validate revision-1 exact target scope
+        run: python scripts/test_runtime_seed_target_scope.py
       - name: Validate Rails D3 canonical evidence import
         run: python scripts/test_rails_pool_evidence_import.py
-
       - name: Validate bounded runtime observation session
         run: python scripts/test_runtime_observe.py
-
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
-
       - name: Validate why bounded observation composition
         run: python scripts/test_causcope_why_observe.py
-
       - name: Validate workspace-native Rails golden why path
         run: python scripts/test_causcope_why_workspace_golden.py
-
       - name: Validate why provider bindings
         run: python scripts/test_causcope_why_provider_binding.py
-
       - name: Validate why explicit evidence acquisition
         run: python scripts/test_causcope_why_acquire.py
-
       - name: Validate why live pgbot CLI acquisition
         run: python scripts/test_causcope_why_pgbot_cli.py
-
       - name: Validate recommendation investigator CLI
         run: python scripts/test_causcope_recommendation.py

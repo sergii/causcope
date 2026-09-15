@@ -12,6 +12,9 @@ on:
       - "scripts/causal_verification_surfaces.py"
       - "scripts/runtime_incident_seed.py"
       - "scripts/rails_pool_evidence_import.py"
+      - "scripts/rails_pool_autonomous_provider.py"
+      - "scripts/provider_bindings.py"
+      - "schema/provider-bindings.schema.json"
       - "scripts/demo_canonical_rails_pool.sh"
       - "scripts/causcope_bootstrap.py"
       - "scripts/causcope_scan.py"
@@ -30,6 +33,9 @@ on:
       - "scripts/causal_verification_surfaces.py"
       - "scripts/runtime_incident_seed.py"
       - "scripts/rails_pool_evidence_import.py"
+      - "scripts/rails_pool_autonomous_provider.py"
+      - "scripts/provider_bindings.py"
+      - "schema/provider-bindings.schema.json"
       - "scripts/demo_canonical_rails_pool.sh"
       - "scripts/causcope_bootstrap.py"
       - "scripts/causcope_scan.py"
@@ -67,15 +73,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-
       - name: Install Python dependencies
         run: python -m pip install --disable-pip-version-check PyYAML jsonschema opentelemetry-proto
-
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -83,26 +86,22 @@ jobs:
           bundler-cache: true
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
-
       - name: Run canonical product demo
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
           CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-canonical-golden
-        run: bash scripts/demo_canonical_rails_pool.sh
-
+        run: |
+          set -o pipefail
+          bash scripts/demo_canonical_rails_pool.sh 2>&1 | tee "$RUNNER_TEMP/canonical-demo.log"
       - name: Assert canonical verification authority
         env:
           CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-canonical-golden
         run: |
-          ./bin/causcope why "checkout is slow" \
-            --workspace "$CAUSCOPE_WORKSPACE" \
-            --require-confirmed \
-            --json > "$RUNNER_TEMP/canonical-why.json"
+          ./bin/causcope why "checkout is slow" --workspace "$CAUSCOPE_WORKSPACE" --require-confirmed --json > "$RUNNER_TEMP/canonical-why.json"
           python - <<'PY'
           import json
           import os
           from pathlib import Path
-
           document = json.loads((Path(os.environ["RUNNER_TEMP"]) / "canonical-why.json").read_text())
           assert document["kind"] == "causcope_why"
           assert document["status"] == "diagnosis_available"
@@ -115,3 +114,16 @@ jobs:
           assert claim["intervention"]["kind"] == "resource_capacity_release"
           assert claim["intervention"]["resource"] == "pool:active_record.primary"
           PY
+      - name: Upload canonical demo diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-demo-diagnostics
+          path: |
+            ${{ runner.temp }}/canonical-demo.log
+            ${{ runner.temp }}/canonical-why.json
+            ${{ runner.temp }}/causcope-canonical-golden/diagnosis.json
+            ${{ runner.temp }}/causcope-canonical-golden/runtime-evidence.json
+            ${{ runner.temp }}/causcope-canonical-golden/provider-bindings.yaml
+            ${{ runner.temp }}/causcope-canonical-golden/resource-topology.yaml
+          if-no-files-found: ignore

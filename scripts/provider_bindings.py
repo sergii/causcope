@@ -18,6 +18,11 @@ from pgbot_autonomous_provider import (
     file_context_supplier,
 )
 from pgbot_cli_context import PgbotCliContextSupplier
+from rails_pool_autonomous_provider import (
+    RAILS_POOL_INSTRUMENT,
+    RAILS_POOL_PROVIDER_ID,
+    RailsPoolAutonomousProvider,
+)
 from resource_topology import ResourceTopology
 
 SCHEMA_PATH = ROOT / "schema" / "provider-bindings.schema.json"
@@ -63,11 +68,7 @@ def _resolve_path(config_path: Path, value: str) -> Path:
     return (config_path.parent / candidate).resolve()
 
 
-def _expected_database(
-    *,
-    provider_instance: str,
-    topology: ResourceTopology,
-) -> str | None:
+def _expected_database(*, provider_instance: str, topology: ResourceTopology) -> str | None:
     instance = topology.provider_instance(provider_instance)
     target = topology.resource(instance["target"])
     value = target.get("attributes", {}).get("database")
@@ -75,10 +76,7 @@ def _expected_database(
 
 
 def _validate_pgbot_database_identity(
-    *,
-    provider_instance: str,
-    expected_database: str | None,
-    context: dict[str, Any],
+    *, provider_instance: str, expected_database: str | None, context: dict[str, Any]
 ) -> None:
     if expected_database is None:
         return
@@ -92,8 +90,6 @@ def _validate_pgbot_database_identity(
 
 @dataclass(frozen=True)
 class TargetValidatedPgbotContextSupplier:
-    """Revalidate pgbot database identity on every evidence read."""
-
     provider_instance: str
     expected_database: str | None
     delegate: PgbotContextSupplier
@@ -114,9 +110,6 @@ class TargetValidatedPgbotContextSupplier:
         available, reason = checker(adapter)
         if not available:
             return available, reason
-
-        # File reads are non-invasive, so validate target identity during discovery too.
-        # Live CLI suppliers deliberately do not query the database during plain `why`.
         if isinstance(self.delegate, FileContextSupplier):
             context = self.delegate()
             _validate_pgbot_database_identity(
@@ -128,18 +121,10 @@ class TargetValidatedPgbotContextSupplier:
 
 
 def _pgbot_supplier(
-    *,
-    config_path: Path,
-    entry: dict[str, Any],
-    provider_instance: str,
-    topology: ResourceTopology,
+    *, config_path: Path, entry: dict[str, Any], provider_instance: str, topology: ResourceTopology
 ) -> TargetValidatedPgbotContextSupplier:
-    expected_database = _expected_database(
-        provider_instance=provider_instance,
-        topology=topology,
-    )
+    expected_database = _expected_database(provider_instance=provider_instance, topology=topology)
     driver = entry["driver"]
-
     if driver == "pgbot_file":
         context_path = _resolve_path(config_path, entry["context"])
         context = load_context(context_path)
@@ -155,8 +140,7 @@ def _pgbot_supplier(
             timeout_seconds=int(entry.get("timeout_seconds", 30)),
         )
     else:
-        raise ValueError(f"unsupported provider binding driver: {driver}")
-
+        raise ValueError(f"unsupported pgbot provider binding driver: {driver}")
     return TargetValidatedPgbotContextSupplier(
         provider_instance=provider_instance,
         expected_database=expected_database,
@@ -170,11 +154,11 @@ def load_provider_instance_bindings(
     topology: ResourceTopology,
     concepts: dict[str, dict[str, Any]],
     incident_id: str,
-) -> dict[str, PgbotAutonomousProbeProvider]:
+) -> dict[str, Any]:
     if not incident_id:
         raise ValueError("provider bindings require a non-empty incident_id")
     document = load_provider_bindings_document(path)
-    bindings: dict[str, PgbotAutonomousProbeProvider] = {}
+    bindings: dict[str, Any] = {}
 
     for entry in document["bindings"]:
         provider_instance = entry["provider_instance"]
@@ -182,35 +166,53 @@ def load_provider_instance_bindings(
         provider_type = topology.provider_type(instance["provider_type"])
         driver = entry["driver"]
 
-        if driver not in {"pgbot_file", "pgbot_cli"}:
-            raise ValueError(f"unsupported provider binding driver: {driver}")
-        if provider_type.get("instrument") != "pgbot":
-            raise ValueError(
-                f"provider binding {provider_instance} uses {driver} but topology provider type "
-                f"instrument is {provider_type.get('instrument')!r}"
+        if driver == "rails_pool_file":
+            if provider_type.get("instrument") != RAILS_POOL_INSTRUMENT:
+                raise ValueError(
+                    f"provider binding {provider_instance} uses {driver} but topology provider type "
+                    f"instrument is {provider_type.get('instrument')!r}"
+                )
+            if provider_type.get("provider_id") != RAILS_POOL_PROVIDER_ID:
+                raise ValueError(
+                    f"provider binding {provider_instance} expects provider id "
+                    f"{provider_type.get('provider_id')!r}, not {RAILS_POOL_PROVIDER_ID!r}"
+                )
+            provider: Any = RailsPoolAutonomousProvider(
+                pool_path=_resolve_path(path, entry["pool_evidence"]),
+                runtime_evidence_path=_resolve_path(path, entry["runtime_evidence"]),
+                diagnosis_path=_resolve_path(path, entry["diagnosis"]),
+                concepts=concepts,
+                incident_id=incident_id,
+                source_uri=f"provider-instance:{provider_instance}",
             )
-        if provider_type.get("provider_id") != PGBOT_PROVIDER_ID:
-            raise ValueError(
-                f"provider binding {provider_instance} expects provider id "
-                f"{provider_type.get('provider_id')!r}, not {PGBOT_PROVIDER_ID!r}"
+        else:
+            if driver not in {"pgbot_file", "pgbot_cli"}:
+                raise ValueError(f"unsupported provider binding driver: {driver}")
+            if provider_type.get("instrument") != "pgbot":
+                raise ValueError(
+                    f"provider binding {provider_instance} uses {driver} but topology provider type "
+                    f"instrument is {provider_type.get('instrument')!r}"
+                )
+            if provider_type.get("provider_id") != PGBOT_PROVIDER_ID:
+                raise ValueError(
+                    f"provider binding {provider_instance} expects provider id "
+                    f"{provider_type.get('provider_id')!r}, not {PGBOT_PROVIDER_ID!r}"
+                )
+            adapter = load_adapter(_resolve_path(path, entry["adapter"]))
+            supplier = _pgbot_supplier(
+                config_path=path,
+                entry=entry,
+                provider_instance=provider_instance,
+                topology=topology,
+            )
+            provider = PgbotAutonomousProbeProvider(
+                adapter=adapter,
+                concepts=concepts,
+                context_supplier=supplier,
+                incident_id=incident_id,
+                source_uri=f"provider-instance:{provider_instance}",
             )
 
-        adapter_path = _resolve_path(path, entry["adapter"])
-        adapter = load_adapter(adapter_path)
-        supplier = _pgbot_supplier(
-            config_path=path,
-            entry=entry,
-            provider_instance=provider_instance,
-            topology=topology,
-        )
-
-        provider = PgbotAutonomousProbeProvider(
-            adapter=adapter,
-            concepts=concepts,
-            context_supplier=supplier,
-            incident_id=incident_id,
-            source_uri=f"provider-instance:{provider_instance}",
-        )
         projection = provider.capability_projection()
         if projection["id"] != provider_type["provider_id"]:
             raise ValueError(

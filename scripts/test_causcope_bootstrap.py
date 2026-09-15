@@ -19,34 +19,11 @@ FIXTURE = ROOT / "lab" / "rails-connection-pool"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [str(CLI), *args],
-        cwd=ROOT,
-        check=check,
-        capture_output=True,
-        text=True,
-    )
+    return subprocess.run([str(CLI), *args], cwd=ROOT, check=check, capture_output=True, text=True)
 
 
 def bootstrap(app: Path, *extra: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return run(
-        "bootstrap",
-        str(app),
-        "--system-id",
-        "bootstrap-rails-fixture",
-        "--revision",
-        "revision-bootstrap-123",
-        "--repository",
-        "https://github.com/sergii/causcope",
-        "--env-file",
-        "deployment.yml",
-        "--database",
-        "causcope",
-        "--database-url-env",
-        "CAUSCOPE_BOOTSTRAP_DATABASE_URL",
-        *extra,
-        check=check,
-    )
+    return run("bootstrap", str(app), "--system-id", "bootstrap-rails-fixture", "--revision", "revision-bootstrap-123", "--repository", "https://github.com/sergii/causcope", "--env-file", "deployment.yml", "--database", "causcope", "--database-url-env", "CAUSCOPE_BOOTSTRAP_DATABASE_URL", *extra, check=check)
 
 
 def main() -> int:
@@ -54,7 +31,6 @@ def main() -> int:
         temporary_root = Path(temporary)
         app = temporary_root / "rails-app"
         shutil.copytree(FIXTURE, app)
-
         result = bootstrap(app, "--json")
         document = json.loads(result.stdout)
         workspace = app / ".causcope"
@@ -66,49 +42,37 @@ def main() -> int:
         assert document["pool_config"] == "primary"
         assert document["database"] == "causcope"
         assert document["database_url_env"] == "CAUSCOPE_BOOTSTRAP_DATABASE_URL"
+        assert document["rails_provider_instance"] == "provider.rails_pool.bootstrap-rails-fixture-prod"
         assert document["runtime_evidence_created"] is False
         assert document["diagnosis_created"] is False
-
-        expected = {
-            "concrete-system-facts.json",
-            "resource-topology.yaml",
-            "pgbot-postgresql.yaml",
-            "provider-bindings.yaml",
-        }
+        expected = {"concrete-system-facts.json", "resource-topology.yaml", "pgbot-postgresql.yaml", "provider-bindings.yaml"}
         assert {path.name for path in workspace.iterdir()} == expected
 
         topology = load_resource_topology(workspace / "resource-topology.yaml")
         assert topology.target_for_runtime_resource("pool:active_record.primary") == "db.causcope.prod"
         provider = topology.provider_instance("provider.pgbot.causcope-prod")
         assert provider["target"] == "db.causcope.prod"
+        rails_provider = topology.provider_instance("provider.rails_pool.bootstrap-rails-fixture-prod")
+        assert rails_provider["target"] == "db.causcope.prod"
         database = topology.resource("db.causcope.prod")
         assert database["attributes"]["database"] == "causcope"
         assert database["environment"] == "production"
 
         bindings = load_provider_bindings_document(workspace / "provider-bindings.yaml")
         assert bindings["bindings"] == [
-            {
-                "provider_instance": "provider.pgbot.causcope-prod",
-                "driver": "pgbot_cli",
-                "adapter": "pgbot-postgresql.yaml",
-                "database_url_env": "CAUSCOPE_BOOTSTRAP_DATABASE_URL",
-                "timeout_seconds": 30,
-            }
+            {"provider_instance": "provider.pgbot.causcope-prod", "driver": "pgbot_cli", "adapter": "pgbot-postgresql.yaml", "database_url_env": "CAUSCOPE_BOOTSTRAP_DATABASE_URL", "timeout_seconds": 30},
+            {"provider_instance": "provider.rails_pool.bootstrap-rails-fixture-prod", "driver": "rails_pool_file", "pool_evidence": "resource-pool-runtime-evidence.json", "runtime_evidence": "runtime-evidence.json", "diagnosis": "diagnosis.json"},
         ]
         adapter = yaml.safe_load((workspace / "pgbot-postgresql.yaml").read_text(encoding="utf-8"))
         assert adapter["scope"]["attributes"]["service"] == "bootstrap-rails-fixture"
         assert adapter["scope"]["attributes"]["dependency"] == "postgresql"
-
-        rendered_workspace = "\n".join(
-            path.read_text(encoding="utf-8") for path in sorted(workspace.iterdir())
-        )
+        rendered_workspace = "\n".join(path.read_text(encoding="utf-8") for path in sorted(workspace.iterdir()))
         assert "postgresql://" not in rendered_workspace
         assert "CAUSCOPE_BOOTSTRAP_DATABASE_URL" in rendered_workspace
 
         conflict = bootstrap(app, check=False)
         assert conflict.returncode == 2
         assert "refusing to overwrite existing bootstrap artifacts" in conflict.stderr
-
         forced = bootstrap(app, "--force", "--json")
         assert json.loads(forced.stdout)["provider_instance"] == "provider.pgbot.causcope-prod"
 
@@ -119,17 +83,7 @@ def main() -> int:
         assert "multiple PostgreSQL ActiveRecord pools" in ambiguous.stderr
         assert "primary" in ambiguous.stderr
         assert "replica" in ambiguous.stderr
-
-        selected = bootstrap(
-            multi,
-            "--environment",
-            "multi_database",
-            "--pool-config",
-            "replica",
-            "--workspace",
-            ".causcope-replica",
-            "--json",
-        )
+        selected = bootstrap(multi, "--environment", "multi_database", "--pool-config", "replica", "--workspace", ".causcope-replica", "--json")
         selected_document = json.loads(selected.stdout)
         assert selected_document["pool"] == "pool:active_record.replica"
         replica_topology = load_resource_topology(multi / ".causcope-replica" / "resource-topology.yaml")
