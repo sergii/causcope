@@ -22,7 +22,10 @@ from instrument_router import InstrumentRouter
 from instrument_routing_projection import build_instrument_routing_projection
 from probe_executor_runtime import build_probe_execution_capabilities
 from prometheus_adapter import load_adapter as load_prometheus_adapter, load_response_file
-from prometheus_autonomous_provider import FixturePrometheusQuerySupplier, PrometheusAutonomousProbeProvider
+from prometheus_autonomous_provider import (
+    FixturePrometheusQuerySupplier,
+    PrometheusAutonomousProbeProvider,
+)
 from resource_topology import load_resource_topology
 from routed_agent_plan import build_routed_agent_plan
 from routed_execution_set_mcp_tool import (
@@ -37,36 +40,76 @@ from runtime_target_resolution import build_runtime_target_resolution
 
 ROOT = Path(__file__).resolve().parents[1]
 TOPOLOGY_PATH = ROOT / "examples" / "topology" / "shop.yaml"
-PROMETHEUS_ADAPTER_PATH = ROOT / "examples" / "adapters" / "prometheus" / "database-query-latency.yaml"
-PROMETHEUS_RESPONSE_PATH = ROOT / "examples" / "telemetry" / "prometheus" / "database-query-latency.json"
+PROMETHEUS_ADAPTER_PATH = (
+    ROOT / "examples" / "adapters" / "prometheus" / "database-query-latency.yaml"
+)
+PROMETHEUS_RESPONSE_PATH = (
+    ROOT / "examples" / "telemetry" / "prometheus" / "database-query-latency.json"
+)
 
 INCIDENT_ID = "incident.test.multi-target-execution-set"
 DIAGNOSIS_TARGET = "observation.database.query_latency"
 PROBE_ID = "probe.database.measure_query_latency"
+TOP_HYPOTHESIS = "hypothesis.latency.database"
+ALTERNATIVE_HYPOTHESIS = "hypothesis.database.connection_pool_exhaustion"
 NOW = datetime(2026, 9, 14, 23, 31, 0, tzinfo=timezone.utc)
 SCOPE = {
     "boundaries": ["boundary.application.database"],
     "attributes": {"service": "checkout-api", "dependency": "postgresql"},
 }
+PAIR = [TOP_HYPOTHESIS, ALTERNATIVE_HYPOTHESIS]
 PROBE_CANDIDATE = {
+    "rank": 1,
     "probe": {"id": PROBE_ID},
-    "factors": {"top_candidate": "hypothesis.latency.database"},
+    "risk": "read_only",
+    "requires": ["capability.database.query_metrics"],
+    "preferred_tools": ["prometheus", "pgbot"],
+    "unresolved_observations": [DIAGNOSIS_TARGET],
+    "hypotheses_tested": [TOP_HYPOTHESIS, ALTERNATIVE_HYPOTHESIS],
     "outcome_analysis": [
         {
             "observation": DIAGNOSIS_TARGET,
-            "observed_distinguishes_pairs": [
-                [
-                    "hypothesis.latency.database",
-                    "hypothesis.database.connection_pool_exhaustion",
-                ]
+            "candidate_effects": [
+                {
+                    "hypothesis": TOP_HYPOTHESIS,
+                    "current_rank": 1,
+                    "on_causal_path": True,
+                    "prediction_strength": "strong",
+                    "prediction_expected": "above_baseline",
+                    "absent_is_falsifier_conflict": True,
+                    "falsifier_condition": "not_above_baseline",
+                    "explicitly_tested_by_probe": True,
+                },
+                {
+                    "hypothesis": ALTERNATIVE_HYPOTHESIS,
+                    "current_rank": 2,
+                    "on_causal_path": False,
+                    "prediction_strength": "moderate",
+                    "prediction_expected": "near_baseline_after_checkout",
+                    "absent_is_falsifier_conflict": False,
+                    "falsifier_condition": None,
+                    "explicitly_tested_by_probe": True,
+                },
             ],
-            "absent_distinguishes_pairs": [
-                [
-                    "hypothesis.latency.database",
-                    "hypothesis.database.connection_pool_exhaustion",
-                ]
-            ],
+            "observed_distinguishes_pairs": [PAIR],
+            "absent_distinguishes_pairs": [PAIR],
+            "two_sided_distinguishes_pairs": [PAIR],
+            "contrast_components": 4,
         }
+    ],
+    "factors": {
+        "top_candidate": TOP_HYPOTHESIS,
+        "top_candidate_two_sided_alternatives": [ALTERNATIVE_HYPOTHESIS],
+        "top_candidate_discriminated_alternatives": [ALTERNATIVE_HYPOTHESIS],
+        "top_candidate_contrast_components": 4,
+        "two_sided_candidate_pairs": [PAIR],
+        "discriminated_candidate_pairs": [PAIR],
+        "contrast_components": 4,
+        "discriminating_observations": [DIAGNOSIS_TARGET],
+    },
+    "reasons": [
+        "Both observed and absent query-latency outcomes distinguish the current candidate pair.",
+        "The probe is read-only and can be executed through exact target-aware providers.",
     ],
 }
 
@@ -102,14 +145,14 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
             "candidates": [
                 {
                     "rank": 1,
-                    "source": {"id": "hypothesis.latency.database"},
+                    "source": {"id": TOP_HYPOTHESIS},
                     "path": [],
                     "factors": {},
                     "reasons": [],
                 },
                 {
                     "rank": 2,
-                    "source": {"id": "hypothesis.database.connection_pool_exhaustion"},
+                    "source": {"id": ALTERNATIVE_HYPOTHESIS},
                     "path": [],
                     "factors": {},
                     "reasons": [],
@@ -119,10 +162,29 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
         probe_ranking = {
             "schema_version": "0.1",
             "kind": "probe_ranking",
-            "query": {"target": DIAGNOSIS_TARGET},
+            "query": {
+                "target": DIAGNOSIS_TARGET,
+                "observed": [],
+                "absent": [],
+                "candidate_hypotheses": [TOP_HYPOTHESIS, ALTERNATIVE_HYPOTHESIS],
+            },
             "found": True,
             "not_found_reason": None,
-            "ranking_method": {},
+            "ranking_method": {
+                "type": "deterministic_ordinal",
+                "purpose": "discriminate_current_causal_candidates",
+                "priority": [
+                    "more_top_candidate_two_sided_alternatives",
+                    "more_top_candidate_contrast_components",
+                    "more_top_candidate_discriminated_alternatives",
+                    "more_two_sided_candidate_pairs",
+                    "more_contrast_components",
+                    "more_discriminated_candidate_pairs",
+                    "lower_probe_risk",
+                    "more_hypotheses_explicitly_tested",
+                    "probe_id",
+                ],
+            },
             "probes": [copy.deepcopy(PROBE_CANDIDATE)],
         }
         probe_execution = {
@@ -133,7 +195,9 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
             "probe_id": PROBE_ID,
             "registered": False,
             "executable_here": False,
-            "unavailable_reason": "host executor is intentionally absent in this provider-routing proof",
+            "unavailable_reason": (
+                "host executor is intentionally absent in this provider-routing proof"
+            ),
             "executor": None,
             "capability": None,
             "observation": DIAGNOSIS_TARGET,
@@ -273,8 +337,14 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
         snapshot = self.snapshot()
         evidence = self.runtime_evidence()
         relationships = self.relationships()
-        snapshot_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        snapshot_path.write_text(
+            json.dumps(snapshot, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        evidence_path.write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         reader = DiagnosisSnapshotReader(snapshot_path)
 
         def routing_provider(current_snapshot: dict) -> dict:
@@ -324,7 +394,16 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
 
     def test_routed_agent_plan_exposes_one_two_member_execution_set(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            snapshot, _evidence, _snapshot_path, _evidence_path, _reader, routing_provider, base_router_provider, _controller = self.setup_runtime(directory)
+            (
+                snapshot,
+                _evidence,
+                _snapshot_path,
+                _evidence_path,
+                _reader,
+                routing_provider,
+                base_router_provider,
+                _controller,
+            ) = self.setup_runtime(directory)
             routing = routing_provider(snapshot)
             projection = build_routed_execution_sets(routing)
             self.assertEqual(1, len(projection["sets"]))
@@ -354,7 +433,16 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
 
     def test_one_mcp_call_commits_two_targets_as_one_revision_and_one_rerank(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            snapshot, _evidence, snapshot_path, evidence_path, reader, routing_provider, base_router_provider, controller = self.setup_runtime(directory)
+            (
+                _snapshot,
+                _evidence,
+                snapshot_path,
+                evidence_path,
+                reader,
+                routing_provider,
+                base_router_provider,
+                controller,
+            ) = self.setup_runtime(directory)
             server = RoutingDiagnosisMcpServer(
                 reader,
                 instrument_router_provider=base_router_provider,
@@ -371,6 +459,7 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
                     "params": {"uri": ROUTED_AGENT_PLAN_URI, "_meta": self.modern_meta()},
                 }
             )
+            self.assertNotIn("error", resource)
             plan = json.loads(resource["result"]["contents"][0]["text"])
             self.assertEqual(1, len(plan["execution_sets"]))
             execution_set = plan["execution_sets"][0]
@@ -384,7 +473,10 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
                     "params": {"_meta": self.modern_meta()},
                 }
             )
-            self.assertEqual([TOOL_NAME], [tool["name"] for tool in tools["result"]["tools"]])
+            self.assertEqual(
+                [TOOL_NAME],
+                [tool["name"] for tool in tools["result"]["tools"]],
+            )
 
             called = server.handle_message(
                 {
@@ -412,23 +504,46 @@ class MultiTargetExecutionSetTest(unittest.TestCase):
             committed_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
             self.assertEqual(8, committed_snapshot["evidence_revision"])
             committed_evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-            routed_targets = {
-                instance.get("source", {}).get("attributes", {}).get("routing.target_resource")
+            routed_instances = [
+                instance
                 for instance in committed_evidence["instances"]
+                if instance.get("source", {})
+                .get("attributes", {})
+                .get("routing.target_resource")
+            ]
+            self.assertEqual(2, len(routed_instances))
+            routed_targets = {
+                instance["source"]["attributes"]["routing.target_resource"]
+                for instance in routed_instances
             }
-            self.assertIn("db.orders.prod", routed_targets)
-            self.assertIn("db.payments.prod", routed_targets)
+            self.assertEqual(
+                {"db.orders.prod", "db.payments.prod"},
+                routed_targets,
+            )
+            for instance in routed_instances:
+                self.assertEqual(
+                    instance["source"]["attributes"]["routing.target_resource"],
+                    instance["scope"]["attributes"]["target_resource"],
+                )
 
-            stale = controller.call
-            with self.assertRaisesRegex(RoutedExecutionSetInvocationError, "stale evidenceRevision"):
-                stale(TOOL_NAME, execution_set["arguments"])
+            with self.assertRaisesRegex(
+                RoutedExecutionSetInvocationError,
+                "stale evidenceRevision",
+            ):
+                controller.call(TOOL_NAME, execution_set["arguments"])
 
     def test_second_member_failure_commits_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            snapshot, _evidence, snapshot_path, evidence_path, _reader, routing_provider, _base_router_provider, controller = self.setup_runtime(
-                directory,
-                fail_payments=True,
-            )
+            (
+                snapshot,
+                _evidence,
+                snapshot_path,
+                evidence_path,
+                _reader,
+                routing_provider,
+                _base_router_provider,
+                controller,
+            ) = self.setup_runtime(directory, fail_payments=True)
             execution_set = build_routed_execution_sets(routing_provider(snapshot))["sets"][0]
             before_snapshot = snapshot_path.read_text(encoding="utf-8")
             before_evidence = evidence_path.read_text(encoding="utf-8")
