@@ -21,8 +21,10 @@ class ShopRoutedProbeProvider:
         collected_at: str,
         concepts: dict[str, dict[str, Any]],
         scope: dict[str, Any],
+        provider_id: str = SHOP_PROVIDER_ID,
     ) -> None:
         self.concepts = concepts
+        self.provider_id = provider_id
         self.scope = normalize_scope(scope, concepts)
         if self.scope is None:
             raise ValueError("Shop routed provider requires an exact diagnosis scope")
@@ -67,7 +69,7 @@ class ShopRoutedProbeProvider:
                 }
             )
         return {
-            "id": SHOP_PROVIDER_ID,
+            "id": self.provider_id,
             "instrument": "shop_structured_logs",
             "transport": "captured_docker_compose_logs",
             "scope_mode": "fixed_exact",
