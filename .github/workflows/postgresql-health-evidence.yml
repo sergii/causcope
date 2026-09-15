@@ -18,6 +18,7 @@ on:
       - "vocabulary/tools.yaml"
       - "scripts/postgresql_health_provider.py"
       - "scripts/test_postgresql_health_provider.py"
+      - "scripts/test_postgresql_health_binding.py"
       - "scripts/verify_postgresql_health_live.py"
       - "scripts/provider_bindings.py"
       - "schema/provider-bindings.schema.json"
@@ -39,6 +40,7 @@ on:
       - "vocabulary/tools.yaml"
       - "scripts/postgresql_health_provider.py"
       - "scripts/test_postgresql_health_provider.py"
+      - "scripts/test_postgresql_health_binding.py"
       - "scripts/verify_postgresql_health_live.py"
       - "scripts/provider_bindings.py"
       - "schema/provider-bindings.schema.json"
@@ -85,6 +87,9 @@ jobs:
 
       - name: Validate PostgreSQL health provider
         run: python scripts/test_postgresql_health_provider.py
+
+      - name: Validate PostgreSQL health binding
+        run: python scripts/test_postgresql_health_binding.py
 
       - name: Validate live PostgreSQL catalog evidence
         env:
