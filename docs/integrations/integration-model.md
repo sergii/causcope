@@ -15,7 +15,20 @@ Evidence provider
 Communication surface
 ```
 
-Causcope itself should be the system of record for **investigation state, evidence, hypotheses, causal reasoning, and diagnosis**.
+Causcope should be the system of record for **normalized investigation state, evidence references/provenance, hypotheses, causal reasoning, probe history, and diagnosis**.
+
+Causcope is not automatically the authoritative source of the underlying raw fact. For example:
+
+```text
+CPU metric value                -> Datadog / Prometheus
+Sentry error event              -> Sentry
+PostgreSQL lock state           -> PostgreSQL
+commit / PR                     -> GitHub
+paging / acknowledgement state  -> PagerDuty
+normalized investigation state  -> Causcope
+```
+
+This distinction prevents Causcope from pretending to replace source systems while still allowing it to own diagnosis.
 
 ## Operational roles
 
@@ -84,11 +97,75 @@ Examples:
 - Telegram;
 - Mattermost;
 - Google Chat;
+- Discord;
 - email;
 - dashboard;
 - CLI/agent conversation.
 
 Communication surfaces should not own canonical reasoning state.
+
+## Trigger modes
+
+An Investigation can begin in several ways. These modes should normalize into the same investigation contract rather than creating separate workflows.
+
+```text
+1. External incident
+   PagerDuty / ServiceNow / JSM incident already exists
+
+2. Observability or error signal
+   Datadog / Prometheus / Sentry / BugSnag / CloudWatch
+
+3. Human request
+   CLI, dashboard, Slack/Teams/Telegram, coding agent
+
+4. Infrastructure/runtime event
+   Kubernetes, database, queue, host, deployment system
+
+5. Causcope detector
+   proactive anomaly or known-pattern detection
+```
+
+The trigger creates or updates an Investigation. It does not necessarily create a formal incident.
+
+## Investigation vs incident promotion
+
+Causcope needs an explicit policy boundary between investigation and incident lifecycle.
+
+Examples:
+
+```text
+Sentry issue
+  -> Causcope Investigation
+  -> low blast radius
+  -> no PagerDuty incident
+```
+
+```text
+Causcope detector
+  -> Investigation
+  -> customer impact confirmed
+  -> severity threshold crossed
+  -> create or attach PagerDuty incident according to customer policy
+```
+
+```text
+PagerDuty P1
+  -> existing formal incident
+  -> create/attach Causcope Investigation immediately
+```
+
+Promotion criteria may eventually include:
+
+- customer impact;
+- blast radius;
+- severity;
+- duration;
+- service criticality;
+- confidence/evidence quality where formally defined;
+- customer policy;
+- human approval requirements.
+
+Causcope should not hard-code a universal rule that every anomaly or issue is an incident.
 
 ## Canonical investigation object
 
@@ -121,6 +198,40 @@ Investigation CS-4821
 ```
 
 An Investigation may exist without a formal incident, and a formal incident may trigger an Investigation.
+
+## Signal, context, observation, and evidence
+
+These concepts must remain distinct.
+
+```text
+Signal
+  something reported or emitted
+
+Context
+  relevant surrounding information, not yet causal evidence
+
+Observation
+  concrete fact measured or reported about a scoped system
+
+Evidence
+  an observation interpreted in relation to a hypothesis or investigation question
+```
+
+Example:
+
+```text
+GitHub deploy at 13:37
+```
+
+is initially change context. It does not become evidence that the deploy caused the incident merely because the timestamps are close.
+
+This preserves the existing Causcope rules:
+
+```text
+context != evidence
+correlation != causality
+difference != cause
+```
 
 ## Canonical event normalization
 
@@ -246,9 +357,13 @@ Datadog
 OpenTelemetry / Prometheus ingestion
 Microsoft Teams
 Telegram
+BugSnag
+Mattermost / Google Chat / Discord as demand justifies
 ```
 
 Telegram has higher value for founders and SMB than its enterprise ranking suggests and is useful for dogfooding.
+
+Slack and Microsoft Teams are expected to be higher-priority enterprise communication surfaces.
 
 ## Communication behavior
 
@@ -293,21 +408,21 @@ Causcope renders an answer from canonical investigation state.
 
 The communication integration must not implement independent reasoning logic.
 
-## Confidence presentation
+## Ranking and confidence presentation
 
-Avoid pseudo-precision such as `73%` unless confidence is empirically calibrated.
+Causcope should not present pseudo-precise probabilities such as `73%` unless the value is empirically calibrated against confirmed outcomes.
 
-Prefer:
+The current deterministic core is better represented through ordinal ranking and explicit factors:
 
 ```text
 Leading hypothesis: database connection pool exhaustion
-Confidence: medium-high
 Supporting evidence: 4
 Contradicting evidence: 1
-Unknowns: 2
+Unknown discriminators: 2
+Why ranked first: ...
 ```
 
-The underlying model should expose why a hypothesis is ranked, not only a score.
+A future qualitative or numeric confidence model may be added only after its semantics are explicit and testable. Product surfaces must not invent confidence labels independently of the core.
 
 ## Non-invasive adoption
 
@@ -391,15 +506,38 @@ There is no single universal source of truth. Authority is per dimension.
 Example:
 
 ```text
-Detection                 Datadog
-Paging / acknowledgement  PagerDuty
-ITSM / compliance record  ServiceNow
-Code/change history       GitHub
-Investigation / diagnosis Causcope
-Conversation              Slack
+Raw telemetry              Datadog / Prometheus / source system
+Application error event    Sentry / BugSnag
+Runtime state               PostgreSQL / Kubernetes / source system
+Detection                   Datadog or another detector
+Paging / acknowledgement   PagerDuty
+ITSM / compliance record   ServiceNow
+Code/change history        GitHub
+Investigation / diagnosis  Causcope
+Conversation               Slack
 ```
 
 Causcope should preserve external identifiers and synchronization state instead of attempting to own every operational lifecycle.
+
+## Reactive to proactive evolution
+
+The integration architecture should support gradual evolution without changing the Investigation model:
+
+```text
+Phase A
+external incident -> Causcope investigation
+
+Phase B
+multiple external signals -> correlation -> investigation
+
+Phase C
+Causcope/local detectors -> proactive investigation -> maybe incident
+
+Phase D
+continuous causal understanding and safe recommendation
+```
+
+Detection is therefore an optional producer of investigations, not the definition of Causcope itself.
 
 ## Design rule
 
