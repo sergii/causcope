@@ -1,0 +1,66 @@
+name: Validate recommendation session journal
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "schema/recommendation-session-event.schema.json"
+      - "schema/recommendation-session.schema.json"
+      - "schema/architectural-recommendation-projection.schema.json"
+      - "schema/recommendation-information-gap-projection.schema.json"
+      - "schema/recommendation-evidence-acquisition-result.schema.json"
+      - "scripts/recommendation_session_journal.py"
+      - "scripts/test_recommendation_session_journal.py"
+      - "scripts/recommendation_information_gaps.py"
+      - "scripts/recommendation_evidence_acquisition.py"
+      - "scripts/database_read_model_recommendation.py"
+      - "scripts/probe_filesystem_claim.py"
+      - "examples/recommendations/database-read-model/**"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/topology/shop.yaml"
+      - "RFC/0071-recommendation-session-journal.md"
+      - ".github/workflows/recommendation-session-journal.yml"
+  pull_request:
+    paths:
+      - "schema/recommendation-session-event.schema.json"
+      - "schema/recommendation-session.schema.json"
+      - "schema/architectural-recommendation-projection.schema.json"
+      - "schema/recommendation-information-gap-projection.schema.json"
+      - "schema/recommendation-evidence-acquisition-result.schema.json"
+      - "scripts/recommendation_session_journal.py"
+      - "scripts/test_recommendation_session_journal.py"
+      - "scripts/recommendation_information_gaps.py"
+      - "scripts/recommendation_evidence_acquisition.py"
+      - "scripts/database_read_model_recommendation.py"
+      - "scripts/probe_filesystem_claim.py"
+      - "examples/recommendations/database-read-model/**"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/topology/shop.yaml"
+      - "RFC/0071-recommendation-session-journal.md"
+      - ".github/workflows/recommendation-session-journal.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Verify recommendation evidence acquisition baseline
+        run: python scripts/test_recommendation_evidence_acquisition.py
+
+      - name: Verify recommendation session lifecycle
+        run: python scripts/test_recommendation_session_journal.py
