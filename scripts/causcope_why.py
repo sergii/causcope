@@ -20,6 +20,7 @@ from causcope_cli import (
 from instrument_router import InstrumentRouter
 from instrument_routing_projection import build_instrument_routing_projection
 from probe_executor_runtime import build_probe_execution_capabilities
+from provider_bindings import load_provider_instance_bindings
 from rails_pool_vertical_slice import build_summary, load_document, render
 from resource_topology import load_resource_topology
 from runtime_target_resolution import build_runtime_target_resolution
@@ -28,6 +29,7 @@ WORKSPACE_DIAGNOSIS = "diagnosis.json"
 WORKSPACE_RUNTIME_EVIDENCE = "runtime-evidence.json"
 WORKSPACE_RUNTIME_RELATIONSHIPS = "runtime-relationships.json"
 WORKSPACE_RESOURCE_TOPOLOGY = "resource-topology.yaml"
+WORKSPACE_PROVIDER_BINDINGS = "provider-bindings.yaml"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -160,11 +162,16 @@ def workspace_route_context(
     runtime_evidence_path = workspace / WORKSPACE_RUNTIME_EVIDENCE
     relationships_path = workspace / WORKSPACE_RUNTIME_RELATIONSHIPS
     topology_path = workspace / WORKSPACE_RESOURCE_TOPOLOGY
+    provider_bindings_path = workspace / WORKSPACE_PROVIDER_BINDINGS
+
+    topology = load_resource_topology(topology_path) if topology_path.exists() else None
+    if provider_bindings_path.exists() and topology is None:
+        raise ValueError(
+            f"{provider_bindings_path} requires {topology_path}; provider instances cannot be bound without topology"
+        )
 
     target_resolution: dict[str, Any] | None = None
-    topology = None
-    if runtime_evidence_path.exists() and relationships_path.exists() and topology_path.exists():
-        topology = load_resource_topology(topology_path)
+    if runtime_evidence_path.exists() and relationships_path.exists() and topology is not None:
         target_resolution = build_runtime_target_resolution(
             snapshot,
             _load_json_object(runtime_evidence_path),
@@ -172,12 +179,23 @@ def workspace_route_context(
             topology,
         )
 
+    provider_instance_bindings = (
+        load_provider_instance_bindings(
+            provider_bindings_path,
+            topology=topology,
+            concepts=concepts,
+            incident_id=snapshot["incident_id"],
+        )
+        if provider_bindings_path.exists() and topology is not None
+        else {}
+    )
+
     router = InstrumentRouter(
         concepts=concepts,
         host_capabilities=build_probe_execution_capabilities(concepts),
         providers=[],
         resource_topology=topology,
-        provider_instance_bindings={},
+        provider_instance_bindings=provider_instance_bindings,
     )
     routing = build_instrument_routing_projection(
         snapshot,
