@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 from agent_plan_recovery import build_agent_plan_projection
 from causal_projection import ROOT, load_concepts, load_edges
+from causal_verification import build_causal_verification_projection
 from diagnosis_http_api import DiagnosisSnapshotReader
 from diagnosis_mcp_server import (
     DiagnosisMcpServer,
@@ -35,11 +36,13 @@ from routed_instrument_mcp_tool import (
     RoutedInstrumentInvocationError,
     RoutedInstrumentToolController,
 )
+from runtime_evidence import load_runtime_evidence
 
 INSTRUMENT_ROUTING_URI = "causcope://diagnosis/instrument-routing"
 ROUTED_AGENT_PLAN_URI = "causcope://diagnosis/routed-agent-plan"
 EXECUTION_SET_STATUS_URI = "causcope://diagnosis/execution-set-status"
 EXECUTION_SET_RECOVERY_URI = "causcope://diagnosis/execution-set-recovery"
+CAUSAL_VERIFICATION_URI = "causcope://diagnosis/causal-verification"
 
 RouterProvider = Callable[[], InstrumentRouter]
 RoutingProjectionProvider = Callable[[dict[str, Any]], dict[str, Any]]
@@ -57,11 +60,9 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         routed_tools: Any | None = None,
         routing_projection_provider: RoutingProjectionProvider | None = None,
         execution_set_state_dir: Path | None = None,
+        causal_verification_evidence_path: Path | None = None,
     ) -> None:
-        super().__init__(
-            reader,
-            probe_capability_provider=probe_capability_provider,
-        )
+        super().__init__(reader, probe_capability_provider=probe_capability_provider)
         self.instrument_router_provider = instrument_router_provider
         self.routed_tools = routed_tools
         self.routing_projection_provider = routing_projection_provider
@@ -69,6 +70,11 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             execution_set_state_dir
             if execution_set_state_dir is not None
             else reader.snapshot_path.parent / "execution-sets"
+        )
+        self.causal_verification_evidence_path = (
+            causal_verification_evidence_path
+            if causal_verification_evidence_path is not None
+            else reader.snapshot_path.parent / "runtime-evidence.json"
         )
 
     def _capabilities(self) -> dict[str, Any]:
@@ -88,6 +94,8 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             "historical durable execution sets without reading raw journal JSONL."
             + f" Read {EXECUTION_SET_RECOVERY_URI} for advisory recovery classification of journaled "
             "execution sets without granting new execution or cleanup authority."
+            + f" Read {CAUSAL_VERIFICATION_URI} for intervention-based causal claims derived from the "
+            "same canonical diagnosis and runtime evidence, not from a specialized compatibility state."
         )
         if self.routed_tools is not None:
             instructions += (
@@ -139,12 +147,22 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                 ),
                 "mimeType": "application/json",
             },
+            {
+                "uri": CAUSAL_VERIFICATION_URI,
+                "name": "causal_verification",
+                "description": (
+                    "Read-only intervention-based causal verification derived from the current canonical "
+                    "diagnosis snapshot and runtime evidence. Missing recovery or identity evidence fails closed."
+                ),
+                "mimeType": "application/json",
+            },
         ]
         if modern:
             additions[0]["title"] = "Causcope instrument routing"
             additions[1]["title"] = "Causcope routed agent plan"
             additions[2]["title"] = "Causcope execution-set status"
             additions[3]["title"] = "Causcope execution-set recovery"
+            additions[4]["title"] = "Causcope causal verification"
         return sorted(resources + additions, key=lambda resource: resource["uri"])
 
     def _router(self, uri: str) -> InstrumentRouter:
@@ -157,11 +175,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                 data={"uri": uri},
             ) from exc
 
-    def _routing_projection(
-        self,
-        snapshot: dict[str, Any],
-        router: InstrumentRouter,
-    ) -> dict[str, Any]:
+    def _routing_projection(self, snapshot: dict[str, Any], router: InstrumentRouter) -> dict[str, Any]:
         if self.routing_projection_provider is None:
             return build_instrument_routing_projection(
                 snapshot,
@@ -182,41 +196,42 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             ROUTED_AGENT_PLAN_URI,
             EXECUTION_SET_STATUS_URI,
             EXECUTION_SET_RECOVERY_URI,
+            CAUSAL_VERIFICATION_URI,
         }:
             return super()._read_resource(uri, modern=modern)
 
         snapshot = self._read_snapshot(uri, modern=modern)
-        router = self._router(uri)
         try:
-            routing = self._routing_projection(snapshot, router)
-            if uri == INSTRUMENT_ROUTING_URI:
-                document = routing
-            elif uri in {EXECUTION_SET_STATUS_URI, EXECUTION_SET_RECOVERY_URI}:
-                execution_sets = build_routed_execution_sets(routing)
-                if uri == EXECUTION_SET_STATUS_URI:
-                    document = build_execution_set_status(
-                        execution_sets,
-                        self.execution_set_state_dir,
-                    )
-                else:
-                    document = build_execution_set_recovery(
-                        execution_sets,
-                        self.execution_set_state_dir,
-                    )
+            if uri == CAUSAL_VERIFICATION_URI:
+                document = build_causal_verification_projection(
+                    snapshot,
+                    load_runtime_evidence(self.causal_verification_evidence_path),
+                )
             else:
-                base_plan = build_agent_plan_projection(
-                    snapshot,
-                    active_execution_enabled=False,
-                    active_sessions=[],
-                    recovery_issues=[],
-                )
-                document = build_routed_agent_plan(
-                    snapshot,
-                    base_plan,
-                    router,
-                    external_mcp_execution_enabled=self.routed_tools is not None,
-                    routing_projection=routing,
-                )
+                router = self._router(uri)
+                routing = self._routing_projection(snapshot, router)
+                if uri == INSTRUMENT_ROUTING_URI:
+                    document = routing
+                elif uri in {EXECUTION_SET_STATUS_URI, EXECUTION_SET_RECOVERY_URI}:
+                    execution_sets = build_routed_execution_sets(routing)
+                    if uri == EXECUTION_SET_STATUS_URI:
+                        document = build_execution_set_status(execution_sets, self.execution_set_state_dir)
+                    else:
+                        document = build_execution_set_recovery(execution_sets, self.execution_set_state_dir)
+                else:
+                    base_plan = build_agent_plan_projection(
+                        snapshot,
+                        active_execution_enabled=False,
+                        active_sessions=[],
+                        recovery_issues=[],
+                    )
+                    document = build_routed_agent_plan(
+                        snapshot,
+                        base_plan,
+                        router,
+                        external_mcp_execution_enabled=self.routed_tools is not None,
+                        routing_projection=routing,
+                    )
         except (OSError, ValueError) as exc:
             raise McpProtocolError(
                 INTERNAL_ERROR,
@@ -226,11 +241,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
 
         payload = {
             "contents": [
-                {
-                    "uri": uri,
-                    "mimeType": "application/json",
-                    "text": self._json_text(document),
-                }
+                {"uri": uri, "mimeType": "application/json", "text": self._json_text(document)}
             ]
         }
         if modern:
@@ -268,7 +279,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Expose current Causcope diagnosis, instrument routing, routed agent plan, execution-set "
-            "lifecycle/recovery projections, and optionally revision-bound direct provider execution over MCP stdio."
+            "lifecycle/recovery projections, causal verification, and optionally revision-bound direct "
+            "provider execution over MCP stdio."
         )
     )
     parser.add_argument("--snapshot", type=Path, required=True)
@@ -282,7 +294,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--runtime-evidence",
         type=Path,
-        help="Runtime evidence JSON/YAML source of truth; required with routed provider tools",
+        help=(
+            "Canonical runtime evidence JSON/YAML; used for causal verification and required with "
+            "routed provider tools. Defaults to <snapshot-dir>/runtime-evidence.json for verification."
+        ),
     )
     parser.add_argument(
         "--mutation-lock-dir",
@@ -293,10 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--execution-set-state-dir",
         type=Path,
-        help=(
-            "Directory containing durable execution-set journals; defaults to "
-            "<snapshot-dir>/execution-sets"
-        ),
+        help="Directory containing durable execution-set journals; defaults to <snapshot-dir>/execution-sets",
     )
     parser.add_argument("--verbose", action="store_true")
     return parser
@@ -354,6 +366,7 @@ def main(root: Path = ROOT) -> int:
             probe_capability_provider=lambda: build_probe_execution_capabilities(concepts),
             routed_tools=routed_tools,
             execution_set_state_dir=args.execution_set_state_dir,
+            causal_verification_evidence_path=args.runtime_evidence,
         )
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
