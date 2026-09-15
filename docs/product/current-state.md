@@ -2,312 +2,263 @@
 
 Status: Living projection
 
-This document maps the repository as it exists today to the agent-first product roadmap. It is intentionally descriptive rather than aspirational.
+This document answers:
 
-It should answer:
+> What can Causcope actually do now, and what is still architecture or planned work?
 
-> What can Causcope actually do now, and what is still only architecture or planned work?
+It is descriptive rather than aspirational.
 
 ## Summary
 
 Causcope is no longer only a troubleshooting ontology or a collection of empirical labs.
 
-The repository already contains a deterministic investigation substrate with:
+The repository contains a deterministic investigation substrate with:
 
 ```text
 semantic knowledge
-runtime evidence
+claims + empirical experiments
 causal ranking
 next-probe ranking
-safe read-only execution
+runtime evidence
+persistent Investigation/scoping state
+exact runtime relationships
+resource topology
 provider capability discovery
 instrument routing
-exact runtime target resolution
 workspace provider bindings
+safe read-only execution
 revision-bound evidence acquisition
-crash-recoverable evidence + diagnosis commit
-MCP and HTTP projections
-persistent investigation/scoping state
+crash-recoverable evidence + diagnosis commits
 bounded autonomous investigation
+CLI / HTTP / MCP projections
 Concrete System / X-Ray projections
-Rails and PostgreSQL evidence providers
+Rails / OpenTelemetry / PostgreSQL / pgbot evidence paths
 ```
 
-The strongest current product proof is the Rails D3.1 golden vertical slice.
+The current product direction remains:
 
-A second product proof closes a generic local read-only loop through `causcope why --acquire`, and the first live process-backed provider path now executes `pgbot inspect --json` under a narrow binding contract.
+> Agent First, not Agent Only.
 
-## Proven product slice
+The local product is the first execution surface. Dashboard, Cloud, Relay, Slack/PagerDuty-style integrations, Helm, and private deployment should project the same investigation contracts later.
 
-`RFC/0075-golden-vertical-slice-rails-connection-pool.md` is an implemented proof.
+## Strongest proofs
 
-The live CI path demonstrates:
+### Rails D3.1 confirmed causal proof
+
+`RFC/0075-golden-vertical-slice-rails-connection-pool.md` is implemented.
+
+The bounded live proof demonstrates:
 
 ```text
-user-visible slow request
-  -> revision-bound Rails scan
-  -> exact Rails code symbol
+slow request
+  -> revision-bound Rails system facts
+  -> exact code symbol
   -> exact ActiveRecord pool
-  -> real pool saturation
   -> measured checkout wait
   -> OpenTelemetry request identity
   -> independent PostgreSQL capacity control
   -> generic D3.1 X-Ray progression
   -> recovery evidence
   -> CAUSAL_DIAGNOSIS_CONFIRMED
-  -> product-shaped human diagnosis
 ```
 
-The bounded proof explicitly keeps blast radius unknown because it has no evidence source establishing affected-user/request counts.
+Blast radius remains unknown unless a separate evidence source proves affected-user/request counts.
 
-That behavior is intentional and product-defining: unknown evidence remains unknown rather than being guessed.
+That is intentional: unknown evidence stays unknown.
 
-## Product front door
+### Generic local acquisition loop
 
-The repository exposes:
+The human-facing command:
 
 ```text
-causcope why "checkout is slow"
+causcope why
 ```
 
-as a thin product front door over existing investigation contracts.
-
-### No diagnostic evidence yet
-
-`causcope why` creates or resumes the same local investigation/scoping state used by the existing Investigator and presents the next unresolved scoping question.
-
-It does not invent a root cause from the problem statement.
-
-### Generic workspace diagnosis available
-
-When the workspace contains:
+can consume canonical diagnosis state, expose the next discriminator, resolve the exact operational target, route to a configured provider, and keep acquisition explicit:
 
 ```text
-.causcope/diagnosis.json
+causcope why --acquire
 ```
 
-`causcope why` consumes the existing canonical `diagnosis_snapshot` and exposes:
+The bounded acquisition loop is:
 
 ```text
-target
-leading hypothesis
-supporting observations
-contradictions
-next ranked probe
-selected instrument or explicit routing stop
+diagnosis revision N
+  -> ranked read-only probe
+  -> exact target
+  -> provider instance
+  -> InstrumentRouter
+  -> explicit authorization
+  -> read-only evidence acquisition
+  -> durable journal
+  -> atomic evidence + diagnosis commit
+  -> revision N + 1
+  -> rerank
 ```
 
-It reuses the existing probe ranking and InstrumentRouter. It does not implement another diagnosis engine.
+The path is proven with both captured `pgbot_file` evidence and live `pgbot_cli` execution.
 
-The diagnosis snapshot is identity-checked against the local investigation. A snapshot for another `incident_id` fails closed instead of being silently attached to the current case.
-
-### Exact operational target resolution
-
-When the workspace additionally contains:
-
-```text
-runtime-evidence.json
-runtime-relationships.json
-resource-topology.yaml
-```
-
-`causcope why` can reuse the existing runtime-target resolution contract:
-
-```text
-active observation
-  -> exact trace
-  -> runtime resolved relationship
-  -> concrete runtime resource
-  -> topology runtime binding
-  -> exact operational target
-```
-
-For example:
-
-```text
-observation.database.query_latency
-  -> trace-1
-  -> pool:active_record.primary
-  -> db.orders.prod
-```
-
-If the exact target cannot be proven, Causcope preserves the unresolved state rather than routing a target-specific provider heuristically.
-
-### Workspace provider binding
-
-`RFC/0078-workspace-provider-bindings.md` defines the workspace runtime binding contract:
-
-```text
-.causcope/provider-bindings.yaml
-```
-
-Implemented pgbot drivers are:
-
-```text
-pgbot_file
-pgbot_cli
-```
-
-`pgbot_file` binds a topology-declared provider instance to an already-produced pgbot JSON report.
-
-`pgbot_cli` is the first live process-backed binding. It is deliberately not a generic command runner. The executable shape is fixed to:
+`pgbot_cli` is deliberately constrained to:
 
 ```text
 pgbot inspect --json
 ```
 
-The database URL is referenced by environment-variable name in the workspace and is supplied to the child only as `DATABASE_URL`; raw credentials are not stored in the binding or passed in command-line arguments.
+It is not a generic subprocess runner. The DSN is resolved only through a named environment variable and database identity is revalidated on every read.
 
-Plain `causcope why` does not run the CLI. It may check that `pgbot` exists and the configured environment variable is present, but the database read occurs only after explicit acquisition authorization.
+### Rails/PostgreSQL system bootstrap
 
-The deterministic routing path is:
+`RFC/0079-agent-first-rails-postgresql-bootstrap.md` is implemented.
 
-```text
-diagnosis
-  -> ranked next probe
-  -> exact operational target
-  -> topology provider instance
-  -> runtime provider binding
-  -> InstrumentRouter
-  -> selected safe instrument
+```bash
+causcope bootstrap . \
+  --database app_production \
+  --database-url-env CAUSCOPE_PRODUCTION_DATABASE_URL
 ```
 
-A proven test resolves `pool:active_record.primary` to `db.orders.prod` and selects:
+creates:
 
 ```text
-provider.pgbot.orders-prod
+.causcope/concrete-system-facts.json
+.causcope/resource-topology.yaml
+.causcope/pgbot-postgresql.yaml
+.causcope/provider-bindings.yaml
 ```
 
-for the canonical read-only query-latency probe.
+The command discovers system/configuration facts and provider routing only.
 
-Both pgbot bindings verify database identity. The identity check is repeated on every evidence read, so changing a report or receiving a live CLI result for the wrong database cannot be silently relabeled as evidence for the selected target.
+It does not manufacture runtime evidence or diagnosis.
 
-The live CLI proof additionally verifies that a report-bearing pgbot exit code `2` is accepted, that the command shape remains exactly `pgbot inspect --json`, and that the configured DSN is not emitted by Causcope.
+Multi-database applications require explicit pool selection rather than guessing.
+
+### Observed Rails incident bootstrap
+
+`RFC/0080-observed-rails-incident-bootstrap.md` is implemented for the first bounded slice.
+
+The product path is now:
+
+```text
+causcope bootstrap
+  -> system knowledge + exact DB target + provider binding
+
+causcope why "checkout is slow"
+  -> create/resume Investigation
+
+causcope runtime start
+  -> bind OTLP receiver to the same Investigation
+
+reproduce observed request
+  -> concrete runtime facts
+  -> exact request / trace / ActiveRecord pool interaction
+
+causcope runtime seed
+  -> runtime evidence revision 1
+  -> runtime relationships
+  -> diagnosis revision 1
+  -> exact target
+  -> next discriminator
+```
+
+The first seed requires explicit objectives:
+
+```text
+request latency threshold
+pool checkout-wait threshold
+```
+
+and emits two observations from the same trace and scope:
+
+```text
+observation.http.request_latency
+observation.database.connection_pool_wait_time
+```
+
+For the proven slice, the request-latency diagnosis ranks these empirically grounded alternatives:
+
+```text
+1. hypothesis.database.connection_pool_exhaustion
+2. hypothesis.latency.database
+```
+
+and the existing deterministic probe ranker chooses:
+
+```text
+probe.database.measure_query_latency
+```
+
+as the next discriminator.
+
+This is candidate ranking, not confirmed root cause.
+
+The exact target path is preserved:
+
+```text
+request observation
+  -> trace
+  -> runtime used_resource relationship
+  -> pool:active_record.primary
+  -> explicit topology binding
+  -> exact PostgreSQL resource
+```
+
+No provider is routed from natural-language similarity or from the assumption that the app has only one database.
+
+## Current product front door
+
+### No diagnostic evidence yet
+
+```text
+causcope why "something is wrong"
+```
+
+creates or resumes durable scoping state and asks the next unresolved question.
+
+It does not invent a diagnosis from text.
+
+### Diagnosis available
+
+When `.causcope/diagnosis.json` exists, `why` projects:
+
+```text
+target
+ranked hypotheses
+supporting observations
+contradictions
+next probe
+exact target resolution when proven
+selected provider or explicit routing stop
+```
+
+The snapshot is identity-checked against the current Investigation.
 
 ### Explicit evidence acquisition
 
-Plain `causcope why` remains read-only.
-
-The user must explicitly opt in to evidence acquisition:
+Plain `why` remains non-mutating with respect to live provider reads.
 
 ```text
-causcope why "database requests are slow" --acquire
+causcope why --acquire
 ```
 
-`--acquire` does not add a second executor. It projects the current investigation through the existing target-aware execution-set machinery.
+is the explicit boundary for one bounded evidence acquisition step.
 
-The current bounded product path is:
-
-```text
-current diagnosis revision N
-  -> top-ranked read-only probe
-  -> exact runtime target resolution
-  -> configured provider instance
-  -> current safe route
-  -> one ready execution set
-  -> explicit --acquire authorization
-  -> revalidate incident + revision + route + provider
-  -> execute read-only provider
-  -> canonical evidence
-  -> execution-set journal
-  -> crash-recoverable evidence + diagnosis commit
-  -> evidence revision N + 1
-  -> one causal rerank
-```
-
-The product wrapper therefore inherits the existing execution safety properties:
+Safety properties include:
 
 ```text
 stale revision -> fail closed
 route drift -> fail closed
 provider drift -> fail closed
 wrong target -> fail closed
-provider evidence without exact target provenance -> fail closed
-member failure -> no partial incident-state commit
+cross-Investigation evidence -> fail closed
+partial execution failure -> no partial canonical commit
 no new canonical evidence -> fail closed
 ```
 
-The first `why --acquire` product proof is intentionally bounded to exactly one ready execution set. If there are zero or multiple ready sets, the command stops instead of choosing implicitly.
+## Current CLI/product commands
 
-The proof demonstrates:
-
-```text
-evidence revision 7
-  -> exact db.orders.prod target
-  -> provider.pgbot.orders-prod
-  -> probe.database.measure_query_latency
-  -> new pgbot-backed canonical evidence
-  -> durable member_succeeded journal event
-  -> one atomic Causcope state transition
-  -> durable set_committed journal event
-  -> evidence revision 8
-  -> rerank_count = 1
-```
-
-The same proof now runs through both replayed `pgbot_file` evidence and a live `pgbot_cli` process boundary.
-
-This means the generic local product can complete a real read-only investigation step from the same human-facing command instead of stopping at provider selection.
-
-### Canonical Rails D3.1 artifacts available
-
-The same command can still consume the bounded D3.1 proof inputs directly:
+Important implemented surfaces include:
 
 ```text
-Concrete System Facts
-Concrete Runtime Facts
-Resource-pool Runtime Evidence
-```
-
-and delegate to the already-proven Rails D3.1 product projection.
-
-That specialized path can reach `CAUSAL_DIAGNOSIS_CONFIRMED` because it includes the stronger D3.1 causal verification contract.
-
-Current product composition is therefore:
-
-```text
-causcope why
-  -> investigation/scoping state
-  OR
-  -> generic diagnosis_snapshot
-       -> probe ranking
-       -> exact target resolution when available
-       -> InstrumentRouter
-       -> workspace provider bindings when configured
-       -> explicit --acquire
-       -> canonical evidence revision N + 1
-       -> diagnosis rerank
-  OR
-  -> Rails D3.1 concrete proof
-       -> generic X-Ray engine
-       -> confirmed product diagnosis
-```
-
-## Roadmap mapping
-
-### Semantic core
-
-State: **implemented and actively expanding**
-
-Includes:
-
-- symptom/mechanism catalog;
-- canonical semantic IDs;
-- predictions and falsifiers;
-- claims and empirical experiments;
-- causal graph;
-- diagnostic catalog codes;
-- runtime evidence contracts;
-- deterministic causal ranking.
-
-This area is mature enough to support product proofs but not complete across all failure domains.
-
-### Local Investigator
-
-State: **implemented for scoping, diagnosis projection, routing, and bounded read-only acquisition**
-
-Implemented:
-
-```text
+causcope bootstrap
 causcope investigate
 causcope next
 causcope answer
@@ -315,83 +266,104 @@ causcope status
 causcope report
 causcope why
 causcope why --acquire
+causcope runtime start
+causcope runtime seed
+causcope rails install
+causcope rails run
 ```
 
-Scoping is durable under `.causcope/`.
+The same repository also contains HTTP/MCP and autonomous-agent machinery beneath these product projections.
 
-`why` can consume generic diagnosis state, expose the next discriminating probe, resolve exact operational targets when the required runtime identity artifacts exist, select configured provider instances, and explicitly execute one current ready read-only execution set.
+## Semantic core
 
-It still does not automatically create the initial diagnosis/evidence/topology state from only a natural-language problem statement.
+State: **implemented and actively expanding**
 
-### Agent integration
+Includes:
+
+- symptoms and mechanism domains;
+- observations, hypotheses, probes and capabilities;
+- predictions and falsifiers;
+- claims and empirical experiments;
+- causal graph;
+- diagnostic catalog codes;
+- runtime evidence schemas;
+- deterministic causal ranking;
+- deterministic probe ranking.
+
+The knowledge base is not complete across every failure domain, but it is already sufficient for real product-shaped proofs.
+
+## Evidence and providers
+
+State: **implemented for several bounded paths**
+
+Current adapters/providers include:
+
+```text
+OpenTelemetry
+Prometheus
+structured logs
+Rails runtime evidence
+pgbot/PostgreSQL
+selected local read-only executors
+```
+
+Workspace pgbot bindings include:
+
+```text
+pgbot_file
+pgbot_cli
+```
+
+Provider breadth is not the immediate goal. A complete causal loop is preferred over accumulating adapters without a concrete investigation use case.
+
+## Agent integration
 
 State: **substantial machinery implemented**
 
-Existing repository work includes:
+The repository already contains:
 
 - MCP resources and tools;
 - agent-plan projections;
 - next-probe selection;
 - safe read-only probe execution;
-- bounded autonomous investigation;
-- workflow recovery/journaling;
 - provider capability discovery;
-- instrument routing;
 - exact target-aware routing;
+- bounded autonomous investigation;
 - multi-target execution sets;
-- durable execution-set journals;
-- crash recovery for evidence acquisition.
+- durable journals and cross-process claims;
+- workflow recovery;
+- verification machinery.
 
-The remaining work is product consolidation and ergonomic use of this machinery, not inventing agent support from scratch.
+The remaining work is increasingly product consolidation and ergonomics rather than inventing an agent architecture.
 
-### Real local evidence providers
+## Dashboard
 
-State: **implemented for several bounded paths**
+State: **planned, not yet implemented as the shared product surface described in `docs/`**
 
-Existing providers/adapters include:
+Dashboard remains important and should be an early second surface after the local agent path becomes coherent.
 
-- Prometheus;
-- OpenTelemetry;
-- pgbot/PostgreSQL;
-- Rails repository/runtime evidence;
-- structured logs;
-- selected local probe executors.
+It must project canonical Investigation state instead of introducing another diagnosis model.
 
-Workspace provider bindings now support:
-
-```text
-pgbot_file - replay/captured deterministic reports
-pgbot_cli  - live `pgbot inspect --json` with env-referenced DB credentials
-```
-
-Provider breadth is not the immediate goal. Complete product-shaped investigations are preferred over adding more adapters without a demonstrated use case.
-
-### Dashboard
-
-State: **not implemented as the shared product surface described in `docs/`**
-
-The dashboard remains the next major human/team surface after the agent/local investigation loop is sufficiently coherent.
-
-It must project canonical investigation state rather than introduce another diagnosis model.
-
-### Managed Cloud
+## Managed Cloud
 
 State: **architecture documented, implementation intentionally deferred**
 
-Logical responsibilities are described in:
+Relevant documents:
 
 ```text
 docs/architecture/cloud-component-model.md
 docs/architecture/deployment-model.md
 ```
 
-There is no requirement for the current local product to depend on Causcope Cloud.
+Cloud is expected to provide managed ingestion, collaboration, orchestration, history, policy and enterprise integration surfaces around the same core.
 
-### Managed SaaS integrations
+The local product must not depend on Cloud for reasoning.
+
+## Managed SaaS integrations
 
 State: **planned product architecture**
 
-Priority set currently includes:
+Current priority set includes:
 
 ```text
 GitHub App
@@ -406,9 +378,9 @@ Teams
 Telegram
 ```
 
-These are delivery, signal, evidence, and communication adapters around the same investigation core.
+These are signal, evidence, incident-system and communication adapters around the same Investigation core.
 
-### Relay / enterprise deployment
+## Relay / enterprise deployment
 
 State: **architecture documented, not yet productized**
 
@@ -422,123 +394,120 @@ Helm chart
 private/on-prem deployment later
 ```
 
-The intended security model is capability-based, read-only first, customer-controlled credentials, outbound connectivity where possible, and no arbitrary remote shell.
+Relay should remain a capability-constrained customer-side evidence plane, not a second reasoning implementation and not a remote arbitrary shell.
 
-### Trust Manifest / Trust Diff
+## Trust Manifest / Trust Diff
 
-State: **directional architecture, not yet canonical schema**
+State: **directional architecture, not yet canonical machine-readable schema**
 
-The model is documented under:
+The model is documented in:
 
 ```text
 docs/architecture/trust-access-blast-radius.md
 ```
 
-It should become machine-readable only through a focused RFC/schema slice, not by treating the current prose example as a stable standard.
+The intended model covers:
 
-### Investigation vs Incident identity
+```text
+Principal
+Credential
+Capability
+Action
+Resource
+Scope
+Data
+Boundary
+Consequence
+Control
+```
+
+with multidimensional blast radius, declared-vs-effective access, Trust Diff and access drift.
+
+## Investigation vs Incident identity
 
 State: **compatibility design proposed**
 
-`RFC/0076-investigation-case-and-incident-compatibility.md` proposes `Investigation` as the Causcope-owned case object while preserving existing `incident_context`/`incident_id` data during migration.
+`RFC/0076-investigation-case-and-incident-compatibility.md` defines `Investigation` as the intended Causcope-owned case object while preserving current `incident_context` / `incident_id` storage during migration.
 
-No breaking storage rename has been authorized yet.
+The current Rails runtime/bootstrap path still uses those compatibility identifiers.
 
-### RFC identity governance
+No silent breaking rename has been authorized.
 
-State: **validator implemented, historical cleanup deferred**
+## RFC identity governance
 
-`RFC/0077-rfc-identity-governance.md` defines the direction.
+State: **implemented guardrail, historical cleanup deferred**
 
-The repository contains:
+`RFC/0077-rfc-identity-governance.md` plus:
 
 ```text
 vocabulary/rfc-id-exceptions.yaml
 scripts/validate_rfc_ids.py
 ```
 
-and CI prevents new unregistered numeric collisions while grandfathering the known historical pairs.
+prevent new unregistered RFC-number collisions while grandfathering known historical pairs.
 
-## Immediate product gap
+## What is no longer the main gap
 
-The previous two gaps are now closed for bounded local slices:
-
-```text
-safe target-aware provider route
-  -> explicit canonical evidence acquisition
-  -> reranked diagnosis
-
-logical pgbot provider instance
-  -> live process-backed read-only PostgreSQL evidence
-```
-
-The largest remaining product gap is **bootstrap and setup**, not the investigation loop itself.
-
-Today Causcope can already do:
+For the bounded Rails/PostgreSQL path, these links are now proven:
 
 ```text
-current canonical diagnosis
+system discovery
+  -> topology/provider setup
+
+observed request
+  -> canonical revision-1 evidence
+  -> ranked alternatives
   -> next discriminator
-  -> exact operational target
-  -> configured provider
-  -> explicit safe acquisition
-  -> new canonical evidence
+  -> exact target
+
+exact target
+  -> safe provider route
+  -> explicit acquisition
+  -> canonical evidence N + 1
   -> rerank
 ```
 
-But a new user still has to prepare several artifacts before that loop can start:
+Therefore the immediate problem is no longer “how do we get into the investigation loop at all?”
+
+## Immediate product gaps
+
+The highest-value gaps are now ergonomic and breadth-related:
 
 ```text
-initial runtime evidence
-initial diagnosis snapshot
-runtime relationships
-resource topology
-provider bindings
+1. reduce the number of commands needed to observe/reproduce/seed one local Investigation;
+2. represent service objectives/baselines as explicit machine-readable configuration so thresholds do not always come from CLI flags;
+3. connect the first observed revision more directly to `why` without weakening explicit authorization boundaries;
+4. make the Rails D3.1 confirmed X-Ray proof and generic persisted Investigation path converge further;
+5. add additional symptom/transport bootstrap paths only for concrete use cases;
+6. keep Dashboard/Cloud/Relay contracts compatible while remaining secondary to the agent core.
 ```
 
-The next product problem is therefore:
-
-> How does `causcope why "something is wrong"` bootstrap enough concrete system context and initial evidence from an actual project/environment to enter the already-working loop?
-
-For a local Rails/PostgreSQL slice, this should primarily reuse existing work:
+A likely next UX progression is:
 
 ```text
-repository scan
-portable Rails runtime
-OTLP receiver
-runtime relationship extraction
-resource topology
-configured pgbot/PostgreSQL provider
+causcope why "checkout is slow"
+  -> knows configured objectives
+  -> guides/starts bounded observation session
+  -> receives runtime facts
+  -> seeds revision 1 automatically when the evidence contract is satisfied
+  -> presents alternatives + next discriminator
+  -> asks for explicit acquisition authorization when a provider read is needed
 ```
 
-rather than invent another bootstrap engine.
-
-Secret resolution beyond a local named environment variable also remains a deployment concern. Future Relay/cloud paths should map logical credential references to customer-controlled secret stores without changing the investigation semantics.
-
-## Current priority
-
-Near-term work should therefore favor:
-
-```text
-1. keep `causcope why` read-only by default and `--acquire` explicitly mutating investigation evidence;
-2. bootstrap a local Rails/PostgreSQL workspace from the existing scan/runtime/provider machinery;
-3. make the Rails D3.1 live proof reachable through the same persisted workspace path;
-4. reduce the number of hand-created `.causcope/` artifacts needed before the first useful diagnosis;
-5. add another provider transport only when bootstrap or a concrete investigation requires it;
-6. keep Dashboard/Cloud architecture compatible but secondary.
-```
+The key constraint is that fewer commands must not mean weaker provenance or heuristic target guessing.
 
 ## Guardrail
 
-A new abstraction should be treated skeptically unless it is required to move this path forward:
+A new abstraction should be treated skeptically unless it moves this path forward:
 
 ```text
 problem
   -> scope
+  -> observe
   -> evidence
   -> discriminate
   -> diagnose
   -> verify
 ```
 
-Causcope currently needs bootstrap, integration, and product consolidation more than additional conceptual layers.
+Causcope currently needs product integration, ergonomics, additional proven knowledge coverage, and human surfaces more than additional conceptual layers.
