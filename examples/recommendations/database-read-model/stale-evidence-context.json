@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.1",
+  "kind": "database_read_model_recommendation_context",
+  "system_id": "shop-production",
+  "revision": {
+    "type": "git",
+    "value": "recommendation-proof-r1",
+    "repository": "https://github.com/sergii/causcope"
+  },
+  "incident_id": "INC-READ-MODEL-001",
+  "evaluation_time": "2026-09-15T00:10:00Z",
+  "recommendation_id": "recommendation.database.denormalize_read_model",
+  "subject_resource": "db.orders.prod",
+  "provider_instance": "provider.pgbot.orders-prod",
+  "evidence_scope": {
+    "boundaries": ["boundary.application.database"],
+    "attributes": {
+      "service": "checkout-api",
+      "dependency": "postgresql"
+    }
+  },
+  "workload": {
+    "query_object": "query:orders-summary",
+    "request_path": "GET /reports/orders-summary",
+    "read_frequency_per_minute": 120,
+    "query_contribution": "dominant"
+  },
+  "proposed_change": {
+    "type": "materialized_projection",
+    "description": "Precompute the orders summary used by the dominant reporting read path."
+  }
+}
