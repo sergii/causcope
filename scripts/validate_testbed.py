@@ -13,7 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCENARIO_SCHEMA = ROOT / "schema" / "testbed-scenario.schema.json"
 ORACLE_SCHEMA = ROOT / "schema" / "testbed-scenario-oracle.schema.json"
 TESTBED_ROOT = ROOT / "testbed"
-FORBIDDEN_PUBLIC_KEYS = {"root_cause", "hidden_truth", "expected_evidence", "causal_notes"}
+FORBIDDEN_PUBLIC_KEYS = {
+    "root_cause",
+    "hidden_truth",
+    "expected_evidence",
+    "causal_notes",
+    "expected_causcope",
+}
 
 
 def load_json(path: Path) -> Any:
