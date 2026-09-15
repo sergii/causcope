@@ -7,6 +7,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from diagnosis_http_api import DiagnosisSnapshotReader
+from routing_mcp_server import CAUSAL_VERIFICATION_URI, RoutingDiagnosisMcpServer
 from test_rails_pool_evidence_import import pool_document, run, seed, write_json
 from test_runtime_incident_seed import FIXTURE
 
@@ -48,6 +50,15 @@ def main() -> int:
         assert verification["claims"][0]["status"] == "verified"
         assert verification["claims"][0]["hypothesis"] == "hypothesis.database.connection_pool_exhaustion"
 
+        mcp = RoutingDiagnosisMcpServer(
+            DiagnosisSnapshotReader(workspace / "diagnosis.json"),
+            instrument_router_provider=lambda: None,
+        )
+        mcp_payload = mcp._read_resource(CAUSAL_VERIFICATION_URI, modern=False)
+        mcp_verification = json.loads(mcp_payload["contents"][0]["text"])
+        assert mcp_verification == verification
+        assert mcp_verification["claims"][0]["status"] == "verified"
+
         incomplete_app = root / "incomplete-app"
         shutil.copytree(FIXTURE, incomplete_app)
         incomplete_workspace, incomplete_static, incomplete_incident = seed(incomplete_app)
@@ -67,7 +78,7 @@ def main() -> int:
         assert rejected.returncode == 2
         assert "not verified by canonical intervention evidence" in rejected.stderr
 
-    print("Canonical causal verification why surface: ok")
+    print("Canonical causal verification why/MCP surfaces: ok")
     return 0
 
 
