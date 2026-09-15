@@ -1,0 +1,18 @@
+id: causal.latency.database_query_delay.http_request_latency
+kind: causal_edge
+source: hypothesis.latency.database
+target: observation.http.request_latency
+relation: contributes_to
+strength: strong
+conditions:
+  - A synchronous database operation is on the request critical path and its execution or database-side wait is materially above baseline.
+evidence:
+  claims:
+    - claim.latency.database.query_delay_propagates_upstream
+  experiments:
+    - experiment.latency.database.query_delay_python_postgres
+explanation: A synchronous PostgreSQL query delay on the request critical path propagates upstream and contributes directly to measured end-to-end request latency.
+limitations:
+  - The experiment uses controlled pg_sleep delay and does not identify why a production query is slow.
+  - Application work, pool checkout, network delay, retries, parallelism, and caching can change how much database delay appears in total request latency.
+  - This edge applies only when the database call is on the measured request critical path.
