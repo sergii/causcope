@@ -16,6 +16,10 @@
       "type": "array",
       "items": {"$ref": "#/$defs/relationship"}
     },
+    "runtime_bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/runtime_binding"}
+    },
     "runners": {
       "type": "array",
       "items": {"$ref": "#/$defs/runner"}
@@ -33,6 +37,10 @@
     "topology_id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"
+    },
+    "runtime_resource_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*:[^\\s]+$"
     },
     "scalar": {
       "type": ["string", "number", "boolean"]
@@ -60,6 +68,15 @@
         "from": {"$ref": "#/$defs/topology_id"},
         "relation": {"const": "depends_on"},
         "to": {"$ref": "#/$defs/topology_id"}
+      }
+    },
+    "runtime_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_resource", "target_resource"],
+      "properties": {
+        "runtime_resource": {"$ref": "#/$defs/runtime_resource_id"},
+        "target_resource": {"$ref": "#/$defs/topology_id"}
       }
     },
     "runner": {
