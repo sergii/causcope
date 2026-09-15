@@ -1,0 +1,6 @@
+id: observation.database.blocking_chain
+kind: observation
+title: Database blocking chain
+summary: One or more database sessions form a current blocking dependency chain in which a blocked backend waits behind another backend or prepared transaction.
+explanation:
+  short: In PostgreSQL this can be observed from pg_blocking_pids for current sessions. A chain is stronger evidence than a generic lock-wait signal because it preserves blocker-to-blocked structure.
