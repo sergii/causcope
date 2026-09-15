@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -36,30 +37,32 @@ def _labels(instance: dict[str, Any]) -> dict[str, str]:
     return {str(key): str(value) for key, value in labels.items()}
 
 
+def _base_scope(scope: Any) -> Any:
+    if not isinstance(scope, dict):
+        return scope
+    result = copy.deepcopy(scope)
+    attributes = result.get("attributes")
+    if isinstance(attributes, dict):
+        attributes.pop("evidence_phase", None)
+        if not attributes:
+            result.pop("attributes", None)
+    return result
+
+
 def _scope_key(scope: Any) -> str:
-    return json.dumps(scope, sort_keys=True, separators=(",", ":"))
+    return json.dumps(_base_scope(scope), sort_keys=True, separators=(",", ":"))
 
 
-def _matching(
-    instances: list[dict[str, Any]],
-    *,
-    observation: str,
-    state: str,
-    phase: str,
-) -> list[dict[str, Any]]:
+def _matching(instances: list[dict[str, Any]], *, observation: str, state: str, phase: str) -> list[dict[str, Any]]:
     return [
-        item
-        for item in instances
+        item for item in instances
         if item.get("observation") == observation
         and item.get("state") == state
         and _attributes(item).get("causcope.verification_phase") == phase
     ]
 
 
-def build_causal_verification_projection(
-    snapshot: dict[str, Any],
-    evidence: dict[str, Any],
-) -> dict[str, Any]:
+def build_causal_verification_projection(snapshot: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any]:
     if snapshot.get("kind") != "diagnosis_snapshot":
         raise CausalVerificationError("snapshot must be a diagnosis_snapshot")
     if evidence.get("kind") != "runtime_evidence":
@@ -105,32 +108,12 @@ def build_causal_verification_projection(
             for item in members
         }
         if len(identity) != 1:
-            reasons.append("verification evidence identity or exact scope is inconsistent")
+            reasons.append("verification evidence identity or base scope is inconsistent")
 
-        pre = _matching(
-            members,
-            observation=POOL_UTILIZATION,
-            state="observed",
-            phase="pre_intervention",
-        )
-        control = _matching(
-            members,
-            observation=QUERY_LATENCY,
-            state="absent",
-            phase="control",
-        )
-        recovered_wait = _matching(
-            members,
-            observation=POOL_WAIT,
-            state="absent",
-            phase="post_intervention",
-        )
-        recovered_request = _matching(
-            members,
-            observation=REQUEST_LATENCY,
-            state="absent",
-            phase="post_intervention",
-        )
+        pre = _matching(members, observation=POOL_UTILIZATION, state="observed", phase="pre_intervention")
+        control = _matching(members, observation=QUERY_LATENCY, state="absent", phase="control")
+        recovered_wait = _matching(members, observation=POOL_WAIT, state="absent", phase="post_intervention")
+        recovered_request = _matching(members, observation=REQUEST_LATENCY, state="absent", phase="post_intervention")
 
         if hypothesis != POOL_EXHAUSTION:
             reasons.append("baseline leading hypothesis was not connection-pool exhaustion")
@@ -149,8 +132,7 @@ def build_causal_verification_projection(
 
         seed_ids = {
             _attributes(item).get("causcope.seed_evidence_id")
-            for item in members
-            if _attributes(item).get("causcope.seed_evidence_id")
+            for item in members if _attributes(item).get("causcope.seed_evidence_id")
         }
         if len(seed_ids) != 1:
             reasons.append("verification must bind to exactly one canonical seed evidence instance")
@@ -162,7 +144,7 @@ def build_causal_verification_projection(
             elif seed.get("observation") != POOL_WAIT or seed.get("state") != "observed":
                 reasons.append("canonical seed must be an observed connection-pool wait")
             elif _scope_key(seed.get("scope")) != _scope_key(members[0].get("scope")):
-                reasons.append("canonical seed and verification evidence do not share exact scope")
+                reasons.append("canonical seed and verification evidence do not share the same base scope")
 
         if pre:
             pre_labels = _labels(pre[0])
@@ -185,19 +167,14 @@ def build_causal_verification_projection(
                 "baseline_evidence_revision": baseline_revision,
                 "verified_at_evidence_revision": snapshot.get("evidence_revision"),
                 "target_resource": target_resource,
-                "scope": members[0].get("scope"),
-                "intervention": {
-                    "kind": intervention_kind,
-                    "resource": intervention_resource,
-                },
+                "scope": _base_scope(members[0].get("scope")),
+                "intervention": {"kind": intervention_kind, "resource": intervention_resource},
                 "evidence_ids": evidence_ids,
                 "predicted_outcomes": [
                     {"observation": POOL_WAIT, "state": "absent", "phase": "post_intervention"},
                     {"observation": REQUEST_LATENCY, "state": "absent", "phase": "post_intervention"},
                 ],
-                "controls": [
-                    {"observation": QUERY_LATENCY, "state": "absent", "phase": "control"}
-                ],
+                "controls": [{"observation": QUERY_LATENCY, "state": "absent", "phase": "control"}],
                 "reasons": reasons,
             }
         )
@@ -219,9 +196,7 @@ def load_snapshot(path: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Project intervention-based causal verification from canonical Investigation evidence."
-    )
+    parser = argparse.ArgumentParser(description="Project intervention-based causal verification from canonical Investigation evidence.")
     parser.add_argument("--workspace", type=Path, default=Path(".causcope"))
     parser.add_argument("--require-verified", action="store_true")
     args = parser.parse_args(argv)
