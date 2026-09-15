@@ -7,6 +7,10 @@ case "${1:-}" in
     shift
     exec python3 "$ROOT/scripts/causcope_scan.py" "$@"
     ;;
+  bootstrap)
+    shift
+    exec python3 "$ROOT/scripts/causcope_bootstrap.py" "$@"
+    ;;
   rails)
     shift
     exec python3 "$ROOT/scripts/causcope_rails.py" "$@"
