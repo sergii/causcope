@@ -122,7 +122,7 @@ class PostgreSQLHealthProviderTest(unittest.TestCase):
             if item["observation"] == "observation.database.blocking_chain"
         )
         self.assertEqual("observed", blocking["state"])
-        self.assertEqual(2, blocking["measurement"]["value"] - 1 + 1)
+        self.assertEqual(1, blocking["measurement"]["value"])
         self.assertEqual("2", blocking["labels"]["max_depth"])
         self.assertEqual(TARGET_RESOURCE, blocking["scope"]["attributes"]["target_resource"])
         self.assertNotIn("query", json.dumps(evidence).lower())
