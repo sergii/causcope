@@ -19,6 +19,10 @@ case "${1:-}" in
     shift
     exec python3 "$ROOT/scripts/causcope_recommendation.py" "$@"
     ;;
+  why)
+    shift
+    exec python3 "$ROOT/scripts/causcope_why.py" "$@"
+    ;;
 esac
 
 exec python3 "$ROOT/scripts/causcope_cli.py" "$@"
