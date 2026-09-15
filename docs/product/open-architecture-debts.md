@@ -4,27 +4,22 @@ Status: Active review list
 
 This file records inconsistencies discovered while reconciling the current repository with the agent-first product architecture. These are not all implementation bugs. Some are naming or governance debts that should be resolved deliberately rather than through silent breaking changes.
 
-## 1. `incident_context` now conflicts with the broader Investigation model
+## 1. `incident_context` vs broader Investigation model
+
+Status: **Compatibility direction proposed, migration still open**
 
 ### Current state
 
-Accepted RFC 0022 introduced:
+Accepted historical contracts use:
 
 ```text
 kind: incident_context
 incident_id: ...
 schema/incident-context.schema.json
-```
-
-The local Investigator also persists:
-
-```text
 .causcope/incident-context.yaml
 ```
 
-At the time, `incident` was used broadly for "the problem being investigated."
-
-The newer integration architecture now distinguishes:
+The product architecture now distinguishes:
 
 ```text
 Investigation
@@ -36,38 +31,35 @@ Incident
 
 An Investigation may exist without a formal Incident.
 
-### Risk
+### Resolution in progress
 
-If the current naming becomes part of cloud/webhook integrations, it can incorrectly imply:
+`RFC/0076-investigation-case-and-incident-compatibility.md` now proposes:
 
-```text
-every investigation == formal incident
-```
+- `Investigation` as the Causcope-owned parent case;
+- `investigation_id` as the future canonical identity;
+- external incidents as optional provider-qualified references;
+- existing `incident_context` and `incident_id` preserved during a compatibility period;
+- no silent file/schema rename.
 
-This would make proactive findings, local debugging sessions, Sentry-only issues, learning labs, and pre-incident investigations awkward to model.
+### Remaining work
 
-### Recommended resolution
-
-Do not rename the accepted schema/file ad hoc.
-
-Create a compatibility RFC that evaluates one of these approaches:
+The architecture question is no longer whether an Investigation should exist independently from an Incident. The remaining debt is migration mechanics:
 
 ```text
-A. Rename canonical runtime concept to investigation_context
-   and provide incident_context compatibility/migration.
-
-B. Introduce investigation as the parent case object
-   while keeping incident_context as an optional scoping subrecord.
-
-C. Explicitly redefine incident_context as legacy terminology
-   with a versioned replacement contract.
+investigation-case schema
+legacy incident_id mapping
+runtime-evidence join-key compatibility
+workspace compatibility fixtures
+eventual investigation_context naming decision
 ```
 
-Preference: B or a carefully versioned A. Preserve old stored sessions during migration.
+Until that migration is accepted and implemented, existing serialized contracts remain authoritative.
 
-## 2. RFC numeric identifiers are not unique
+## 2. Historical RFC numeric collisions
 
-The `RFC/` directory currently contains multiple files with the same numeric prefix. Confirmed examples include:
+Status: **Recurrence prevented, historical cleanup still open**
+
+The `RFC/` directory contains legacy duplicate numeric prefixes:
 
 ```text
 0022-agent-plan-probe-session-state.md
@@ -86,53 +78,59 @@ The `RFC/` directory currently contains multiple files with the same numeric pre
 0068-runtime-target-aware-investigation.md
 ```
 
-### Risk
+### Implemented governance
 
-References such as "RFC 0059" are ambiguous and no longer act as stable identifiers.
+`RFC/0077-rfc-identity-governance.md` defines the future identity rule.
 
-This matters increasingly as `docs/`, issues, code comments, agents, and future public documentation cross-reference architectural decisions.
+The repository now contains:
 
-### Recommended resolution
+```text
+vocabulary/rfc-id-exceptions.yaml
+scripts/validate_rfc_ids.py
+```
 
-Do not silently renumber files that may already be referenced.
+and the main validation workflow runs the RFC identity validator.
 
-First:
+The validator allows only the exact registered historical collision groups. A new duplicate or an additional file under one of those legacy IDs fails validation.
 
-1. inventory all duplicate prefixes;
-2. determine which references exist in repository history/current files;
-3. define immutable RFC identity rules;
-4. introduce explicit aliases/supersession metadata if renumbering is required;
-5. add validation preventing any new duplicate number.
+### Remaining work
 
-A validator should fail CI/local validation when two RFC filenames claim the same numeric ID.
+Historical IDs are still ambiguous. Before any renumbering:
 
-Future RFC creation should allocate the next unique identifier atomically rather than having parallel agents independently choose a number.
+1. inventory current references to each collision pair;
+2. decide whether one file keeps the historical ID and the other receives a new one;
+3. preserve explicit former-ID/alias metadata if renumbering occurs;
+4. use full filenames when referencing a grandfathered ambiguous RFC in the meantime.
 
-## 3. Product roadmap wording lags implemented agent machinery
+The urgent governance bug is fixed. Historical cleanup is lower priority than current product work.
 
-The repository already contains accepted/implemented work beyond a purely hypothetical agent roadmap, including:
+## 3. Product roadmap vs implemented agent machinery
+
+Status: **Resolved as documentation structure; keep current-state projection fresh**
+
+The repository already contains substantial implemented machinery:
 
 ```text
 autonomous bounded read-only investigation
-probe ranking/execution machinery
+probe ranking/execution
 MCP surfaces
 provider/capability discovery
 runtime evidence composition
-Concrete System / X-Ray work
+Concrete System / X-Ray
 Rails runtime providers
 ```
 
-The current golden milestone is an in-progress Rails D3.1 connection-pool vertical slice rather than the creation of the first generic investigation concepts from scratch.
+The roadmap phases therefore describe product sequencing, not a claim that those capabilities are unimplemented.
 
-### Recommended resolution
+`docs/product/current-state.md` now maps repository reality to the roadmap and should remain the descriptive source for implementation status.
 
-Treat the roadmap phases as product sequencing, not as a claim that earlier phases are unimplemented.
-
-Add/maintain a separate current-state projection that maps repository capabilities to roadmap phases.
+The Rails D3.1 golden vertical slice in `RFC/0075-golden-vertical-slice-rails-connection-pool.md` is now an implemented proof, not an in-progress conceptual milestone.
 
 ## 4. Confidence terminology must remain aligned with deterministic ranking
 
-The current core intentionally exposes ordinal ranking and its factors instead of pretending to calculate universal probabilities.
+Status: **Active invariant**
+
+The core intentionally exposes ordinal ranking and its factors instead of pretending to calculate universal probabilities.
 
 Product surfaces must not independently introduce values such as:
 
@@ -153,7 +151,11 @@ unknown discriminators
 ranking explanation
 ```
 
+This remains a guardrail rather than a migration task.
+
 ## 5. Trust model is directional, not yet a canonical contract
+
+Status: **Open**
 
 `docs/architecture/trust-access-blast-radius.md` proposes:
 
@@ -168,7 +170,11 @@ These are currently product architecture ideas, not yet canonical schemas/vocabu
 
 Before implementations depend on them, stabilize the smallest useful slice through RFC + schema, preferably starting with one concrete integration such as GitHub App or local PostgreSQL diagnostic access.
 
+This should not interrupt current Agent First product consolidation unless a concrete integration requires it.
+
 ## 6. Cloud component model is logical, not a microservice plan
+
+Status: **Active architecture guardrail**
 
 The future Cloud architecture names logical responsibilities such as:
 
@@ -186,6 +192,35 @@ These names must not be interpreted as a requirement to deploy separate microser
 
 A modular monolith is the preferred first implementation unless scaling, security, team ownership, or independent lifecycle creates a real boundary.
 
+## 7. Product front door is not yet the generic evidence-acquisition loop
+
+Status: **Open, current near-term priority**
+
+The initial `causcope why` front door now exists.
+
+It can:
+
+- start or resume existing investigation/scoping state;
+- avoid guessing a cause before evidence exists;
+- consume the canonical Rails D3.1 artifact set;
+- render the already-proven product diagnosis without introducing another reasoning engine.
+
+The remaining gap is:
+
+```text
+plain problem statement
+  -> capability discovery
+  -> provider/instrument selection
+  -> safe evidence acquisition
+  -> generic diagnosis projection
+```
+
+without requiring the user to manually supply subsystem artifact paths.
+
+Most of the underlying capability, provider, routing, probe, and autonomous-execution machinery already exists. The debt is composition and product consolidation, not another reasoning abstraction.
+
 ## Review rule
 
 When an architecture debt becomes contract-defining or requires a breaking semantic change, resolve it through an RFC/schema migration rather than only editing directional prose under `docs/`.
+
+When an item is resolved, update this document and `docs/product/current-state.md` so agents and humans do not plan from stale architecture assumptions.
