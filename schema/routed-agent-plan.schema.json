@@ -4,13 +4,88 @@
   "title": "Causcope routed agent plan",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "kind", "incident_id", "evidence_revision", "plan", "routing"],
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "evidence_revision",
+    "plan",
+    "routing",
+    "execution_sets"
+  ],
   "properties": {
     "schema_version": {"const": "0.1"},
     "kind": {"const": "routed_agent_plan"},
     "incident_id": {"type": "string", "minLength": 1},
     "evidence_revision": {"type": "integer", "minimum": 0},
     "plan": {"type": "object"},
-    "routing": {"type": "object"}
+    "routing": {"type": "object"},
+    "execution_sets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/execution_set"}
+    }
+  },
+  "$defs": {
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "execution_mode"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"const": "diagnostic_provider"},
+        "execution_mode": {"const": "direct"},
+        "provider_type": {"type": "string", "minLength": 1},
+        "target_resource": {"type": "string", "minLength": 1},
+        "endpoint_resource": {"type": "string", "minLength": 1},
+        "runner": {"type": "string", "minLength": 1}
+      }
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "target_resource", "instrument", "supporting_relationship_ids"],
+      "properties": {
+        "ordinal": {"type": "integer", "minimum": 1},
+        "target_resource": {"type": "string", "minLength": 1},
+        "instrument": {"$ref": "#/$defs/instrument"},
+        "supporting_relationship_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "execution_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "scope",
+        "diagnosis_target",
+        "probe_id",
+        "state",
+        "reason",
+        "members",
+        "operation",
+        "arguments",
+        "atomic_evidence_commit",
+        "rerank_policy",
+        "failure_policy"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^execution-set\\.[0-9a-f]{16}$"},
+        "scope": {"type": ["object", "null"]},
+        "diagnosis_target": {"type": "string", "minLength": 1},
+        "probe_id": {"type": "string", "minLength": 1},
+        "state": {"enum": ["ready", "blocked"]},
+        "reason": {"type": "string", "minLength": 1},
+        "members": {"type": "array", "items": {"$ref": "#/$defs/member"}},
+        "operation": {"type": ["string", "null"]},
+        "arguments": {"type": ["object", "null"]},
+        "atomic_evidence_commit": {"const": true},
+        "rerank_policy": {"const": "after_all_members"},
+        "failure_policy": {"const": "no_state_commit_on_member_failure"}
+      }
+    }
   }
 }
