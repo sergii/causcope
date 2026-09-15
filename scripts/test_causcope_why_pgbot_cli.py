@@ -57,8 +57,6 @@ if os.environ.get("DATABASE_URL") != expected:
     print("DATABASE_URL mismatch", file=sys.stderr)
     sys.exit(3)
 
-# The parent environment may contain this legacy variable. Causcope must not
-# pass it through to pgbot when it supplies the explicit DATABASE_URL binding.
 if "PGBOT_DATABASE_URL" in os.environ:
     print("unexpected PGBOT_DATABASE_URL", file=sys.stderr)
     sys.exit(3)
@@ -81,8 +79,6 @@ report = {
     ]
 }
 print(json.dumps(report))
-# pgbot report exit codes 0/1/2 are valid diagnostic states. Use 2 to prove
-# Causcope accepts a report-bearing non-zero diagnostic exit code.
 sys.exit(2)
 """,
         encoding="utf-8",
@@ -108,7 +104,6 @@ def base_env(fake_bin: Path, marker: Path) -> dict[str, str]:
     env[DATABASE_URL_ENV] = SECRET_DSN
     env["CAUSCOPE_TEST_EXPECTED_DATABASE_URL"] = SECRET_DSN
     env["CAUSCOPE_TEST_PGBOT_MARKER"] = str(marker)
-    # Prove the supplier deliberately removes this variable in the child.
     env["PGBOT_DATABASE_URL"] = "must-not-reach-child"
     return env
 
@@ -127,25 +122,10 @@ def main() -> int:
         configure_cli_binding(workspace)
         env = base_env(fake_bin, marker)
 
-        # Discovery must be non-invasive. Plain `why` may verify that the
-        # executable and env binding exist, but it must not query PostgreSQL.
-        before = run_with_env(
-            workspace,
-            "why",
-            "database requests are slow",
-            "--json",
-            env=env,
-        )
-        before_document = json.loads(before.stdout)
-        route = before_document["routing"]["routes"][0]
-        assert route["decision"]["selected_instrument"]["id"] == "provider.pgbot.orders-prod"
-        assert not marker.exists(), "plain why unexpectedly executed pgbot"
-
         acquired = run_with_env(
             workspace,
             "why",
             "database requests are slow",
-            "--acquire",
             "--json",
             env=env,
         )
@@ -172,8 +152,8 @@ def main() -> int:
         assert added[0]["source"]["attributes"]["routing.target_resource"] == "db.orders.prod"
         assert added[0]["source"]["attributes"]["routing.instrument_id"] == "provider.pgbot.orders-prod"
 
-        # TOCTOU safety: live identity is checked on the actual acquisition
-        # read, not only when the binding is loaded during routing.
+        # TOCTOU safety remains on the actual implicit provider read. A live
+        # identity mismatch fails before any causal state mutation.
         mismatch_workspace = root / "mismatch" / ".causcope"
         mismatch_workspace.mkdir(parents=True)
         prepare_workspace(mismatch_workspace)
@@ -182,23 +162,10 @@ def main() -> int:
         mismatch_env = base_env(fake_bin, mismatch_marker)
         mismatch_env["CAUSCOPE_TEST_REPORTED_DATABASE"] = "payments"
 
-        routed = run_with_env(
-            mismatch_workspace,
-            "why",
-            "database requests are slow",
-            "--json",
-            env=mismatch_env,
-        )
-        routed_document = json.loads(routed.stdout)
-        routed_route = routed_document["routing"]["routes"][0]
-        assert routed_route["decision"]["selected_instrument"]["id"] == "provider.pgbot.orders-prod"
-        assert not mismatch_marker.exists(), "plain why unexpectedly queried live pgbot"
-
         mismatch = run_with_env(
             mismatch_workspace,
             "why",
             "database requests are slow",
-            "--acquire",
             "--json",
             env=mismatch_env,
             check=False,
@@ -213,7 +180,7 @@ def main() -> int:
         )["evidence_revision"] == 7
         assert len(mismatch_marker.read_text(encoding="utf-8").splitlines()) == 1
 
-    print("Causcope why live pgbot CLI acquisition: ok")
+    print("Causcope why implicit live pgbot CLI acquisition: ok")
     return 0
 
 
