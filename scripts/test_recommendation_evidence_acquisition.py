@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -89,6 +90,7 @@ class RecommendationEvidenceAcquisitionTest(unittest.TestCase):
         instances = {item["id"]: item for item in evidence["instances"]}
         for evidence_id in matching:
             attributes = instances[evidence_id]["source"]["attributes"]
+            self.assertEqual("query:orders-summary", attributes["pgbot.object"])
             self.assertEqual("db.orders.prod", attributes["routing.target_resource"])
             self.assertEqual("provider.pgbot.orders-prod", attributes["routing.instrument_id"])
             self.assertEqual(
@@ -121,6 +123,23 @@ class RecommendationEvidenceAcquisitionTest(unittest.TestCase):
         self.assertEqual("NO_PROBLEM_EVIDENCE", bundle["result"]["recommendation_state"])
         self.assertEqual("read_only_probe", bundle["result"]["next_action"]["kind"])
         self.assertNotIn("evidence_id", bundle["recommendation_projection"]["causal_basis"])
+
+    def test_wrong_query_object_cannot_satisfy_refresh(self) -> None:
+        context = stale_context()
+        current = projection(context, OLD_PGBOT)
+        wrong_query = load(FRESH_PGBOT)
+        wrong_query["findings"][0]["object"] = "query:other-report"
+        with tempfile.TemporaryDirectory(prefix="causcope-rec-acquisition-") as directory:
+            path = Path(directory) / "wrong-query.json"
+            path.write_text(json.dumps(wrong_query), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "exact query"):
+                acquire_and_reproject(
+                    context=context,
+                    current_projection=current,
+                    topology_path=TOPOLOGY,
+                    router=router(context, path),
+                    acquisition_time="2026-09-15T00:10:00Z",
+                )
 
     def test_missing_exact_scope_refuses_acquisition(self) -> None:
         context = stale_context(include_scope=False)
