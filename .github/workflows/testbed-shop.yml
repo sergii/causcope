@@ -15,6 +15,11 @@ on:
       - "scripts/test_autonomous_investigation.py"
       - "scripts/run_acceptance_benchmark.py"
       - "scripts/test_acceptance_benchmark.py"
+      - "scripts/run_mcp_acceptance_benchmark.py"
+      - "scripts/test_mcp_acceptance_benchmark.py"
+      - "scripts/routing_mcp_server.py"
+      - "scripts/routed_instrument_mcp_tool.py"
+      - "scripts/instrument_router.py"
       - "knowledge/client/**"
       - "knowledge/database/**"
       - "knowledge/observations/http-*.yaml"
@@ -55,6 +60,9 @@ jobs:
       - name: Validate acceptance benchmark scoring
         run: python scripts/test_acceptance_benchmark.py
 
+      - name: Validate MCP acceptance benchmark policy
+        run: python scripts/test_mcp_acceptance_benchmark.py
+
       - name: Build and start happy path
         run: python testbed/shop/testbed.py up
 
@@ -89,6 +97,42 @@ jobs:
           assert lock['source']['type'] == 'probe'
           assert lock['source']['name'] == 'probe.database.inspect_lock_error_events'
           assert lock['labels']['scope_correlation'] == 'request_metadata'
+          PY
+
+      - name: Run deterministic MCP agent acceptance benchmark
+        run: |
+          python scripts/run_mcp_acceptance_benchmark.py \
+            --workspace /tmp/causcope-mobile-mcp \
+            --result /tmp/causcope-mcp-acceptance.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/causcope-mcp-acceptance.json').read_text())
+          assert result['passed'] is True
+          assert result['surface'] == 'deterministic_mcp_agent'
+          assert result['llm']['enabled'] is False
+          assert result['oracle_policy']['loaded_after_investigation'] is True
+          assert result['observed']['mcp_tool_calls'] == [
+              'probe.http.compare_client_cohorts',
+              'probe.database.inspect_lock_error_events',
+          ]
+          evidence = json.loads(Path('/tmp/causcope-mobile-mcp/runtime-evidence.json').read_text())
+          ios = {
+              'method': 'POST',
+              'path': '/orders',
+              'client_platform': 'iOS',
+              'app_version': '7.42.0',
+          }
+          scoped = [
+              item for item in evidence['instances']
+              if item.get('scope', {}).get('attributes') == ios
+          ]
+          skew = next(item for item in scoped if item['observation'] == 'observation.http.client_cohort_failure_skew')
+          lock = next(item for item in scoped if item['observation'] == 'observation.database.lock_error_event')
+          assert skew['source']['name'] == 'probe.http.compare_client_cohorts'
+          assert lock['source']['name'] == 'probe.database.inspect_lock_error_events'
+          assert lock['state'] == 'absent'
           PY
 
       - name: Reset reference system between incidents
