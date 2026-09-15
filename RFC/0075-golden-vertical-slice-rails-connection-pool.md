@@ -1,6 +1,6 @@
 # RFC 0075: Golden vertical slice - Rails connection-pool exhaustion
 
-- Status: In progress
+- Status: Implemented proof
 - Date: 2026-09-15
 - Scope: Stop expanding platform surface temporarily and prove one product-shaped Causcope investigation from a user-visible Rails latency symptom to a verified causal diagnosis.
 
@@ -195,6 +195,38 @@ Until this slice is green end to end, new work should normally not add:
 - additional X-Ray mechanisms.
 
 An exception requires showing that the missing capability blocks this vertical slice.
+
+## Implementation proof
+
+The live product path is now exercised by `.github/workflows/xray-d3-1-rails.yml`.
+
+On 2026-09-15, workflow run 18 at commit `41b0db86c2161783bf62a8791d72f8d07e57d8bb` completed successfully with the live acceptance chain:
+
+```text
+real Rails application
+  -> revision-bound Rails scan
+  -> real PostgreSQL service
+  -> ActiveRecord pool capacity = 1
+  -> concrete pool contention
+  -> official OTLP export
+  -> exact request / trace / span / pool identity
+  -> independent PostgreSQL reachability control
+  -> generic D3.1 X-Ray
+  -> CAUSAL_DIAGNOSIS_CONFIRMED
+  -> rails_pool_vertical_slice product projection
+  -> human-readable confirmed diagnosis
+```
+
+The dedicated step `Render product diagnosis from live Rails evidence` passed and verified that the resulting projection:
+
+- reports `application-side database connection pool exhaustion` as the root cause;
+- names `code:PoolController#work()`;
+- names `pool:active_record.primary`;
+- rejects slow SQL only with supporting evidence;
+- rejects PostgreSQL-wide admission exhaustion only with supporting evidence;
+- keeps blast radius explicitly unknown in this bounded proof.
+
+This closes the core technical Definition of Done for the golden slice. Product-front-door integration and README positioning remain follow-up productization work rather than missing causal proof.
 
 ## Definition of done
 
