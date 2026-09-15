@@ -1,0 +1,26 @@
+version: 0.1
+
+purpose: >-
+  Explicit grandfathered RFC numeric-id collisions that predate RFC identity
+  governance. These entries are compatibility exceptions, not reusable ranges.
+
+legacy_collisions:
+  "0022":
+    - RFC/0022-agent-plan-probe-session-state.md
+    - RFC/0022-incident-context-and-scoping.md
+
+  "0033":
+    - RFC/0033-external-diagnostic-adapters.md
+    - RFC/0033-testbed-runtime-evidence-bridge.md
+
+  "0040":
+    - RFC/0040-resource-topology-provider-instances.md
+    - RFC/0040-routing-aware-agent-plan-and-mcp.md
+
+  "0059":
+    - RFC/0059-investigator-cli-diagnosis-front-door.md
+    - RFC/0059-rails-product-cli.md
+
+  "0068":
+    - RFC/0068-recommendation-investigator-cli-mcp-surface.md
+    - RFC/0068-runtime-target-aware-investigation.md
