@@ -24,6 +24,7 @@ The first useful product should work locally with an engineer or autonomous agen
 ### Product
 
 - [Current product state](product/current-state.md) - what is actually implemented today, the Rails D3.1 golden proof, the current `causcope why` front door, and the remaining product-integration gap.
+- [Bootstrap product state](product/bootstrap.md) - implemented Rails/PostgreSQL system bootstrap, system-vs-incident bootstrap boundary, exact-target safety requirements, and the next runtime-evidence composition step.
 - [v0.1 readiness checkpoint](product/v0.1-readiness.md) - what is demonstrably real now, what must not yet be claimed, and the minimum gate before tagging the first product release.
 - [Agent-first roadmap](product/agent-first-roadmap.md) - recommended product sequence from local investigator to dashboard and enterprise distribution.
 - [Operational terminology](product/operational-terminology.md) - concise distinction between signal, symptom, context, observation, evidence, mechanism, hypothesis, investigation, incident, diagnosis, mitigation, and verification.
