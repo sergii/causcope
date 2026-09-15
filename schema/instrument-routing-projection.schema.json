@@ -33,7 +33,25 @@
       "properties": {
         "id": {"type": "string", "minLength": 1},
         "kind": {"enum": ["host_executor", "diagnostic_provider"]},
-        "execution_mode": {"enum": ["session", "direct"]}
+        "execution_mode": {"enum": ["session", "direct"]},
+        "provider_type": {"type": "string", "minLength": 1},
+        "target_resource": {"type": "string", "minLength": 1},
+        "endpoint_resource": {"type": "string", "minLength": 1},
+        "runner": {"type": "string", "minLength": 1}
+      }
+    },
+    "target_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "unresolved_reason", "supporting_relationship_ids"],
+      "properties": {
+        "status": {"enum": ["legacy_unbound", "resolved", "unresolved"]},
+        "unresolved_reason": {"type": ["string", "null"]},
+        "supporting_relationship_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
       }
     },
     "route": {
@@ -44,6 +62,11 @@
         "scope": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/scope"}]},
         "target": {"type": "string", "minLength": 1},
         "probe_id": {"type": "string", "minLength": 1},
+        "target_resource": {"type": ["string", "null"]},
+        "routing_strategy": {
+          "enum": ["legacy_safe_route", "target_aware_safe_route", "target_aware_information_gain"]
+        },
+        "target_resolution": {"$ref": "#/$defs/target_resolution"},
         "decision": {
           "type": "object",
           "additionalProperties": false,

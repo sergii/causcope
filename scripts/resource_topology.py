@@ -65,6 +65,21 @@ def validate_resource_topology(document: dict[str, Any]) -> None:
             raise ValueError(f"duplicate topology relationship: {key}")
         relationship_keys.add(key)
 
+    runtime_resources: set[str] = set()
+    for binding in document.get("runtime_bindings", []):
+        runtime_resource = binding["runtime_resource"]
+        target_resource = binding["target_resource"]
+        if runtime_resource in runtime_resources:
+            raise ValueError(
+                f"duplicate runtime resource binding: {runtime_resource}"
+            )
+        runtime_resources.add(runtime_resource)
+        if target_resource not in resource_ids:
+            raise ValueError(
+                f"runtime resource binding {runtime_resource} references unknown target resource: "
+                f"{target_resource}"
+            )
+
     for instance in document["provider_instances"]:
         provider_type = instance["provider_type"]
         target = instance["target"]
@@ -101,6 +116,10 @@ class ResourceTopology:
         self._provider_instances = {
             entry["id"]: entry for entry in self._document["provider_instances"]
         }
+        self._runtime_bindings = {
+            entry["runtime_resource"]: entry["target_resource"]
+            for entry in self._document.get("runtime_bindings", [])
+        }
 
     def resource(self, resource_id: str) -> dict[str, Any]:
         try:
@@ -131,6 +150,24 @@ class ResourceTopology:
     def provider_endpoint(self, provider_instance_id: str) -> dict[str, Any]:
         instance = self.provider_instance(provider_instance_id)
         return self.resource(instance.get("endpoint_resource", instance["target"]))
+
+    def target_for_runtime_resource(self, runtime_resource: str) -> str:
+        try:
+            return self._runtime_bindings[runtime_resource]
+        except KeyError as exc:
+            raise ValueError(
+                f"runtime resource has no explicit topology target binding: {runtime_resource}"
+            ) from exc
+
+    @property
+    def runtime_bindings(self) -> list[dict[str, str]]:
+        return [
+            {
+                "runtime_resource": runtime_resource,
+                "target_resource": self._runtime_bindings[runtime_resource],
+            }
+            for runtime_resource in sorted(self._runtime_bindings)
+        ]
 
     @property
     def provider_instances(self) -> list[dict[str, Any]]:
@@ -174,6 +211,14 @@ class ResourceTopology:
                 relationship["to"],
             ),
         )
+        if "runtime_bindings" in document:
+            document["runtime_bindings"] = sorted(
+                document["runtime_bindings"],
+                key=lambda binding: (
+                    binding["runtime_resource"],
+                    binding["target_resource"],
+                ),
+            )
         return document
 
 
@@ -194,6 +239,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--target",
         help="Show provider instances bound to one resource target",
     )
+    parser.add_argument(
+        "--runtime-resource",
+        help="Resolve one exact runtime resource through an explicit topology binding",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output")
     return parser
 
@@ -201,12 +250,21 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    if args.target and args.runtime_resource:
+        parser.error("--target and --runtime-resource are mutually exclusive")
     try:
         topology = load_resource_topology(args.path)
         if args.target:
             output: Any = {
                 "target": topology.resource(args.target),
                 "provider_instances": topology.provider_instances_for_target(args.target),
+            }
+        elif args.runtime_resource:
+            target_resource = topology.target_for_runtime_resource(args.runtime_resource)
+            output = {
+                "runtime_resource": args.runtime_resource,
+                "target_resource": target_resource,
+                "target": topology.resource(target_resource),
             }
         else:
             output = topology.canonical_document()
