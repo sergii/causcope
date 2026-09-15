@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://causcope.dev/schema/acceptance-benchmark-result.schema.json",
-  "title": "Causcope deterministic acceptance benchmark result",
+  "title": "Causcope acceptance benchmark result",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -22,7 +22,12 @@
     "schema_version": {"const": "0.1"},
     "kind": {"const": "acceptance_benchmark_result"},
     "benchmark_id": {"type": "string", "pattern": "^benchmark\\."},
-    "surface": {"const": "deterministic_shop_autonomous"},
+    "surface": {
+      "enum": [
+        "deterministic_shop_autonomous",
+        "deterministic_mcp_agent"
+      ]
+    },
     "scenario_id": {"type": "string", "pattern": "^scenario\\."},
     "incident_id": {"type": "string", "minLength": 1},
     "llm": {
