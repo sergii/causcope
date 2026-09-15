@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/recommendation-information-gap-projection.schema.json",
+  "title": "Causcope recommendation information gap projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "recommendation_id",
+    "subject_resource",
+    "recommendation_state",
+    "status",
+    "gaps",
+    "next_action",
+    "ranking_method",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "recommendation_information_gap_projection"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "recommendation_id": {"type": "string", "minLength": 1},
+    "subject_resource": {"type": "string", "minLength": 1},
+    "recommendation_state": {
+      "enum": [
+        "NO_PROBLEM_EVIDENCE",
+        "INSUFFICIENT_CONTEXT",
+        "EXPERIMENT_REQUIRED",
+        "BENEFIT_NOT_DEMONSTRATED",
+        "ESTIMATED_BENEFIT",
+        "READY_FOR_HUMAN_REVIEW"
+      ]
+    },
+    "status": {
+      "enum": [
+        "EVIDENCE_REFRESH_REQUIRED",
+        "INFORMATION_GAP",
+        "EXPERIMENT_REQUIRED",
+        "CANDIDATE_REJECTED",
+        "HUMAN_REVIEW_READY"
+      ]
+    },
+    "gaps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gap"}
+    },
+    "next_action": {"$ref": "#/$defs/action"},
+    "ranking_method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "purpose", "priority"],
+      "properties": {
+        "type": {"const": "deterministic_ordinal"},
+        "purpose": {"const": "close_recommendation_information_gaps"},
+        "priority": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "category",
+        "rank",
+        "decision_leverage",
+        "acquisition_kind",
+        "question",
+        "why_now",
+        "blocks_progression"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^information_gap\\.[a-z0-9_.-]+$"},
+        "category": {
+          "enum": [
+            "problem_evidence",
+            "workload",
+            "business_semantics",
+            "candidate_design",
+            "maintenance",
+            "cost",
+            "verification",
+            "benefit"
+          ]
+        },
+        "rank": {"type": "integer", "minimum": 1},
+        "decision_leverage": {
+          "enum": [
+            "refreshes_evidence",
+            "can_invalidate_candidate",
+            "constrains_design",
+            "quantifies_tradeoff",
+            "defines_verification",
+            "demonstrates_benefit"
+          ]
+        },
+        "acquisition_kind": {"enum": ["operator_question", "read_only_probe", "safe_experiment"]},
+        "question": {"type": "string", "minLength": 1},
+        "why_now": {"type": "string", "minLength": 1},
+        "blocks_progression": {"type": "boolean"},
+        "missing_assumption": {"type": "string", "minLength": 1},
+        "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
+        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "prompt", "reason", "execution_boundary"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "operator_question",
+            "read_only_probe",
+            "safe_experiment",
+            "human_decision",
+            "stop_candidate"
+          ]
+        },
+        "gap_id": {"type": "string", "pattern": "^information_gap\\.[a-z0-9_.-]+$"},
+        "prompt": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "execution_boundary": {
+          "enum": [
+            "question_only",
+            "existing_read_only_probe",
+            "experiment_plan_only",
+            "human_decision_required",
+            "stop_without_more_evidence"
+          ]
+        },
+        "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
+        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"}
+      }
+    }
+  }
+}
