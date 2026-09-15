@@ -8,6 +8,7 @@ on:
       - "testbed/shop/**"
       - "schema/testbed-scenario*.json"
       - "schema/acceptance-benchmark-result.schema.json"
+      - "schema/instrument-routing-projection.schema.json"
       - "scripts/validate_testbed.py"
       - "scripts/structured_log_evidence.py"
       - "scripts/test_structured_log_evidence.py"
@@ -19,6 +20,9 @@ on:
       - "scripts/test_mcp_acceptance_benchmark.py"
       - "scripts/routing_mcp_server.py"
       - "scripts/routed_instrument_mcp_tool.py"
+      - "scripts/ranked_routable_mcp_tool.py"
+      - "scripts/ranked_routable_projection.py"
+      - "scripts/routable_probe_selection.py"
       - "scripts/instrument_router.py"
       - "knowledge/client/**"
       - "knowledge/database/**"
@@ -113,10 +117,12 @@ jobs:
           assert result['surface'] == 'deterministic_mcp_agent'
           assert result['llm']['enabled'] is False
           assert result['oracle_policy']['loaded_after_investigation'] is True
-          assert result['observed']['mcp_tool_calls'] == [
+          calls = result['observed']['mcp_tool_calls']
+          assert len(calls) == 2
+          assert set(calls) == {
               'probe.http.compare_client_cohorts',
               'probe.database.inspect_lock_error_events',
-          ]
+          }
           evidence = json.loads(Path('/tmp/causcope-mobile-mcp/runtime-evidence.json').read_text())
           ios = {
               'method': 'POST',
