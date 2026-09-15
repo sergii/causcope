@@ -18,5 +18,18 @@
   "causal_notes": [
     "The lock-holder process is the competing writer, not merely a nearby change.",
     "The short SQLite busy timeout converts contention into visible request failures."
-  ]
+  ],
+  "expected_causcope": {
+    "target": "observation.http.request_failure",
+    "scope_contains": {
+      "method": "POST",
+      "path": "/orders",
+      "client_platform": "web"
+    },
+    "top_hypothesis": "hypothesis.database.lock_contention",
+    "required_completed_probes": [
+      "probe.database.inspect_lock_error_events"
+    ],
+    "minimum_evidence_revision": 2
+  }
 }
