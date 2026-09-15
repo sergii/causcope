@@ -50,7 +50,8 @@ def render_verification(projection: dict[str, Any]) -> str:
             )
         lines.append(f"    canonical evidence: {len(claim.get('evidence_ids', []))} instances")
         if claim.get("predicted_outcomes"):
-            lines.append("    predicted recovery: observed")
+            outcome = "observed" if claim.get("status") == "verified" else "incomplete"
+            lines.append(f"    predicted recovery: {outcome}")
         reasons = claim.get("reasons", [])
         if reasons:
             lines.append("    missing/invalid:")
