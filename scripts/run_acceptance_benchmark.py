@@ -73,6 +73,115 @@ def scope_matches(scope: Any, expected: dict[str, Any]) -> bool:
     return all(attributes.get(key) == value for key, value in expected.items())
 
 
+def _workspace_projection_diagnoses(document: dict[str, Any]) -> list[dict[str, Any]]:
+    if document.get("kind") != "causcope_why" or document.get("status") != "diagnosis_available":
+        return []
+    snapshot = document.get("diagnosis")
+    if not isinstance(snapshot, dict):
+        return []
+
+    projected: list[dict[str, Any]] = []
+    for partition in snapshot.get("partitions", []):
+        if not isinstance(partition, dict):
+            continue
+        scope = partition.get("scope")
+        for diagnosis in partition.get("diagnoses", []):
+            if not isinstance(diagnosis, dict):
+                continue
+            ranking = diagnosis.get("ranking")
+            candidates = ranking.get("candidates", []) if isinstance(ranking, dict) else []
+            top_hypothesis = None
+            if isinstance(candidates, list) and candidates and isinstance(candidates[0], dict):
+                source = candidates[0].get("source")
+                if isinstance(source, dict) and isinstance(source.get("id"), str):
+                    top_hypothesis = source["id"]
+            probe_ranking = diagnosis.get("probe_ranking")
+            probes = probe_ranking.get("probes", []) if isinstance(probe_ranking, dict) else []
+            next_probe = None
+            if isinstance(probes, list) and probes and isinstance(probes[0], dict):
+                probe = probes[0].get("probe")
+                if isinstance(probe, dict) and isinstance(probe.get("id"), str):
+                    next_probe = probe["id"]
+            projected.append(
+                {
+                    "target": diagnosis.get("target"),
+                    "scope": scope,
+                    "top_hypothesis": top_hypothesis,
+                    "next_probe": next_probe,
+                }
+            )
+    return projected
+
+
+def score_why_projection(
+    document: dict[str, Any],
+    oracle: dict[str, Any],
+    canonical_observed: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    expected = oracle.get("expected_causcope")
+    if not isinstance(expected, dict):
+        raise ValueError("oracle does not define expected_causcope benchmark expectations")
+
+    diagnoses = _workspace_projection_diagnoses(document)
+    matching = [
+        item
+        for item in diagnoses
+        if item.get("target") == expected["target"]
+        and scope_matches(item.get("scope"), expected.get("scope_contains", {}))
+    ]
+    selected = matching[0] if len(matching) == 1 else None
+    snapshot = document.get("diagnosis")
+    evidence_revision = snapshot.get("evidence_revision") if isinstance(snapshot, dict) else None
+    canonical_revision = canonical_observed.get("final_evidence_revision")
+    canonical_hypothesis = canonical_observed.get("top_hypothesis")
+
+    checks = [
+        {
+            "id": "why_projection_available",
+            "passed": document.get("kind") == "causcope_why"
+            and document.get("status") == "diagnosis_available",
+            "expected": "causcope_why:diagnosis_available",
+            "actual": f"{document.get('kind')}:{document.get('status')}",
+        },
+        {
+            "id": "why_single_expected_diagnosis_scope",
+            "passed": len(matching) == 1,
+            "expected": 1,
+            "actual": len(matching),
+        },
+        {
+            "id": "why_top_hypothesis",
+            "passed": selected is not None
+            and selected.get("top_hypothesis") == expected["top_hypothesis"],
+            "expected": expected["top_hypothesis"],
+            "actual": selected.get("top_hypothesis") if selected else None,
+        },
+        {
+            "id": "why_matches_canonical_hypothesis",
+            "passed": selected is not None
+            and selected.get("top_hypothesis") == canonical_hypothesis,
+            "expected": canonical_hypothesis,
+            "actual": selected.get("top_hypothesis") if selected else None,
+        },
+        {
+            "id": "why_matches_canonical_evidence_revision",
+            "passed": isinstance(evidence_revision, int)
+            and evidence_revision == canonical_revision,
+            "expected": canonical_revision,
+            "actual": evidence_revision,
+        },
+    ]
+    observed = {
+        "status": document.get("status"),
+        "target": selected.get("target") if selected else None,
+        "scope": selected.get("scope") if selected else None,
+        "top_hypothesis": selected.get("top_hypothesis") if selected else None,
+        "next_probe": selected.get("next_probe") if selected else None,
+        "evidence_revision": evidence_revision,
+    }
+    return checks, observed
+
+
 def score_summary(
     summary: dict[str, Any],
     oracle: dict[str, Any],
@@ -163,8 +272,14 @@ def build_result(
     oracle: dict[str, Any],
     summary: dict[str, Any],
     incident_id: str,
+    why_projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     passed, checks, observed = score_summary(summary, oracle)
+    if why_projection is not None:
+        why_checks, why_observed = score_why_projection(why_projection, oracle, observed)
+        checks.extend(why_checks)
+        observed["causcope_why"] = why_observed
+        passed = passed and all(check["passed"] for check in why_checks)
     return {
         "schema_version": "0.1",
         "kind": "acceptance_benchmark_result",
@@ -265,13 +380,32 @@ def run_benchmark(
         if not isinstance(summary, dict):
             raise ValueError("Causcope benchmark summary must be a JSON object")
 
-        # Hidden ground truth is intentionally unavailable until Causcope has finished.
+        # Project the completed canonical Investigation through the real product front door
+        # before the hidden oracle becomes available to the benchmark process.
+        why_completed = run(
+            [
+                str(CAUSCOPE),
+                "why",
+                "--workspace",
+                str(workspace),
+                "--json",
+            ],
+            capture=True,
+            env=env,
+        )
+        why_projection = json.loads(why_completed.stdout)
+        if not isinstance(why_projection, dict):
+            raise ValueError("causcope why benchmark projection must be a JSON object")
+
+        # Hidden ground truth is intentionally unavailable until Causcope and its product
+        # projection have both finished.
         oracle = load_json(oracle_path)
         return build_result(
             scenario=scenario,
             oracle=oracle,
             summary=summary,
             incident_id=incident_id,
+            why_projection=why_projection,
         )
     finally:
         try:

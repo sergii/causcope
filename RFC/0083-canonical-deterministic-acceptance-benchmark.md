@@ -55,11 +55,12 @@ fresh Docker Compose reference system
   -> evidence revision increment
   -> deterministic rerank
   -> bounded stop
+  -> project completed Investigation through causcope why
   -> load hidden oracle
-  -> score final Causcope state
+  -> score final Causcope state and product projection
 ```
 
-Oracle data MUST NOT be used to construct observations, hypotheses, probe choices, target scope, or diagnosis.
+Oracle data MUST NOT be used to construct observations, hypotheses, probe choices, target scope, diagnosis, or the `causcope why` projection.
 
 ## First scenario
 
@@ -168,7 +169,7 @@ python scripts/run_acceptance_benchmark.py \
 The runner owns the reference-system lifecycle for the benchmark:
 
 ```text
-down -> up -> investigate -> fault -> verify -> Causcope -> score -> stop -> down
+down -> up -> investigate -> fault -> verify -> Causcope -> why projection -> score -> stop -> down
 ```
 
 ## What is scored
@@ -178,7 +179,10 @@ The first slice scores semantic product outcomes rather than exact prose or inci
 1. exactly one diagnosis matches the expected target and scope subset;
 2. the expected canonical hypothesis ranks first;
 3. the required discriminating probe completed;
-4. the evidence revision advanced far enough to prove feedback-loop execution.
+4. the evidence revision advanced far enough to prove feedback-loop execution;
+5. `causcope why --json` exposes the same expected diagnosis scope;
+6. the product projection exposes the same leading hypothesis as the canonical autonomous result;
+7. the product projection reads the same final evidence revision rather than a stale snapshot.
 
 CI also keeps stronger evidence-provenance assertions for the canonical lock observation:
 
@@ -190,13 +194,34 @@ labels.scope_correlation == request_metadata
 
 This prevents a benchmark pass from being achieved by merely hard-coding the final hypothesis.
 
+## Product front-door projection
+
+The acceptance runner now invokes the real product front door after the deterministic autonomous loop has finished and before the hidden oracle is loaded:
+
+```bash
+causcope why --workspace <benchmark-workspace> --json
+```
+
+The benchmark does not ask `why` to recompute a second diagnosis. It verifies that the product projection consumes the same persisted canonical Investigation and exposes the same target, scope, leading hypothesis, and evidence revision.
+
+This closes the first cross-surface consistency check:
+
+```text
+deterministic autonomous loop
+  -> canonical persisted Investigation
+  -> causcope why product projection
+  -> same semantic answer
+```
+
+A stale projection, a different leading hypothesis, or a scope mismatch fails the benchmark even when the underlying autonomous loop itself passed.
+
 ## Determinism boundary
 
 Deterministic means:
 
 - the same semantic rules and ranking contracts are used;
 - probe selection is not delegated to an LLM;
-- the oracle is not visible to the investigator;
+- the oracle is not visible to the investigator or product projection;
 - the fault is controlled and repeatable;
 - scoring is machine-readable and stable;
 - unknown/insufficient evidence remains explicit.
@@ -225,8 +250,8 @@ Mechanism labs should remain small and focused rather than being rewritten as pr
 The same scenario/oracle pair should later be reusable for:
 
 ```text
-deterministic local loop      # implemented first
-CLI product projection
+deterministic local loop      # implemented
+CLI product projection        # implemented as read-only cross-surface check
 MCP agent
 LLM-backed agent
 Dashboard
@@ -246,9 +271,11 @@ The slice is complete when CI proves:
 3. AI provider credentials are stripped from child execution;
 4. the Docker Compose SQLite fault is injected and publicly verified;
 5. Causcope runs the bounded autonomous read-only loop without oracle access;
-6. the hidden oracle is loaded only after the run;
-7. the final hypothesis and evidence revision satisfy the hidden scoring contract;
-8. the correlated lock observation has canonical probe provenance;
-9. the benchmark result validates against its JSON Schema.
+6. `causcope why` projects the completed Investigation before oracle access;
+7. the hidden oracle is loaded only after the run and product projection;
+8. the final hypothesis and evidence revision satisfy the hidden scoring contract;
+9. the `why` projection matches the canonical target/scope, hypothesis, and evidence revision;
+10. the correlated lock observation has canonical probe provenance;
+11. the benchmark result validates against its JSON Schema.
 
-All nine checks are now exercised by the Shop CI workflow and the initial slice is implemented.
+All eleven checks are exercised by the Shop CI workflow when this revision is active.
