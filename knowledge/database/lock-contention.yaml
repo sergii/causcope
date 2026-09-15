@@ -30,7 +30,6 @@ falsifiers:
     effect: decrease
 tested_by:
   - probe.database.inspect_lock_waits
-  - probe.database.inspect_blocking_chains
   - probe.database.inspect_lock_error_events
   - probe.http.measure_request_latency
 related_to:
