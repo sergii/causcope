@@ -19,11 +19,15 @@ from diagnosis_mcp_server import (
     serve_stdio,
 )
 from instrument_router import InstrumentRouter
-from instrument_routing_projection import build_instrument_routing_projection
+from instrument_routing_projection import (
+    build_instrument_routing_projection,
+    validate_instrument_routing_projection,
+)
 from pgbot_adapter import load_adapter
 from pgbot_autonomous_provider import PgbotAutonomousProbeProvider, file_context_supplier
 from probe_executor_runtime import build_probe_execution_capabilities
 from routed_agent_plan import build_routed_agent_plan
+from routed_execution_set_mcp_tool import RoutedExecutionSetInvocationError
 from routed_instrument_mcp_tool import (
     RoutedInstrumentInvocationError,
     RoutedInstrumentToolController,
@@ -33,6 +37,7 @@ INSTRUMENT_ROUTING_URI = "causcope://diagnosis/instrument-routing"
 ROUTED_AGENT_PLAN_URI = "causcope://diagnosis/routed-agent-plan"
 
 RouterProvider = Callable[[], InstrumentRouter]
+RoutingProjectionProvider = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
@@ -44,7 +49,8 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         *,
         instrument_router_provider: RouterProvider,
         probe_capability_provider: Callable[[], dict[str, Any]] | None = None,
-        routed_tools: RoutedInstrumentToolController | None = None,
+        routed_tools: Any | None = None,
+        routing_projection_provider: RoutingProjectionProvider | None = None,
     ) -> None:
         super().__init__(
             reader,
@@ -52,6 +58,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         )
         self.instrument_router_provider = instrument_router_provider
         self.routed_tools = routed_tools
+        self.routing_projection_provider = routing_projection_provider
 
     def _capabilities(self) -> dict[str, Any]:
         capabilities = super()._capabilities()
@@ -64,14 +71,14 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             super()._instructions()
             + f" Read {INSTRUMENT_ROUTING_URI} to see which safe instrument, if any, can execute "
             "each current top-ranked canonical probe without changing semantic probe rank."
-            + f" Read {ROUTED_AGENT_PLAN_URI} for the compatibility agent plan and routing projection "
-            "in one validated envelope."
+            + f" Read {ROUTED_AGENT_PLAN_URI} for the compatibility agent plan, routing projection, "
+            "and any current bounded target execution sets in one validated envelope."
         )
         if self.routed_tools is not None:
             instructions += (
-                " The revision-bound routed instrument tool is enabled. Execute only the exact route "
+                " Revision-bound routed tools are enabled. Execute only the exact route or execution set "
                 "advertised by the current routed agent plan; stale incident revisions, probes, scopes, "
-                "or instruments fail closed."
+                "targets, instruments, or set identities fail closed."
             )
         else:
             instructions += " External-provider routes are read-only advisory in this process."
@@ -94,8 +101,8 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                 "uri": ROUTED_AGENT_PLAN_URI,
                 "name": "routed_agent_plan",
                 "description": (
-                    "Validated envelope containing the existing compatibility agent plan plus the current "
-                    "instrument-routing projection for the same incident and evidence revision."
+                    "Validated envelope containing the compatibility agent plan, current routing, and "
+                    "first-class bounded execution sets for the same incident and evidence revision."
                 ),
                 "mimeType": "application/json",
             },
@@ -115,6 +122,25 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                 data={"uri": uri},
             ) from exc
 
+    def _routing_projection(
+        self,
+        snapshot: dict[str, Any],
+        router: InstrumentRouter,
+    ) -> dict[str, Any]:
+        if self.routing_projection_provider is None:
+            return build_instrument_routing_projection(
+                snapshot,
+                router,
+                external_mcp_execution_enabled=self.routed_tools is not None,
+            )
+        projection = self.routing_projection_provider(snapshot)
+        validate_instrument_routing_projection(projection)
+        if projection.get("incident_id") != snapshot.get("incident_id"):
+            raise ValueError("routing projection belongs to another incident")
+        if projection.get("evidence_revision") != snapshot.get("evidence_revision"):
+            raise ValueError("routing projection revision does not match diagnosis snapshot")
+        return projection
+
     def _read_resource(self, uri: str, *, modern: bool) -> dict[str, Any]:
         if uri not in {INSTRUMENT_ROUTING_URI, ROUTED_AGENT_PLAN_URI}:
             return super()._read_resource(uri, modern=modern)
@@ -122,12 +148,9 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         snapshot = self._read_snapshot(uri, modern=modern)
         router = self._router(uri)
         try:
+            routing = self._routing_projection(snapshot, router)
             if uri == INSTRUMENT_ROUTING_URI:
-                document = build_instrument_routing_projection(
-                    snapshot,
-                    router,
-                    external_mcp_execution_enabled=self.routed_tools is not None,
-                )
+                document = routing
             else:
                 base_plan = build_agent_plan_projection(
                     snapshot,
@@ -140,6 +163,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                     base_plan,
                     router,
                     external_mcp_execution_enabled=self.routed_tools is not None,
+                    routing_projection=routing,
                 )
         except (OSError, ValueError) as exc:
             raise McpProtocolError(
@@ -183,7 +207,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             raise McpProtocolError(INVALID_PARAMS, "Tool not found", data={"name": name})
         try:
             result = self.routed_tools.call(name, params.get("arguments"))
-        except RoutedInstrumentInvocationError as exc:
+        except (RoutedInstrumentInvocationError, RoutedExecutionSetInvocationError) as exc:
             return self._tool_result(None, modern=modern, error_message=str(exc))
         return self._tool_result(result, modern=modern)
 
