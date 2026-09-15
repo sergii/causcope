@@ -56,6 +56,7 @@ class McpAcceptanceBenchmarkTest(unittest.TestCase):
             "scope": wanted,
             "target": "observation.http.request_failure",
             "probe_id": "probe.http.compare_client_cohorts",
+            "probe_rank": 2,
             "decision": {
                 "selected_instrument": {"id": "provider.shop.structured_logs"}
             },
@@ -76,8 +77,8 @@ class McpAcceptanceBenchmarkTest(unittest.TestCase):
             **executable,
             "agent_action": {"mcp_execution_available": False},
         }
-        plan = {"routing": {"routes": [wrong_scope, disabled, executable]}}
-        self.assertEqual(executable, matching_route(plan, wanted))
+        routing = {"routes": [wrong_scope, disabled, executable]}
+        self.assertEqual(executable, matching_route(routing, wanted))
 
 
 if __name__ == "__main__":
