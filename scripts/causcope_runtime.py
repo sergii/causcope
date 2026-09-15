@@ -213,6 +213,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "observe":
+        from runtime_observe import main as observe_main
+
+        return observe_main(arguments[1:])
     if arguments and arguments[0] == "seed":
         from runtime_incident_seed import main as seed_main
 
