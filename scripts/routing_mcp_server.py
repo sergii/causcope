@@ -28,6 +28,8 @@ from pgbot_autonomous_provider import PgbotAutonomousProbeProvider, file_context
 from probe_executor_runtime import build_probe_execution_capabilities
 from routed_agent_plan import build_routed_agent_plan
 from routed_execution_set_mcp_tool import RoutedExecutionSetInvocationError
+from routed_execution_set_status import build_execution_set_status
+from routed_execution_sets import build_routed_execution_sets
 from routed_instrument_mcp_tool import (
     RoutedInstrumentInvocationError,
     RoutedInstrumentToolController,
@@ -35,6 +37,7 @@ from routed_instrument_mcp_tool import (
 
 INSTRUMENT_ROUTING_URI = "causcope://diagnosis/instrument-routing"
 ROUTED_AGENT_PLAN_URI = "causcope://diagnosis/routed-agent-plan"
+EXECUTION_SET_STATUS_URI = "causcope://diagnosis/execution-set-status"
 
 RouterProvider = Callable[[], InstrumentRouter]
 RoutingProjectionProvider = Callable[[dict[str, Any]], dict[str, Any]]
@@ -51,6 +54,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         probe_capability_provider: Callable[[], dict[str, Any]] | None = None,
         routed_tools: Any | None = None,
         routing_projection_provider: RoutingProjectionProvider | None = None,
+        execution_set_state_dir: Path | None = None,
     ) -> None:
         super().__init__(
             reader,
@@ -59,6 +63,11 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         self.instrument_router_provider = instrument_router_provider
         self.routed_tools = routed_tools
         self.routing_projection_provider = routing_projection_provider
+        self.execution_set_state_dir = (
+            execution_set_state_dir
+            if execution_set_state_dir is not None
+            else reader.snapshot_path.parent / "execution-sets"
+        )
 
     def _capabilities(self) -> dict[str, Any]:
         capabilities = super()._capabilities()
@@ -73,6 +82,8 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             "each current top-ranked canonical probe without changing semantic probe rank."
             + f" Read {ROUTED_AGENT_PLAN_URI} for the compatibility agent plan, routing projection, "
             "and any current bounded target execution sets in one validated envelope."
+            + f" Read {EXECUTION_SET_STATUS_URI} for operator-facing lifecycle state of current and "
+            "historical durable execution sets without reading raw journal JSONL."
         )
         if self.routed_tools is not None:
             instructions += (
@@ -106,10 +117,20 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                 ),
                 "mimeType": "application/json",
             },
+            {
+                "uri": EXECUTION_SET_STATUS_URI,
+                "name": "execution_set_status",
+                "description": (
+                    "Read-only operator projection of pending, in-progress, ready-to-commit, committed, "
+                    "and stranded routed execution sets derived from the current plan and verified durable journals."
+                ),
+                "mimeType": "application/json",
+            },
         ]
         if modern:
             additions[0]["title"] = "Causcope instrument routing"
             additions[1]["title"] = "Causcope routed agent plan"
+            additions[2]["title"] = "Causcope execution-set status"
         return sorted(resources + additions, key=lambda resource: resource["uri"])
 
     def _router(self, uri: str) -> InstrumentRouter:
@@ -142,7 +163,11 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
         return projection
 
     def _read_resource(self, uri: str, *, modern: bool) -> dict[str, Any]:
-        if uri not in {INSTRUMENT_ROUTING_URI, ROUTED_AGENT_PLAN_URI}:
+        if uri not in {
+            INSTRUMENT_ROUTING_URI,
+            ROUTED_AGENT_PLAN_URI,
+            EXECUTION_SET_STATUS_URI,
+        }:
             return super()._read_resource(uri, modern=modern)
 
         snapshot = self._read_snapshot(uri, modern=modern)
@@ -151,6 +176,12 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             routing = self._routing_projection(snapshot, router)
             if uri == INSTRUMENT_ROUTING_URI:
                 document = routing
+            elif uri == EXECUTION_SET_STATUS_URI:
+                execution_sets = build_routed_execution_sets(routing)
+                document = build_execution_set_status(
+                    execution_sets,
+                    self.execution_set_state_dir,
+                )
             else:
                 base_plan = build_agent_plan_projection(
                     snapshot,
@@ -215,8 +246,8 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Expose current Causcope diagnosis, instrument routing, routed agent plan, and optionally "
-            "revision-bound direct provider execution over MCP stdio."
+            "Expose current Causcope diagnosis, instrument routing, routed agent plan, execution-set "
+            "lifecycle status, and optionally revision-bound direct provider execution over MCP stdio."
         )
     )
     parser.add_argument("--snapshot", type=Path, required=True)
@@ -237,6 +268,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("/tmp/causcope-routed-mutations"),
         help="Directory for cross-process routed instrument mutation claims",
+    )
+    parser.add_argument(
+        "--execution-set-state-dir",
+        type=Path,
+        help=(
+            "Directory containing durable execution-set journals; defaults to "
+            "<snapshot-dir>/execution-sets"
+        ),
     )
     parser.add_argument("--verbose", action="store_true")
     return parser
@@ -293,6 +332,7 @@ def main(root: Path = ROOT) -> int:
             instrument_router_provider=router_provider,
             probe_capability_provider=lambda: build_probe_execution_capabilities(concepts),
             routed_tools=routed_tools,
+            execution_set_state_dir=args.execution_set_state_dir,
         )
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
