@@ -431,22 +431,31 @@ def seed_workspace(
         relationships,
         topology,
     )
-    pool_wait_resolutions = [
+    request_resolutions = [
         resolution
         for resolution in target_resolution.get("resolutions", [])
-        if resolution.get("diagnosis_target") == POOL_WAIT_OBSERVATION
+        if resolution.get("diagnosis_target") == REQUEST_LATENCY_OBSERVATION
         and resolution.get("status") == "resolved"
     ]
     resolved_targets = {
         binding["target_resource"]
-        for resolution in pool_wait_resolutions
+        for resolution in request_resolutions
         for binding in resolution.get("target_bindings", [])
     }
     if resolved_targets != {target_resource}:
         rendered = ", ".join(sorted(resolved_targets)) or "none"
+        unresolved = sorted(
+            {
+                str(resolution.get("unresolved_reason"))
+                for resolution in target_resolution.get("resolutions", [])
+                if resolution.get("diagnosis_target") == REQUEST_LATENCY_OBSERVATION
+                and resolution.get("status") != "resolved"
+            }
+        )
+        suffix = f"; unresolved reasons: {', '.join(unresolved)}" if unresolved else ""
         raise ValueError(
-            f"initial pool-wait diagnosis could not be proven to resolve only to {target_resource}; "
-            f"resolved targets: {rendered}"
+            f"initial request-latency diagnosis could not be proven to resolve only to {target_resource}; "
+            f"resolved targets: {rendered}{suffix}"
         )
 
     output_paths = {
@@ -468,13 +477,19 @@ def seed_workspace(
 
     leading_hypothesis = None
     top_probe = None
+    candidate_hypotheses: list[str] = []
     for partition in diagnosis.get("partitions", []):
         for item in partition.get("diagnoses", []):
-            if item.get("target") != POOL_WAIT_OBSERVATION:
+            if item.get("target") != REQUEST_LATENCY_OBSERVATION:
                 continue
             candidates = item.get("ranking", {}).get("candidates", [])
-            if candidates:
-                leading_hypothesis = candidates[0].get("source", {}).get("id")
+            candidate_hypotheses = [
+                candidate.get("source", {}).get("id")
+                for candidate in candidates
+                if isinstance(candidate.get("source", {}).get("id"), str)
+            ]
+            if candidate_hypotheses:
+                leading_hypothesis = candidate_hypotheses[0]
             probes = item.get("probe_ranking", {}).get("probes", [])
             if probes:
                 top_probe = probes[0].get("probe", {}).get("id")
@@ -482,7 +497,11 @@ def seed_workspace(
 
     if leading_hypothesis is None:
         raise ValueError(
-            "initial pool-wait observation produced no causal candidate; knowledge graph is incomplete"
+            "initial request-latency observation produced no causal candidate; knowledge graph is incomplete"
+        )
+    if top_probe is None:
+        raise ValueError(
+            "initial request-latency candidates produced no discriminating next probe; investigation loop cannot start"
         )
 
     return {
@@ -504,6 +523,7 @@ def seed_workspace(
             item["id"] for item in matched_relationships
         ),
         "target_resource": target_resource,
+        "candidate_hypotheses": candidate_hypotheses,
         "leading_hypothesis": leading_hypothesis,
         "next_probe": top_probe,
         "outputs": {name: str(path) for name, path in output_paths.items()},
@@ -567,8 +587,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Pool-wait objective: {result['pool_wait_threshold_ms']:.3f} ms")
             print(f"Runtime resource: {result['runtime_resource']}")
             print(f"Exact target: {result['target_resource']}")
+            print("Candidates: " + ", ".join(result["candidate_hypotheses"]))
             print(f"Leading hypothesis: {result['leading_hypothesis']}")
-            print(f"Next probe: {result['next_probe'] or '<none>'}")
+            print(f"Next probe: {result['next_probe']}")
             print("Wrote diagnosis revision 1")
         return 0
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as error:
