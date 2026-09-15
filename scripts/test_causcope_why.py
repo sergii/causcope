@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 import tempfile
@@ -70,6 +71,7 @@ def main() -> int:
             str(runtime_path),
             "--pool",
             str(pool_path),
+            "--require-confirmed",
         )
         assert "Causcope diagnosis" in diagnosed.stdout
         assert "CONFIRMED (CAUSAL_DIAGNOSIS_CONFIRMED)" in diagnosed.stdout
@@ -88,11 +90,42 @@ def main() -> int:
             "--pool",
             str(pool_path),
             "--json",
+            "--require-confirmed",
         )
         diagnosis = json.loads(diagnosed_json.stdout)
         assert diagnosis["status"] == "confirmed"
         assert diagnosis["epistemic_state"] == "CAUSAL_DIAGNOSIS_CONFIRMED"
         assert diagnosis["root_cause"] == "application-side database connection pool exhaustion"
+
+        incomplete_pool = copy.deepcopy(pool)
+        incomplete_pool["assertions"]["database_still_accepts_direct_connections"] = False
+        incomplete_pool_path = root / "pool-incomplete.json"
+        write_json(incomplete_pool_path, incomplete_pool)
+        not_confirmed = run(
+            "why",
+            "checkout is slow",
+            "--static",
+            str(static_path),
+            "--runtime",
+            str(runtime_path),
+            "--pool",
+            str(incomplete_pool_path),
+            "--require-confirmed",
+            check=False,
+        )
+        assert not_confirmed.returncode == 2
+        assert "diagnosis not confirmed: CHECKOUT_WAIT_OBSERVED" in not_confirmed.stderr
+
+        require_without_artifacts = run(
+            "why",
+            "checkout is slow",
+            "--workspace",
+            str(root / "another-workspace"),
+            "--require-confirmed",
+            check=False,
+        )
+        assert require_without_artifacts.returncode == 2
+        assert "--require-confirmed requires --static, --runtime, and --pool" in require_without_artifacts.stderr
 
         partial = run(
             "why",
