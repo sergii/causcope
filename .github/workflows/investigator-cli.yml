@@ -29,6 +29,9 @@ jobs:
       - name: Validate Rails PostgreSQL bootstrap
         run: python scripts/test_causcope_bootstrap.py
 
+      - name: Validate observed Rails incident bootstrap
+        run: python scripts/test_runtime_incident_seed.py
+
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
 
