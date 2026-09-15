@@ -20,6 +20,7 @@ from diagnosis_mcp_server import (
 )
 from live_diagnosis import build_diagnosis_snapshot
 from routing_mcp_server import (
+    CAUSAL_VERIFICATION_URI,
     EXECUTION_SET_RECOVERY_URI,
     EXECUTION_SET_STATUS_URI,
     INSTRUMENT_ROUTING_URI,
@@ -64,18 +65,14 @@ class RoutingMcpServerTest(unittest.TestCase):
             evidence = yaml.safe_load(handle)
         cls.evidence = copy.deepcopy(evidence)
         cls.evidence["instances"] = [
-            instance
-            for instance in cls.evidence["instances"]
+            instance for instance in cls.evidence["instances"]
             if instance["observation"] == TARGET
         ]
 
     def snapshot(self) -> dict:
         return build_diagnosis_snapshot(
-            copy.deepcopy(self.evidence),
-            self.concepts,
-            self.edges,
-            as_of=AS_OF,
-            evidence_revision=11,
+            copy.deepcopy(self.evidence), self.concepts, self.edges,
+            as_of=AS_OF, evidence_revision=11,
         )
 
     @staticmethod
@@ -88,9 +85,7 @@ class RoutingMcpServerTest(unittest.TestCase):
     def read(self, server: RoutingDiagnosisMcpServer, uri: str) -> dict:
         response = server.handle_message(
             {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "resources/read",
+                "jsonrpc": "2.0", "id": 1, "method": "resources/read",
                 "params": {"uri": uri, "_meta": self.meta()},
             }
         )
@@ -99,36 +94,38 @@ class RoutingMcpServerTest(unittest.TestCase):
 
     def test_routing_projection_and_routed_agent_plan_share_revision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "diagnosis.json"
+            root = Path(directory)
+            path = root / "diagnosis.json"
             path.write_text(json.dumps(self.snapshot()), encoding="utf-8")
+            (root / "runtime-evidence.json").write_text(json.dumps(self.evidence), encoding="utf-8")
             server = RoutingDiagnosisMcpServer(
-                DiagnosisSnapshotReader(path),
-                instrument_router_provider=FakeRouter,
+                DiagnosisSnapshotReader(path), instrument_router_provider=FakeRouter,
             )
 
             routing = self.read(server, INSTRUMENT_ROUTING_URI)
             routed_plan = self.read(server, ROUTED_AGENT_PLAN_URI)
             status = self.read(server, EXECUTION_SET_STATUS_URI)
             recovery = self.read(server, EXECUTION_SET_RECOVERY_URI)
+            verification = self.read(server, CAUSAL_VERIFICATION_URI)
 
             self.assertEqual("instrument_routing_projection", routing["kind"])
             self.assertEqual("routed_agent_plan", routed_plan["kind"])
             self.assertEqual("routed_execution_set_status", status["kind"])
             self.assertEqual("routed_execution_set_recovery", recovery["kind"])
+            self.assertEqual("causal_verification_projection", verification["kind"])
             self.assertEqual(11, routing["evidence_revision"])
             self.assertEqual(11, routed_plan["evidence_revision"])
             self.assertEqual(11, status["current_evidence_revision"])
             self.assertEqual(11, recovery["current_evidence_revision"])
+            self.assertEqual(11, verification["evidence_revision"])
+            self.assertEqual([], verification["claims"])
             self.assertEqual(routing, routed_plan["routing"])
             self.assertEqual("agent_plan", routed_plan["plan"]["kind"])
             self.assertEqual(0, status["summary"]["total"])
             self.assertEqual(0, recovery["summary"]["total"])
 
             route = next(item for item in routing["routes"] if item["target"] == TARGET)
-            self.assertEqual(
-                "provider.test.external",
-                route["decision"]["selected_instrument"]["id"],
-            )
+            self.assertEqual("provider.test.external", route["decision"]["selected_instrument"]["id"])
             self.assertEqual("use_external_instrument", route["agent_action"]["kind"])
             self.assertFalse(route["agent_action"]["mcp_execution_available"])
 
@@ -137,8 +134,7 @@ class RoutingMcpServerTest(unittest.TestCase):
             path = Path(directory) / "diagnosis.json"
             path.write_text(json.dumps(self.snapshot()), encoding="utf-8")
             server = RoutingDiagnosisMcpServer(
-                DiagnosisSnapshotReader(path),
-                instrument_router_provider=FakeRouter,
+                DiagnosisSnapshotReader(path), instrument_router_provider=FakeRouter,
             )
             descriptors = server._resource_descriptors(modern=True)
             uris = {item["uri"] for item in descriptors}
@@ -146,6 +142,7 @@ class RoutingMcpServerTest(unittest.TestCase):
             self.assertIn(ROUTED_AGENT_PLAN_URI, uris)
             self.assertIn(EXECUTION_SET_STATUS_URI, uris)
             self.assertIn(EXECUTION_SET_RECOVERY_URI, uris)
+            self.assertIn(CAUSAL_VERIFICATION_URI, uris)
 
 
 if __name__ == "__main__":
