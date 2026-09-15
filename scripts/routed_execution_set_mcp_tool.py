@@ -24,6 +24,11 @@ from probe_filesystem_claim import (
     acquire_probe_filesystem_claim,
     incident_mutation_claim_identity,
 )
+from routed_execution_set_journal import (
+    append_execution_set_journal_event,
+    execution_set_contract,
+    load_execution_set_resume_state,
+)
 from routed_execution_sets import (
     EXECUTE_SET_OPERATION,
     build_routed_execution_sets,
@@ -33,6 +38,7 @@ from runtime_evidence_composition import compose_runtime_evidence
 
 TOOL_NAME = EXECUTE_SET_OPERATION
 TARGET_SCOPE_ATTRIBUTE = "target_resource"
+ExecutionSetMemberFaultHook = Callable[[str, dict[str, Any]], None]
 
 
 class RoutedExecutionSetInvocationError(ValueError):
@@ -82,6 +88,44 @@ def _bind_evidence_scope_to_target(
         instance["scope"] = instance_scope
 
 
+def _validate_member_evidence(
+    produced: dict[str, Any],
+    *,
+    incident_id: str,
+    target_resource: str,
+    semantic_scope: dict[str, Any] | None,
+) -> list[str]:
+    if produced.get("incident_id") != incident_id:
+        raise RoutedExecutionSetInvocationError(
+            f"member evidence belongs to another incident: {target_resource}"
+        )
+    instance_ids = sorted(
+        instance["id"]
+        for instance in produced.get("instances", [])
+        if isinstance(instance, dict)
+    )
+    if not instance_ids:
+        raise RoutedExecutionSetInvocationError(
+            f"member produced no canonical evidence: {target_resource}"
+        )
+    for instance in produced.get("instances", []):
+        routing_target = (
+            instance.get("source", {})
+            .get("attributes", {})
+            .get("routing.target_resource")
+        )
+        if routing_target != target_resource:
+            raise RoutedExecutionSetInvocationError(
+                f"member evidence target provenance mismatch: {target_resource}"
+            )
+    _bind_evidence_scope_to_target(
+        produced,
+        semantic_scope=semantic_scope,
+        target_resource=target_resource,
+    )
+    return instance_ids
+
+
 class RoutedExecutionSetToolController:
     """Execute one exact multi-target read-only set and commit one evidence revision."""
 
@@ -99,6 +143,8 @@ class RoutedExecutionSetToolController:
         clock: Callable[[], datetime] | None = None,
         commit_path: Path | None = None,
         commit_fault_hook: FaultHook | None = None,
+        execution_set_state_dir: Path | None = None,
+        member_fault_hook: ExecutionSetMemberFaultHook | None = None,
     ) -> None:
         self.reader = reader
         self.snapshot_path = snapshot_path
@@ -111,6 +157,12 @@ class RoutedExecutionSetToolController:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.commit_path = commit_path or default_commit_path(snapshot_path)
         self.commit_fault_hook = commit_fault_hook
+        self.execution_set_state_dir = (
+            execution_set_state_dir
+            if execution_set_state_dir is not None
+            else snapshot_path.parent / "execution-sets"
+        )
+        self.member_fault_hook = member_fault_hook
 
     @staticmethod
     def tool_names() -> set[str]:
@@ -124,8 +176,9 @@ class RoutedExecutionSetToolController:
                 "title": "Execute current routed target set",
                 "description": (
                     "Execute every exact direct read-only provider member in the current bounded target set. "
-                    "All provider reads must succeed before Causcope commits one composed evidence revision "
-                    "and reranks the diagnosis once."
+                    "Successful member reads are durably journaled so a process restart can resume the same "
+                    "revision-bound set without repeating completed reads. Causcope still commits one composed "
+                    "evidence revision and reranks only after every member succeeds."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -225,9 +278,45 @@ class RoutedExecutionSetToolController:
         if evidence["incident_id"] != args["incidentId"]:
             raise RoutedExecutionSetInvocationError("runtime evidence belongs to another incident")
 
+        now = self.clock().astimezone(timezone.utc)
+        try:
+            resume = load_execution_set_resume_state(
+                self.execution_set_state_dir,
+                incident_id=args["incidentId"],
+                evidence_revision=snapshot["evidence_revision"],
+                execution_set=execution_set,
+            )
+            if resume["state"] == "not_started":
+                append_execution_set_journal_event(
+                    self.execution_set_state_dir,
+                    event_type="set_started",
+                    incident_id=args["incidentId"],
+                    execution_set_id=execution_set["id"],
+                    evidence_revision=snapshot["evidence_revision"],
+                    data={"contract": execution_set_contract(execution_set)},
+                    recorded_at=now,
+                )
+                resume = load_execution_set_resume_state(
+                    self.execution_set_state_dir,
+                    incident_id=args["incidentId"],
+                    evidence_revision=snapshot["evidence_revision"],
+                    execution_set=execution_set,
+                )
+            if resume["state"] == "committed":
+                raise RoutedExecutionSetInvocationError(
+                    "execution-set journal says this revision-bound set is already committed"
+                )
+        except RoutedExecutionSetInvocationError:
+            raise
+        except (OSError, ValueError) as exc:
+            raise RoutedExecutionSetInvocationError(
+                f"execution-set journal recovery failed: {exc}"
+            ) from exc
+
         router = self.information_gain_router_provider()
         produced_documents: list[dict[str, Any]] = []
         member_results: list[dict[str, Any]] = []
+        resumed_member_count = 0
 
         for member in execution_set["members"]:
             target_resource = member["target_resource"]
@@ -251,44 +340,75 @@ class RoutedExecutionSetToolController:
                     f"member route is stale for {target_resource}: current instrument is {current}"
                 )
 
-            try:
-                produced = router.execute(
-                    probe_candidate,
-                    execution_set["diagnosis_target"],
-                    scope,
-                    target_resource=target_resource,
-                )
-            except (ProbeInsufficientEvidence, OSError, ValueError) as exc:
-                raise RoutedExecutionSetInvocationError(
-                    f"member execution failed for {target_resource}: {exc}"
-                ) from exc
-
-            if produced.get("incident_id") != args["incidentId"]:
-                raise RoutedExecutionSetInvocationError(
-                    f"member evidence belongs to another incident: {target_resource}"
-                )
-            instance_ids = sorted(
-                instance["id"] for instance in produced.get("instances", []) if isinstance(instance, dict)
-            )
-            if not instance_ids:
-                raise RoutedExecutionSetInvocationError(
-                    f"member produced no canonical evidence: {target_resource}"
-                )
-            for instance in produced.get("instances", []):
-                routing_target = (
-                    instance.get("source", {})
-                    .get("attributes", {})
-                    .get("routing.target_resource")
-                )
-                if routing_target != target_resource:
+            stored_event = resume["member_events"].get(target_resource)
+            resumed = stored_event is not None
+            if stored_event is not None:
+                stored = stored_event["data"]
+                if (
+                    stored.get("ordinal") != member["ordinal"]
+                    or stored.get("instrument_id") != expected_instrument
+                ):
                     raise RoutedExecutionSetInvocationError(
-                        f"member evidence target provenance mismatch: {target_resource}"
+                        f"journaled member identity mismatch for {target_resource}"
                     )
-            _bind_evidence_scope_to_target(
+                produced = copy.deepcopy(stored.get("runtime_evidence"))
+                if not isinstance(produced, dict):
+                    raise RoutedExecutionSetInvocationError(
+                        f"journaled member evidence is missing for {target_resource}"
+                    )
+                resumed_member_count += 1
+            else:
+                try:
+                    produced = router.execute(
+                        probe_candidate,
+                        execution_set["diagnosis_target"],
+                        scope,
+                        target_resource=target_resource,
+                    )
+                except (ProbeInsufficientEvidence, OSError, ValueError) as exc:
+                    raise RoutedExecutionSetInvocationError(
+                        f"member execution failed for {target_resource}: {exc}"
+                    ) from exc
+
+            instance_ids = _validate_member_evidence(
                 produced,
-                semantic_scope=scope,
+                incident_id=args["incidentId"],
                 target_resource=target_resource,
+                semantic_scope=scope,
             )
+
+            if not resumed:
+                try:
+                    journal_event = append_execution_set_journal_event(
+                        self.execution_set_state_dir,
+                        event_type="member_succeeded",
+                        incident_id=args["incidentId"],
+                        execution_set_id=execution_set["id"],
+                        evidence_revision=snapshot["evidence_revision"],
+                        data={
+                            "ordinal": member["ordinal"],
+                            "target_resource": target_resource,
+                            "instrument_id": expected_instrument,
+                            "produced_instance_ids": instance_ids,
+                            "runtime_evidence": copy.deepcopy(produced),
+                        },
+                        recorded_at=now,
+                    )
+                except (OSError, ValueError) as exc:
+                    raise RoutedExecutionSetInvocationError(
+                        f"member succeeded but durable journal append failed for {target_resource}: {exc}"
+                    ) from exc
+                if self.member_fault_hook is not None:
+                    self.member_fault_hook(
+                        "after_member_journaled",
+                        {
+                            "execution_set_id": execution_set["id"],
+                            "target_resource": target_resource,
+                            "instrument_id": expected_instrument,
+                            "journal_sequence": journal_event["sequence"],
+                        },
+                    )
+
             produced_documents.append(produced)
             member_results.append(
                 {
@@ -296,13 +416,16 @@ class RoutedExecutionSetToolController:
                     "target_resource": target_resource,
                     "instrument_id": expected_instrument,
                     "produced_instance_ids": instance_ids,
+                    "resumed_from_journal": resumed,
                 }
             )
 
         composed = compose_runtime_evidence([evidence, *produced_documents], self.concepts)
         old_ids = {instance["id"] for instance in evidence["instances"]}
         added_ids = sorted(
-            instance["id"] for instance in composed["instances"] if instance["id"] not in old_ids
+            instance["id"]
+            for instance in composed["instances"]
+            if instance["id"] not in old_ids
         )
         if not added_ids or canonical_hash(composed) == canonical_hash(evidence):
             raise RoutedExecutionSetInvocationError(
@@ -321,7 +444,6 @@ class RoutedExecutionSetToolController:
             )
 
         next_revision = snapshot["evidence_revision"] + 1
-        now = self.clock().astimezone(timezone.utc)
         next_snapshot = build_diagnosis_snapshot(
             composed,
             self.concepts,
@@ -343,6 +465,27 @@ class RoutedExecutionSetToolController:
             fault_hook=self.commit_fault_hook,
         )
 
+        try:
+            committed_event = append_execution_set_journal_event(
+                self.execution_set_state_dir,
+                event_type="set_committed",
+                incident_id=args["incidentId"],
+                execution_set_id=execution_set["id"],
+                evidence_revision=snapshot["evidence_revision"],
+                data={
+                    "from_evidence_revision": snapshot["evidence_revision"],
+                    "evidence_revision": next_revision,
+                    "added_instance_ids": added_ids,
+                    "diagnosis_generated_at": next_snapshot["generated_at"],
+                },
+                recorded_at=now,
+            )
+        except (OSError, ValueError) as exc:
+            raise RoutedExecutionSetInvocationError(
+                "incident state committed but execution-set journal finalization failed: "
+                + str(exc)
+            ) from exc
+
         return {
             "kind": "routed_execution_set_result",
             "incident_id": args["incidentId"],
@@ -352,7 +495,14 @@ class RoutedExecutionSetToolController:
             "diagnosis_target": execution_set["diagnosis_target"],
             "probe_id": execution_set["probe_id"],
             "member_results": member_results,
+            "resumed_member_count": resumed_member_count,
             "added_instance_ids": added_ids,
             "rerank_count": 1,
             "diagnosis_generated_at": next_snapshot["generated_at"],
+            "journal_event": {
+                "sequence": committed_event["sequence"],
+                "event_hash": committed_event["event_hash"],
+                "previous_hash": committed_event["previous_hash"],
+                "already_recorded": committed_event["already_recorded"],
+            },
         }
