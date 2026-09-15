@@ -1,0 +1,39 @@
+name: Validate golden vertical slice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/rails_pool_vertical_slice.py"
+      - "scripts/test_rails_pool_vertical_slice.py"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "RFC/0073-golden-vertical-slice-rails-connection-pool.md"
+      - ".github/workflows/golden-vertical-slice.yml"
+  pull_request:
+    paths:
+      - "scripts/rails_pool_vertical_slice.py"
+      - "scripts/test_rails_pool_vertical_slice.py"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "RFC/0073-golden-vertical-slice-rails-connection-pool.md"
+      - ".github/workflows/golden-vertical-slice.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  projection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate Rails pool golden vertical-slice projection
+        run: python scripts/test_rails_pool_vertical_slice.py
