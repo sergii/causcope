@@ -213,6 +213,49 @@ Causcope Relay
   -> local policy + read-only DB role
 ```
 
+## Existing standards and concepts to reuse
+
+Causcope should not claim that the entire trust model is a new security standard. It is a normalized operational profile over established concepts.
+
+Relevant foundations include:
+
+```text
+Access-control matrix
+  subject x object -> allowed rights
+
+NIST SP 800-53 AC-6
+  least privilege
+
+OAuth 2.0 RFC 6749
+  scopes and delegated authorization
+
+RFC 9396 - Rich Authorization Requests
+  structured fine-grained authorization details
+
+NIST SP 800-207
+  zero-trust resource-oriented access decisions
+
+OSCAL
+  machine-readable security controls and assessment information
+
+CycloneDX SaaSBOM
+  services, dependencies, endpoints and data-flow concepts
+
+SLSA provenance
+  machine-readable software/build provenance
+```
+
+Causcope's added value is the cross-provider operational model:
+
+```text
+what can this integration touch?
+what can it observe?
+what can it change?
+what data crosses which boundary?
+what is the worst plausible impact if it is compromised?
+what changed since the previous version?
+```
+
 ## Causcope Trust Manifest
 
 Causcope should eventually define a versioned machine-readable manifest that normalizes this information across providers.
@@ -274,19 +317,7 @@ blast_radius:
   availability: none
 ```
 
-The initial format should reuse established concepts where practical rather than claiming to invent a new security standard.
-
-Relevant external families of ideas include:
-
-- access-control matrices;
-- least privilege;
-- OAuth scopes and rich authorization;
-- zero-trust resource-oriented authorization;
-- OSCAL-style machine-readable controls and assessment data;
-- CycloneDX SaaSBOM/service/data-flow concepts;
-- provenance formats such as SLSA.
-
-Causcope's value would be the normalized cross-provider operational model and the ability to derive and compare it automatically.
+The initial format should map cleanly to existing standards where possible rather than creating incompatible vocabulary for concepts that already exist.
 
 ## Declared access vs observed access
 
@@ -366,6 +397,42 @@ HUMAN-APPROVAL-REMOVED
 
 These should become canonical machine-addressable concepts if the model proves useful.
 
+## Trust Diff as a CI artifact
+
+The long-term workflow should be changelog-like and automatable.
+
+Conceptually:
+
+```text
+GitHub App manifest / IAM / RBAC / Terraform / Helm / GRANTs
+                         |
+                         v
+                 normalized trust state
+                         |
+                   compare base/head
+                         |
+                         v
+                     Trust Diff
+```
+
+Example CLI shape:
+
+```text
+causcope trust inspect
+causcope trust diff --base main --head HEAD
+```
+
+A pull request could then expose:
+
+```text
+New access: repository.contents write
+Scope delta: 12 -> 182 repositories
+New data export: raw logs -> external SaaS
+Approval removed: production restart
+```
+
+Policy can later require security review for selected change classes.
+
 ## Inputs that can be analyzed automatically
 
 Potential sources for generating the Trust Manifest or effective-access view include:
@@ -388,6 +455,35 @@ Causcope local policy
 ```
 
 The long-term goal is to reduce manually maintained security documentation by deriving as much as possible from actual configuration.
+
+## Data minimization defaults
+
+Private evidence collection should default to the minimum information needed to support or falsify a hypothesis.
+
+Prefer:
+
+```text
+structured finding
+measurement
+resource identity
+scope
+provenance
+relevant timestamps
+```
+
+over unrestricted export of:
+
+```text
+raw database rows
+full database dumps
+entire log archives
+secrets
+unrelated tenant data
+```
+
+Database credentials should normally remain inside the customer environment when a Relay is used. Raw SQL text, raw rows, and full logs should not leave the boundary by default merely because the collector can see them.
+
+Any exception should be explicit in the Trust Manifest and customer policy.
 
 ## Integration review template
 
@@ -416,6 +512,7 @@ Auditability
 The customer-side Relay should follow these defaults:
 
 - outbound connectivity where possible;
+- mutually authenticated transport where practical, with rotating/short-lived credentials preferred;
 - no arbitrary remote shell;
 - no implicit root or cluster-admin requirement;
 - local secrets remain local;
