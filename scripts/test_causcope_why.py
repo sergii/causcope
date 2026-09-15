@@ -6,8 +6,13 @@ import copy
 import json
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
+
+from causal_projection import load_concepts, load_edges
+from live_diagnosis import build_diagnosis_snapshot
 from test_rails_pool_vertical_slice import fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +30,34 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def write_json(path: Path, document: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def workspace_diagnosis(incident_id: str) -> dict:
+    evidence = {
+        "schema_version": "0.1",
+        "kind": "runtime_evidence",
+        "incident_id": incident_id,
+        "instances": [
+            {
+                "id": "evidence.test.tcp_retransmissions",
+                "observation": "observation.network.tcp_retransmissions",
+                "state": "observed",
+                "observed_at": "2026-09-15T14:00:00Z",
+                "expires_at": "2026-09-15T15:00:00Z",
+                "confidence": "high",
+                "source": {"type": "metric", "name": "test.tcp.retransmissions"},
+            }
+        ],
+    }
+    return build_diagnosis_snapshot(
+        evidence,
+        load_concepts(ROOT),
+        load_edges(ROOT),
+        as_of=datetime(2026, 9, 15, 14, 30, tzinfo=timezone.utc),
+        evidence_revision=1,
+    )
 
 
 def main() -> int:
@@ -53,6 +85,42 @@ def main() -> int:
         assert resumed_document["problem"] == "checkout is slow"
         assert resumed_document["status"] == "needs_scope"
         assert resumed_document["scoping"]["next_action"]["dimension"] == "investigation.blast_radius"
+
+        context = yaml.safe_load((workspace / "incident-context.yaml").read_text(encoding="utf-8"))
+        snapshot = workspace_diagnosis(context["incident_id"])
+        write_json(workspace / "diagnosis.json", snapshot)
+
+        workspace_result = run("why", "--workspace", str(workspace))
+        assert "DIAGNOSIS_AVAILABLE (evidence revision 1)" in workspace_result.stdout
+        assert "target: observation.network.tcp_retransmissions" in workspace_result.stdout
+        assert "leading hypothesis: hypothesis.network.packet_loss" in workspace_result.stdout
+        assert "next probe: probe.network.inspect_tcp_integrity_errors" in workspace_result.stdout
+        assert "instrument: executor.linux.proc_net_snmp.tcp_inerrs" in workspace_result.stdout
+        assert "action: begin_host_probe_session" in workspace_result.stdout
+
+        workspace_json = run("why", "--workspace", str(workspace), "--json")
+        workspace_document = json.loads(workspace_json.stdout)
+        assert workspace_document["status"] == "diagnosis_available"
+        assert workspace_document["diagnosis"]["kind"] == "diagnosis_snapshot"
+        assert workspace_document["routing"]["kind"] == "instrument_routing_projection"
+        routes = workspace_document["routing"]["routes"]
+        route = next(
+            item
+            for item in routes
+            if item["target"] == "observation.network.tcp_retransmissions"
+            and item["probe_id"] == "probe.network.inspect_tcp_integrity_errors"
+        )
+        assert route["decision"]["selected_instrument"]["id"] == "executor.linux.proc_net_snmp.tcp_inerrs"
+        assert route["agent_action"]["kind"] == "begin_host_probe_session"
+
+        mismatched_workspace = root / "mismatched-workspace"
+        run("why", "another problem", "--workspace", str(mismatched_workspace))
+        write_json(mismatched_workspace / "diagnosis.json", snapshot)
+        mismatch = run("why", "--workspace", str(mismatched_workspace), check=False)
+        assert mismatch.returncode == 2
+        assert "workspace diagnosis belongs to another investigation" in mismatch.stderr
+
+        (workspace / "diagnosis.json").unlink()
 
         static, runtime, pool = fixtures()
         static_path = root / "static.json"
