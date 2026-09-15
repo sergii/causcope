@@ -30,7 +30,7 @@ RESULT_SCHEMA = ROOT / "schema" / "recommendation-evidence-acquisition-result.sc
 
 LIMITATIONS = [
     "Recommendation evidence acquisition executes only an explicit RFC 0067 read-only probe through the existing InstrumentRouter safety checks.",
-    "The first RFC 0069 proof remains bound to a pgbot provider instance because the current read-model recommendation requires exact query-object identity.",
+    "The first RFC 0070 proof remains bound to a pgbot provider instance because the current read-model recommendation requires exact query-object identity.",
     "Fresh evidence may advance recommendation maturity, but this bridge never authorizes a schema, application, or data change.",
 ]
 
@@ -73,6 +73,7 @@ def _matching_evidence_ids(
     evidence: dict[str, Any],
     *,
     observation: str,
+    query_object: str,
     target_resource: str,
     instrument_id: str,
 ) -> list[str]:
@@ -82,6 +83,8 @@ def _matching_evidence_ids(
             continue
         attributes = instance.get("source", {}).get("attributes", {})
         labels = instance.get("labels", {})
+        if attributes.get("pgbot.object") != query_object:
+            continue
         if attributes.get("routing.target_resource") != target_resource:
             continue
         if attributes.get("routing.instrument_id") != instrument_id:
@@ -126,9 +129,9 @@ def acquire_and_reproject(
     acquisition_time: str | datetime,
 ) -> dict[str, Any]:
     validate_schema(context, CONTEXT_SCHEMA, "recommendation context")
+    current_gaps = project_information_gaps(current_projection)
     _validate_identity(context, current_projection)
 
-    current_gaps = project_information_gaps(current_projection)
     action = current_gaps["next_action"]
     if action.get("kind") != "read_only_probe":
         raise ValueError(
@@ -149,6 +152,7 @@ def acquire_and_reproject(
         )
 
     target_resource = current_projection["subject_resource"]
+    query_object = context["workload"]["query_object"]
     route = router.route(
         probe_id,
         copy.deepcopy(scope),
@@ -173,7 +177,7 @@ def acquire_and_reproject(
 
     evidence = router.execute(
         probe_id,
-        context["recommendation_id"],
+        requested_observation,
         copy.deepcopy(scope),
         target_resource=target_resource,
     )
@@ -186,12 +190,13 @@ def acquire_and_reproject(
     matching_ids = _matching_evidence_ids(
         evidence,
         observation=requested_observation,
+        query_object=query_object,
         target_resource=target_resource,
         instrument_id=instrument["id"],
     )
     if not matching_ids:
         raise ValueError(
-            "routed provider returned no observed evidence for the requested observation and exact resource"
+            "routed provider returned no observed evidence for the exact query, requested observation, and resource"
         )
 
     as_of = _canonical_time(acquisition_time)
@@ -268,7 +273,7 @@ def build_pgbot_router(
         raise ValueError("provider instance target does not match recommendation subject_resource")
     provider_type = topology.provider_type(instance["provider_type"])
     if provider_type.get("instrument") != "pgbot":
-        raise ValueError("RFC 0069 pgbot CLI proof requires a pgbot provider instance")
+        raise ValueError("RFC 0070 pgbot CLI proof requires a pgbot provider instance")
 
     resource = topology.resource(context["subject_resource"])
     adapter = load_adapter(adapter_path)
