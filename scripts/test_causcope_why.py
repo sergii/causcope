@@ -17,6 +17,7 @@ from test_rails_pool_vertical_slice import fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "bin" / "causcope"
+TOPOLOGY = ROOT / "examples" / "topology" / "shop.yaml"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -58,6 +59,72 @@ def workspace_diagnosis(incident_id: str) -> dict:
         as_of=datetime(2026, 9, 15, 14, 30, tzinfo=timezone.utc),
         evidence_revision=1,
     )
+
+
+def target_aware_documents(incident_id: str) -> tuple[dict, dict, dict]:
+    scope = {
+        "boundaries": ["boundary.application.database"],
+        "attributes": {"service": "checkout-api", "dependency": "postgresql"},
+    }
+    probe = "probe.database.measure_query_latency"
+    target = "observation.database.query_latency"
+    snapshot = {
+        "schema_version": "0.1",
+        "kind": "diagnosis_snapshot",
+        "incident_id": incident_id,
+        "evidence_revision": 7,
+        "partitions": [
+            {
+                "scope": scope,
+                "active_instance_ids": ["evidence.opentelemetry.query.trace1"],
+                "diagnoses": [
+                    {
+                        "target": target,
+                        "probe_ranking": {
+                            "found": True,
+                            "probes": [{"probe": {"id": probe}}],
+                        },
+                    }
+                ],
+                "unranked_observations": [],
+            }
+        ],
+    }
+    evidence = {
+        "schema_version": "0.1",
+        "kind": "runtime_evidence",
+        "incident_id": incident_id,
+        "instances": [
+            {
+                "id": "evidence.opentelemetry.query.trace1",
+                "observation": target,
+                "state": "observed",
+                "source": {
+                    "type": "trace",
+                    "name": "opentelemetry:test",
+                    "attributes": {
+                        "otel.trace_id": "trace-1",
+                        "otel.span_id": "span-query",
+                    },
+                },
+            }
+        ],
+    }
+    relationships = {
+        "schema_version": "0.1",
+        "kind": "runtime_resolved_relationships",
+        "incident_id": incident_id,
+        "relationships": [
+            {
+                "id": "runtime_relationship.opentelemetry.0000000000000001",
+                "subject_execution": "execution.opentelemetry.0000000000000001",
+                "relation": "used_resource",
+                "object_resource": "pool:active_record.primary",
+                "trace_id": "trace-1",
+            }
+        ],
+    }
+    return snapshot, evidence, relationships
 
 
 def main() -> int:
@@ -112,6 +179,37 @@ def main() -> int:
         )
         assert route["decision"]["selected_instrument"]["id"] == "executor.linux.proc_net_snmp.tcp_inerrs"
         assert route["agent_action"]["kind"] == "begin_host_probe_session"
+
+        target_workspace = root / "target-workspace"
+        run("why", "database requests are slow", "--workspace", str(target_workspace))
+        target_context = yaml.safe_load(
+            (target_workspace / "incident-context.yaml").read_text(encoding="utf-8")
+        )
+        target_snapshot, target_evidence, target_relationships = target_aware_documents(
+            target_context["incident_id"]
+        )
+        write_json(target_workspace / "diagnosis.json", target_snapshot)
+        write_json(target_workspace / "runtime-evidence.json", target_evidence)
+        write_json(target_workspace / "runtime-relationships.json", target_relationships)
+        (target_workspace / "resource-topology.yaml").write_text(
+            TOPOLOGY.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+        target_result = run("why", "--workspace", str(target_workspace))
+        assert "target: observation.database.query_latency" in target_result.stdout
+        assert "next probe: probe.database.measure_query_latency" in target_result.stdout
+        assert "operational target: db.orders.prod" in target_result.stdout
+        assert "instrument: not selected" in target_result.stdout
+
+        target_json = run("why", "--workspace", str(target_workspace), "--json")
+        target_document = json.loads(target_json.stdout)
+        assert target_document["target_resolution"]["kind"] == "runtime_target_resolution"
+        resolution = target_document["target_resolution"]["resolutions"][0]
+        assert resolution["status"] == "resolved"
+        assert resolution["target_bindings"][0]["target_resource"] == "db.orders.prod"
+        target_route = target_document["routing"]["routes"][0]
+        assert target_route["target_resource"] == "db.orders.prod"
+        assert target_route["decision"]["selected_instrument"] is None
 
         mismatched_workspace = root / "mismatched-workspace"
         run("why", "another problem", "--workspace", str(mismatched_workspace))
