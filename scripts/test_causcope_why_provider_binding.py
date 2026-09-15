@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -22,6 +23,9 @@ def write_binding(workspace: Path) -> None:
     )
     report = json.loads(PGBOT_REPORT.read_text(encoding="utf-8"))
     report["server"]["database"] = "orders"
+    report["collected_at"] = (
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
     write_json(workspace / "pgbot-orders.json", report)
     bindings = {
         "schema_version": "0.1",
@@ -80,6 +84,9 @@ def main() -> int:
         mismatch_workspace = root / "mismatch" / ".causcope"
         prepare_bound_workspace(mismatch_workspace)
         wrong_report = json.loads(PGBOT_REPORT.read_text(encoding="utf-8"))
+        wrong_report["collected_at"] = (
+            datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        )
         write_json(mismatch_workspace / "pgbot-orders.json", wrong_report)
         mismatch = run("why", "--workspace", str(mismatch_workspace), check=False)
         assert mismatch.returncode == 2
