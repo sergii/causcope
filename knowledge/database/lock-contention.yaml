@@ -9,6 +9,9 @@ predictions:
   - observation: observation.database.lock_wait_event
     expected: present_during_blocked_operation
     strength: strong
+  - observation: observation.database.blocking_chain
+    expected: present_during_blocked_operation
+    strength: strong
   - observation: observation.database.lock_error_event
     expected: present_when_lock_acquisition_times_out_or_fails
     strength: strong
@@ -19,11 +22,15 @@ falsifiers:
   - observation: observation.database.lock_wait_time
     condition: not_above_baseline
     effect: decrease
+  - observation: observation.database.blocking_chain
+    condition: absent_in_complete_activity_snapshot
+    effect: decrease
   - observation: observation.database.lock_error_event
     condition: absent_in_complete_diagnostic_log_window
     effect: decrease
 tested_by:
   - probe.database.inspect_lock_waits
+  - probe.database.inspect_blocking_chains
   - probe.database.inspect_lock_error_events
   - probe.http.measure_request_latency
 related_to:
@@ -36,6 +43,8 @@ common_misconceptions:
   - High database CPU is required for lock contention to cause high request latency.
 search_terms:
   - postgres lock wait
+  - postgres blocking chain
   - row lock contention
   - blocked transaction
   - pg_stat_activity wait_event_type Lock
+  - pg_blocking_pids
