@@ -1,0 +1,37 @@
+id: hypothesis.database.long_running_transaction
+kind: hypothesis
+title: Long-running database transaction
+summary: A database transaction remains open long enough to retain locks or an old snapshot and can amplify lock contention, vacuum pressure, or request latency when it is on the critical path.
+predictions:
+  - observation: observation.database.long_running_transaction
+    expected: present
+    strength: strong
+  - observation: observation.database.blocking_chain
+    expected: may_be_present_when_transaction_holds_conflicting_locks
+    strength: moderate
+  - observation: observation.database.vacuum_pressure
+    expected: may_increase_when_old_snapshot_delays_tuple_cleanup
+    strength: moderate
+  - observation: observation.http.request_latency
+    expected: may_be_above_baseline_when_transaction_is_on_request_critical_path
+    strength: moderate
+falsifiers:
+  - observation: observation.database.long_running_transaction
+    condition: absent_in_complete_activity_snapshot
+    effect: decrease
+tested_by:
+  - probe.database.inspect_long_running_transactions
+  - probe.database.inspect_lock_waits
+  - probe.database.inspect_vacuum_health
+related_to:
+  - hypothesis.database.lock_contention
+  - hypothesis.latency.database
+  - system_entity.database
+  - boundary.application.database
+common_misconceptions:
+  - Every transaction above the collection threshold is necessarily harmful.
+  - A long-running transaction must currently be executing SQL; it may be idle in transaction.
+search_terms:
+  - postgres long running transaction
+  - pg_stat_activity xact_start
+  - idle in transaction

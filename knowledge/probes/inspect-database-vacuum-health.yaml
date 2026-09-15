@@ -1,0 +1,12 @@
+id: probe.database.inspect_vacuum_health
+kind: probe
+title: Inspect database vacuum health
+summary: Inspect PostgreSQL autovacuum configuration and user-table dead-tuple pressure using effective global and per-table vacuum settings.
+produces:
+  - observation.database.vacuum_pressure
+  - observation.database.autovacuum_disabled
+requires:
+  - capability.database.inspect_vacuum
+preferred_tools:
+  - tool.postgresql
+risk: read_only

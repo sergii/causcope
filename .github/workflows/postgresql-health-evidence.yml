@@ -1,0 +1,97 @@
+name: Validate PostgreSQL health evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "knowledge/database/lock-contention.yaml"
+      - "knowledge/database/long-running-transaction.yaml"
+      - "knowledge/database/autovacuum-pressure.yaml"
+      - "knowledge/observations/database-blocking-chain.yaml"
+      - "knowledge/observations/database-long-running-transaction.yaml"
+      - "knowledge/observations/database-vacuum-pressure.yaml"
+      - "knowledge/observations/database-autovacuum-disabled.yaml"
+      - "knowledge/probes/inspect-database-blocking-chains.yaml"
+      - "knowledge/probes/inspect-database-long-running-transactions.yaml"
+      - "knowledge/probes/inspect-database-vacuum-health.yaml"
+      - "vocabulary/capabilities.yaml"
+      - "vocabulary/tools.yaml"
+      - "scripts/postgresql_health_provider.py"
+      - "scripts/test_postgresql_health_provider.py"
+      - "scripts/test_postgresql_health_binding.py"
+      - "scripts/verify_postgresql_health_live.py"
+      - "scripts/provider_bindings.py"
+      - "schema/provider-bindings.schema.json"
+      - "RFC/0095-postgresql-health-evidence.md"
+      - ".github/workflows/postgresql-health-evidence.yml"
+  pull_request:
+    paths:
+      - "knowledge/database/lock-contention.yaml"
+      - "knowledge/database/long-running-transaction.yaml"
+      - "knowledge/database/autovacuum-pressure.yaml"
+      - "knowledge/observations/database-blocking-chain.yaml"
+      - "knowledge/observations/database-long-running-transaction.yaml"
+      - "knowledge/observations/database-vacuum-pressure.yaml"
+      - "knowledge/observations/database-autovacuum-disabled.yaml"
+      - "knowledge/probes/inspect-database-blocking-chains.yaml"
+      - "knowledge/probes/inspect-database-long-running-transactions.yaml"
+      - "knowledge/probes/inspect-database-vacuum-health.yaml"
+      - "vocabulary/capabilities.yaml"
+      - "vocabulary/tools.yaml"
+      - "scripts/postgresql_health_provider.py"
+      - "scripts/test_postgresql_health_provider.py"
+      - "scripts/test_postgresql_health_binding.py"
+      - "scripts/verify_postgresql_health_live.py"
+      - "scripts/provider_bindings.py"
+      - "schema/provider-bindings.schema.json"
+      - "RFC/0095-postgresql-health-evidence.md"
+      - ".github/workflows/postgresql-health-evidence.yml"
+
+concurrency:
+  group: postgresql-health-evidence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: causcope
+          POSTGRES_DB: causcope
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U causcope -d causcope"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema 'psycopg[binary]'
+
+      - name: Validate semantic knowledge
+        run: python scripts/validate.py
+
+      - name: Validate PostgreSQL health provider
+        run: python scripts/test_postgresql_health_provider.py
+
+      - name: Validate PostgreSQL health binding
+        run: python scripts/test_postgresql_health_binding.py
+
+      - name: Validate live PostgreSQL catalog evidence
+        env:
+          POSTGRESQL_HEALTH_DATABASE_URL: postgresql://causcope@127.0.0.1:5432/causcope
+        run: python scripts/verify_postgresql_health_live.py

@@ -1,0 +1,13 @@
+schema_version: "0.1"
+kind: provider_bindings
+bindings:
+  - provider_instance: provider.postgresql-health.orders-prod
+    driver: postgresql_health
+    database_url_env: ORDERS_DATABASE_URL
+    long_transaction_seconds: 60
+    scope:
+      boundaries:
+        - boundary.application.database
+      attributes:
+        service: orders-api
+        dependency: postgresql

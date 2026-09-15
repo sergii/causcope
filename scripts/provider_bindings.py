@@ -18,6 +18,12 @@ from pgbot_autonomous_provider import (
     file_context_supplier,
 )
 from pgbot_cli_context import PgbotCliContextSupplier
+from postgresql_health_provider import (
+    POSTGRESQL_HEALTH_INSTRUMENT,
+    POSTGRESQL_HEALTH_PROVIDER_ID,
+    PostgresqlHealthAutonomousProvider,
+    PostgresqlHealthCollector,
+)
 from rails_pool_autonomous_provider import (
     RAILS_POOL_INSTRUMENT,
     RAILS_POOL_PROVIDER_ID,
@@ -183,6 +189,28 @@ def load_provider_instance_bindings(
                 diagnosis_path=_resolve_path(path, entry["diagnosis"]),
                 concepts=concepts,
                 incident_id=incident_id,
+                source_uri=f"provider-instance:{provider_instance}",
+            )
+        elif driver == "postgresql_health":
+            if provider_type.get("instrument") != POSTGRESQL_HEALTH_INSTRUMENT:
+                raise ValueError(
+                    f"provider binding {provider_instance} uses {driver} but topology provider type "
+                    f"instrument is {provider_type.get('instrument')!r}"
+                )
+            if provider_type.get("provider_id") != POSTGRESQL_HEALTH_PROVIDER_ID:
+                raise ValueError(
+                    f"provider binding {provider_instance} expects provider id "
+                    f"{provider_type.get('provider_id')!r}, not {POSTGRESQL_HEALTH_PROVIDER_ID!r}"
+                )
+            provider = PostgresqlHealthAutonomousProvider(
+                concepts=concepts,
+                incident_id=incident_id,
+                scope=entry["scope"],
+                target_resource=instance["target"],
+                collector=PostgresqlHealthCollector(
+                    database_url_env=entry["database_url_env"],
+                    long_transaction_seconds=int(entry.get("long_transaction_seconds", 60)),
+                ),
                 source_uri=f"provider-instance:{provider_instance}",
             )
         else:
