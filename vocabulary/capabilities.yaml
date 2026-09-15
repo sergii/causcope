@@ -28,6 +28,12 @@ capabilities:
   - id: capability.database.inspect_locks
     title: Inspect database locks
     description: Read lock ownership, blocked sessions, blockers, and lock-related wait metadata without changing database state.
+  - id: capability.database.inspect_activity
+    title: Inspect database activity
+    description: Read current database sessions and transaction lifetime metadata without reading application rows or changing database state.
+  - id: capability.database.inspect_vacuum
+    title: Inspect database vacuum health
+    description: Read PostgreSQL vacuum and autovacuum configuration, relation statistics, and effective per-table settings without changing database state.
   - id: capability.database.inspect_errors
     title: Inspect database errors
     description: Read database error codes, deadlock counters, logs, or client-visible database failures without changing database state.
