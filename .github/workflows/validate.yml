@@ -24,6 +24,9 @@ jobs:
       - name: Validate product identity
         run: python scripts/test_product_identity.py
 
+      - name: Validate RFC identities
+        run: python scripts/validate_rfc_ids.py
+
       - name: Validate schemas and references
         run: python scripts/validate.py
 
