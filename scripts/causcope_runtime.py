@@ -135,6 +135,9 @@ def enrich_seed_arguments(arguments: list[str]) -> list[str]:
         objective_threshold_ms,
     )
 
+    if "-h" in arguments or "--help" in arguments:
+        return arguments
+
     parsed = seed_argument_parser().parse_args(arguments)
     if (
         parsed.request_latency_threshold_ms is not None
