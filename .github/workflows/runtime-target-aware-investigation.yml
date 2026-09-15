@@ -1,0 +1,46 @@
+name: Validate runtime target-aware investigation
+
+on:
+  pull_request:
+    paths:
+      - "scripts/runtime_target_resolution.py"
+      - "scripts/test_runtime_target_aware_investigation.py"
+      - "scripts/resource_topology.py"
+      - "scripts/instrument_routing_projection.py"
+      - "schema/runtime-target-resolution.schema.json"
+      - "schema/resource-topology.schema.json"
+      - "schema/instrument-routing-projection.schema.json"
+      - "examples/topology/shop.yaml"
+      - "RFC/0068-runtime-target-aware-investigation.md"
+      - ".github/workflows/runtime-target-aware-investigation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/runtime_target_resolution.py"
+      - "scripts/test_runtime_target_aware_investigation.py"
+      - "scripts/resource_topology.py"
+      - "scripts/instrument_routing_projection.py"
+      - "schema/runtime-target-resolution.schema.json"
+      - "schema/resource-topology.schema.json"
+      - "schema/instrument-routing-projection.schema.json"
+      - "examples/topology/shop.yaml"
+      - "RFC/0068-runtime-target-aware-investigation.md"
+      - ".github/workflows/runtime-target-aware-investigation.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install validator dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate runtime target-aware investigation
+        run: python scripts/test_runtime_target_aware_investigation.py
