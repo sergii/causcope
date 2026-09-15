@@ -10,8 +10,7 @@ import causcope_why
 from bounded_workspace_acquisition import acquire_best_workspace_evidence
 from causal_verification import build_causal_verification_projection
 from causal_verification_source import load_causal_verification_source
-from execution_set_selection import select_ready_execution_set
-from routed_execution_sets import build_routed_execution_sets
+from workspace_autonomous_investigation import run_workspace_investigation
 
 
 def load_workspace_verification(workspace: Path, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -64,23 +63,16 @@ def render_verification(projection: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def implicit_acquisition_ready(snapshot: dict[str, Any], workspace: Path) -> bool:
-    evidence_path = workspace / causcope_why.WORKSPACE_RUNTIME_EVIDENCE
-    if not evidence_path.exists():
-        return False
-
-    routing, _resolution, _router, information_gain_router = causcope_why.workspace_route_context(
-        snapshot,
-        workspace,
-        external_execution_enabled=True,
-        information_gain=True,
-    )
-    if information_gain_router is None:
-        return False
-
-    execution_sets = build_routed_execution_sets(routing)
-    selection = select_ready_execution_set(snapshot, execution_sets)
-    return selection["state"] == "selected"
+def render_autonomous_investigation(report: dict[str, Any]) -> str:
+    lines = [
+        "Autonomous investigation",
+        f"  steps: {len(report.get('steps', []))}/{report.get('max_steps', '<unknown>')}",
+        "  evidence revision: "
+        f"{report.get('initial_evidence_revision', '<unknown>')} -> "
+        f"{report.get('final_evidence_revision', '<unknown>')}",
+        f"  stop: {report.get('stop_reason', '<unknown>')} ({report.get('stop_detail', '<unknown>')})",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def run_canonical_workspace(args: Any) -> int | None:
@@ -89,15 +81,34 @@ def run_canonical_workspace(args: Any) -> int | None:
         return None
 
     problem = causcope_why.workspace_problem(args, snapshot)
-    if args.acquire or implicit_acquisition_ready(snapshot, args.workspace):
+    investigation = None
+    acquisition = None
+
+    if args.acquire:
+        # Hidden compatibility path: explicit --acquire retains its historical
+        # exactly-one-set contract. Normal product usage uses the bounded loop.
         acquisition, snapshot, routing, target_resolution = acquire_best_workspace_evidence(
             snapshot, args.workspace
         )
+        acquisitions = [acquisition]
     else:
+        investigation, snapshot, routing, target_resolution = run_workspace_investigation(
+            snapshot,
+            args.workspace,
+            max_steps=4,
+        )
+        acquisitions = [
+            step["acquisition"]
+            for step in investigation.get("steps", [])
+            if isinstance(step, dict) and isinstance(step.get("acquisition"), dict)
+        ]
+        if len(acquisitions) == 1:
+            acquisition = acquisitions[0]
+
+    if routing is None:
         routing, target_resolution, _router, _information_gain_router = causcope_why.workspace_route_context(
             snapshot, args.workspace
         )
-        acquisition = None
 
     verification = load_workspace_verification(args.workspace, snapshot)
     if args.require_confirmed and not verified_claims(verification):
@@ -114,12 +125,19 @@ def run_canonical_workspace(args: Any) -> int | None:
         }
         if target_resolution is not None:
             document["target_resolution"] = target_resolution
+        if investigation is not None:
+            document["autonomous_investigation"] = investigation
+        if acquisitions:
+            document["acquisitions"] = acquisitions
         if acquisition is not None:
+            # Compatibility for consumers that already read the single-step field.
             document["acquisition"] = acquisition
         print(json.dumps(document, indent=2, sort_keys=True))
     else:
-        if acquisition is not None:
-            print(causcope_why.render_acquisition(acquisition))
+        for result in acquisitions:
+            print(causcope_why.render_acquisition(result))
+        if investigation is not None:
+            print(render_autonomous_investigation(investigation), end="")
         print(causcope_why.render_workspace_diagnosis(problem, snapshot, routing), end="")
         print(render_verification(verification), end="")
     return 0
