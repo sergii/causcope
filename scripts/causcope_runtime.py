@@ -50,13 +50,23 @@ def snapshot_path(root: Path, incident_id: str, configured: Path | None, disable
     return (root / ".causcope" / "runtime" / f"{safe}.json").resolve()
 
 
-def build_start_command(args: argparse.Namespace) -> tuple[list[str], Path, Path | None, dict[str, Any]]:
+def resolve_incident_id(args: argparse.Namespace, root: Path) -> str:
+    if args.incident_id:
+        return args.incident_id
+    from runtime_incident_seed import load_workspace_incident_id, workspace_path
+
+    workspace = workspace_path(root, args.workspace)
+    return load_workspace_incident_id(workspace)
+
+
+def build_start_command(args: argparse.Namespace) -> tuple[list[str], Path, Path | None, dict[str, Any], str]:
     root = args.path.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"application root does not exist: {root}")
     static_path = facts_path(root, args.static_facts)
     document = load_facts(static_path)
-    snapshot = snapshot_path(root, args.incident_id, args.snapshot, args.no_snapshot)
+    incident_id = resolve_incident_id(args, root)
+    snapshot = snapshot_path(root, incident_id, args.snapshot, args.no_snapshot)
 
     command = [
         sys.executable,
@@ -64,7 +74,7 @@ def build_start_command(args: argparse.Namespace) -> tuple[list[str], Path, Path
         "--static-facts",
         str(static_path),
         "--incident-id",
-        args.incident_id,
+        incident_id,
         "--host",
         args.host,
         "--port",
@@ -76,14 +86,15 @@ def build_start_command(args: argparse.Namespace) -> tuple[list[str], Path, Path
         command.extend(["--snapshot", str(snapshot)])
     if args.verbose:
         command.append("--verbose")
-    return command, root, snapshot, document
+    return command, root, snapshot, document, incident_id
 
 
 def start(args: argparse.Namespace) -> int:
-    command, root, snapshot, document = build_start_command(args)
+    command, root, snapshot, document, incident_id = build_start_command(args)
     if snapshot is not None:
         snapshot.parent.mkdir(parents=True, exist_ok=True)
 
+    print(f"Investigation: {incident_id}")
     print(f"System: {document.get('system_id', '<unknown>')}")
     print(f"Revision: {document.get('revision', {}).get('value', '<unknown>')}")
     print(f"OTLP endpoint: http://{args.host}:{args.port}/v1/traces")
@@ -106,9 +117,17 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run concrete Causcope runtime ingestion against a pinned static contract.",
     )
     subparsers = parser.add_subparsers(dest="command_name", required=True)
-    start_parser = subparsers.add_parser("start", help="Start an OTLP receiver for one incident and scanned revision")
+    start_parser = subparsers.add_parser("start", help="Start an OTLP receiver for one investigation and scanned revision")
     start_parser.add_argument("path", type=Path, nargs="?", default=Path("."))
-    start_parser.add_argument("--incident-id", required=True)
+    start_parser.add_argument(
+        "--incident-id",
+        help="Investigation identity; defaults to WORKSPACE/incident-context.yaml",
+    )
+    start_parser.add_argument(
+        "--workspace",
+        type=Path,
+        help="Causcope workspace used to resolve the current investigation; defaults to PATH/.causcope",
+    )
     start_parser.add_argument("--static-facts", type=Path)
     start_parser.add_argument("--host", default=DEFAULT_HOST)
     start_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -122,8 +141,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] == "seed":
+        from runtime_incident_seed import main as seed_main
+
+        return seed_main(arguments[1:])
+
     try:
-        args = build_parser().parse_args(argv)
+        args = build_parser().parse_args(arguments)
         if not 0 <= args.port <= 65535:
             raise ValueError("--port must be between 0 and 65535")
         return args.handler(args)
