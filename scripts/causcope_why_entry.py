@@ -104,7 +104,7 @@ def _extract_observe(argv: list[str]) -> tuple[list[str], Path | None, list[str]
     if not observe_root.is_dir():
         raise ValueError(f"--observe Rails root does not exist: {observe_root}")
     if "--acquire" in cleaned:
-        raise ValueError("--observe cannot be combined with the legacy --acquire compatibility flag")
+        raise ValueError("--observe cannot be combined with --acquire; the acquisition flag is legacy compatibility only")
     if "--require-confirmed" in cleaned:
         raise ValueError("--observe cannot be combined with --require-confirmed")
     if _has_explicit_compatibility_paths(cleaned):
