@@ -6,8 +6,11 @@ on:
     paths:
       - "schema/database-read-model-recommendation-context.schema.json"
       - "schema/architectural-recommendation-projection.schema.json"
+      - "schema/recommendation-information-gap-projection.schema.json"
       - "scripts/database_read_model_recommendation.py"
+      - "scripts/recommendation_information_gaps.py"
       - "scripts/test_database_read_model_recommendation.py"
+      - "scripts/test_recommendation_information_gaps.py"
       - "scripts/pgbot_adapter.py"
       - "scripts/resource_topology.py"
       - "examples/adapters/pgbot/postgresql.yaml"
@@ -16,13 +19,17 @@ on:
       - "knowledge/database/denormalized-read-model.yaml"
       - "RFC/0064-causally-justified-architecture-advice.md"
       - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
+      - "RFC/0067-recommendation-information-gap-ranking.md"
       - ".github/workflows/database-read-model-recommendation.yml"
   pull_request:
     paths:
       - "schema/database-read-model-recommendation-context.schema.json"
       - "schema/architectural-recommendation-projection.schema.json"
+      - "schema/recommendation-information-gap-projection.schema.json"
       - "scripts/database_read_model_recommendation.py"
+      - "scripts/recommendation_information_gaps.py"
       - "scripts/test_database_read_model_recommendation.py"
+      - "scripts/test_recommendation_information_gaps.py"
       - "scripts/pgbot_adapter.py"
       - "scripts/resource_topology.py"
       - "examples/adapters/pgbot/postgresql.yaml"
@@ -31,6 +38,7 @@ on:
       - "knowledge/database/denormalized-read-model.yaml"
       - "RFC/0064-causally-justified-architecture-advice.md"
       - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
+      - "RFC/0067-recommendation-information-gap-ranking.md"
       - ".github/workflows/database-read-model-recommendation.yml"
 
 permissions:
@@ -56,6 +64,9 @@ jobs:
       - name: Verify recommendation evidence progression
         run: python scripts/test_database_read_model_recommendation.py
 
+      - name: Verify recommendation information-gap progression
+        run: python scripts/test_recommendation_information_gaps.py
+
       - name: Project insufficient-context case
         run: |
           python scripts/database_read_model_recommendation.py \
@@ -77,6 +88,26 @@ jobs:
           PY
 
           cat /tmp/read-model-insufficient.json
+
+      - name: Project next recommendation information gap
+        run: |
+          python scripts/recommendation_information_gaps.py \
+            --recommendation-projection /tmp/read-model-insufficient.json \
+            --output /tmp/read-model-information-gaps.json \
+            --pretty
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('/tmp/read-model-information-gaps.json').read_text())
+          assert result['status'] == 'INFORMATION_GAP'
+          assert result['next_action']['kind'] == 'operator_question'
+          assert result['next_action']['gap_id'] == 'information_gap.business_semantics.consistency_contract'
+          assert result['gaps'][0]['rank'] == 1
+          PY
+
+          cat /tmp/read-model-information-gaps.json
 
       - name: Project measured-benefit case
         run: |
