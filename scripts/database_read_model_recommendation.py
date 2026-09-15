@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,8 @@ from jsonschema import Draft202012Validator, FormatChecker
 from causal_projection import load_concepts
 from pgbot_adapter import build_runtime_evidence, load_adapter, load_context
 from resource_topology import load_resource_topology
-from runtime_evidence import parse_timestamp
+from runtime_evidence import parse_timestamp, validate_runtime_references
+from runtime_evidence_composition import validate_runtime_evidence_document
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTEXT_SCHEMA = ROOT / "schema" / "database-read-model-recommendation-context.schema.json"
@@ -44,11 +46,49 @@ def validate_schema(document: dict[str, Any], schema_path: Path, label: str) -> 
         )
 
 
+def _validate_recommendation_context(
+    context: dict[str, Any],
+    topology_path: Path,
+) -> tuple[
+    dict[str, dict[str, Any]],
+    Any,
+    dict[str, Any],
+    dict[str, Any],
+]:
+    validate_schema(context, CONTEXT_SCHEMA, "recommendation context")
+
+    concepts = load_concepts(ROOT)
+    recommendation = concepts.get(context["recommendation_id"])
+    if recommendation is None:
+        raise ValueError(f"unknown recommendation concept: {context['recommendation_id']}")
+    if recommendation.get("kind") != "architectural_recommendation":
+        raise ValueError("recommendation_id must reference architectural_recommendation")
+    if recommendation.get("human_approval_required") is not True:
+        raise ValueError("architectural recommendation must require human approval")
+
+    topology = load_resource_topology(topology_path)
+    resource = topology.resource(context["subject_resource"])
+    if resource.get("kind") != "postgresql_database":
+        raise ValueError("database read-model recommendation requires a postgresql_database target")
+
+    provider_instance = topology.provider_instance(context["provider_instance"])
+    if provider_instance["target"] != context["subject_resource"]:
+        raise ValueError("provider instance target does not match recommendation subject_resource")
+    provider_type = topology.provider_type(provider_instance["provider_type"])
+    if provider_type.get("instrument") != "pgbot":
+        raise ValueError("database read-model recommendation proof requires a pgbot provider instance")
+
+    return concepts, topology, resource, provider_instance
+
+
 def active_query_latency_evidence(
     runtime_evidence: dict[str, Any],
     *,
     query_object: str,
     evaluation_time: str,
+    subject_resource: str | None = None,
+    provider_instance: str | None = None,
+    require_routed_identity: bool = False,
 ) -> dict[str, Any] | None:
     evaluated_at = parse_timestamp(evaluation_time, "recommendation.evaluation_time")
     matches: list[dict[str, Any]] = []
@@ -60,6 +100,15 @@ def active_query_latency_evidence(
         attributes = instance.get("source", {}).get("attributes", {})
         if attributes.get("pgbot.object") != query_object:
             continue
+        if require_routed_identity:
+            if not subject_resource or not provider_instance:
+                raise ValueError("routed evidence matching requires subject_resource and provider_instance")
+            if attributes.get("routing.target_resource") != subject_resource:
+                continue
+            if attributes.get("routing.instrument_id") != provider_instance:
+                continue
+            if instance.get("labels", {}).get("instrument") != provider_instance:
+                continue
         observed_at = parse_timestamp(instance["observed_at"], f"{instance['id']}.observed_at")
         expires_at = parse_timestamp(instance["expires_at"], f"{instance['id']}.expires_at")
         if observed_at <= evaluated_at < expires_at:
@@ -118,58 +167,26 @@ def projected_benefit(context: dict[str, Any]) -> dict[str, Any] | None:
     return projected
 
 
-def project(
+def _project_validated(
     *,
     context: dict[str, Any],
-    topology_path: Path,
-    adapter_path: Path,
-    pgbot_context_path: Path,
+    concepts: dict[str, dict[str, Any]],
+    runtime_evidence: dict[str, Any],
+    require_routed_identity: bool,
 ) -> dict[str, Any]:
-    validate_schema(context, CONTEXT_SCHEMA, "recommendation context")
+    validate_runtime_evidence_document(runtime_evidence)
+    validate_runtime_references(runtime_evidence, concepts)
+    if runtime_evidence["incident_id"] != context["incident_id"]:
+        raise ValueError("runtime evidence incident_id does not match recommendation context")
 
-    concepts = load_concepts(ROOT)
-    recommendation = concepts.get(context["recommendation_id"])
-    if recommendation is None:
-        raise ValueError(f"unknown recommendation concept: {context['recommendation_id']}")
-    if recommendation.get("kind") != "architectural_recommendation":
-        raise ValueError("recommendation_id must reference architectural_recommendation")
-    if recommendation.get("human_approval_required") is not True:
-        raise ValueError("architectural recommendation must require human approval")
-
-    topology = load_resource_topology(topology_path)
-    resource = topology.resource(context["subject_resource"])
-    if resource.get("kind") != "postgresql_database":
-        raise ValueError("database read-model recommendation requires a postgresql_database target")
-
-    provider_instance = topology.provider_instance(context["provider_instance"])
-    if provider_instance["target"] != context["subject_resource"]:
-        raise ValueError("provider instance target does not match recommendation subject_resource")
-    provider_type = topology.provider_type(provider_instance["provider_type"])
-    if provider_type.get("instrument") != "pgbot":
-        raise ValueError("database read-model recommendation proof requires a pgbot provider instance")
-
-    adapter = load_adapter(adapter_path)
-    pgbot_context = load_context(pgbot_context_path)
-    expected_database = resource.get("attributes", {}).get("database")
-    observed_database = pgbot_context.get("server", {}).get("database")
-    if expected_database and observed_database != expected_database:
-        raise ValueError(
-            "pgbot database identity does not match topology target: "
-            f"expected {expected_database}, observed {observed_database}"
-        )
-
-    runtime_evidence = build_runtime_evidence(
-        adapter,
-        pgbot_context,
-        concepts,
-        incident_id=context["incident_id"],
-        source_uri=f"provider-instance:{provider_instance['id']}",
-    )
     query_object = context["workload"]["query_object"]
     query_evidence = active_query_latency_evidence(
         runtime_evidence,
         query_object=query_object,
         evaluation_time=context["evaluation_time"],
+        subject_resource=context["subject_resource"],
+        provider_instance=context["provider_instance"],
+        require_routed_identity=require_routed_identity,
     )
 
     causal_basis: dict[str, Any] = {
@@ -195,7 +212,7 @@ def project(
         "schema_version": "0.1",
         "kind": "architectural_recommendation_projection",
         "system_id": context["system_id"],
-        "revision": context["revision"],
+        "revision": copy.deepcopy(context["revision"]),
         "incident_id": context["incident_id"],
         "recommendation_id": context["recommendation_id"],
         "subject_resource": context["subject_resource"],
@@ -203,19 +220,21 @@ def project(
         "state": state,
         "human_approval_required": True,
         "causal_basis": causal_basis,
-        "problem": context["workload"],
+        "problem": copy.deepcopy(context["workload"]),
         "missing_assumptions": missing,
         "limitations": list(BASE_LIMITATIONS),
     }
+    if "evidence_scope" in context:
+        projection["evidence_scope"] = copy.deepcopy(context["evidence_scope"])
 
     for key in ("proposed_change", "cost", "verification"):
         if key in context:
-            projection[key] = context[key]
+            projection[key] = copy.deepcopy(context[key])
 
     if "business_semantics" in context or "maintenance" in context:
         consistency: dict[str, Any] = {}
-        consistency.update(context.get("business_semantics", {}))
-        consistency.update(context.get("maintenance", {}))
+        consistency.update(copy.deepcopy(context.get("business_semantics", {})))
+        consistency.update(copy.deepcopy(context.get("maintenance", {})))
         projection["consistency"] = consistency
 
     benefit = projected_benefit(context)
@@ -228,6 +247,62 @@ def project(
 
     validate_schema(projection, PROJECTION_SCHEMA, "recommendation projection")
     return projection
+
+
+def project_from_runtime_evidence(
+    *,
+    context: dict[str, Any],
+    topology_path: Path,
+    runtime_evidence: dict[str, Any],
+    require_routed_identity: bool = True,
+) -> dict[str, Any]:
+    concepts, _topology, _resource, _provider_instance = _validate_recommendation_context(
+        context,
+        topology_path,
+    )
+    return _project_validated(
+        context=context,
+        concepts=concepts,
+        runtime_evidence=runtime_evidence,
+        require_routed_identity=require_routed_identity,
+    )
+
+
+def project(
+    *,
+    context: dict[str, Any],
+    topology_path: Path,
+    adapter_path: Path,
+    pgbot_context_path: Path,
+) -> dict[str, Any]:
+    concepts, _topology, resource, provider_instance = _validate_recommendation_context(
+        context,
+        topology_path,
+    )
+
+    adapter = load_adapter(adapter_path)
+    pgbot_context = load_context(pgbot_context_path)
+    expected_database = resource.get("attributes", {}).get("database")
+    observed_database = pgbot_context.get("server", {}).get("database")
+    if expected_database and observed_database != expected_database:
+        raise ValueError(
+            "pgbot database identity does not match topology target: "
+            f"expected {expected_database}, observed {observed_database}"
+        )
+
+    runtime_evidence = build_runtime_evidence(
+        adapter,
+        pgbot_context,
+        concepts,
+        incident_id=context["incident_id"],
+        source_uri=f"provider-instance:{provider_instance['id']}",
+    )
+    return _project_validated(
+        context=context,
+        concepts=concepts,
+        runtime_evidence=runtime_evidence,
+        require_routed_identity=False,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

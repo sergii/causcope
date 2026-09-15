@@ -83,6 +83,21 @@
     }
   },
   "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boundaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
     "gap": {
       "type": "object",
       "additionalProperties": false,
@@ -127,7 +142,8 @@
         "blocks_progression": {"type": "boolean"},
         "missing_assumption": {"type": "string", "minLength": 1},
         "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
-        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"}
+        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"},
+        "scope": {"$ref": "#/$defs/scope"}
       }
     },
     "action": {
@@ -157,7 +173,8 @@
           ]
         },
         "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
-        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"}
+        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"},
+        "scope": {"$ref": "#/$defs/scope"}
       }
     }
   }

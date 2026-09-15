@@ -35,6 +35,21 @@
     "recommendation_id": {"const": "recommendation.database.denormalize_read_model"},
     "subject_resource": {"type": "string", "minLength": 1},
     "provider_instance": {"type": "string", "minLength": 1},
+    "evidence_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boundaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
     "workload": {
       "type": "object",
       "additionalProperties": false,

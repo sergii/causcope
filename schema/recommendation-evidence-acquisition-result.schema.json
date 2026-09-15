@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/recommendation-evidence-acquisition-result.schema.json",
+  "title": "Causcope recommendation evidence acquisition result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "system_id",
+    "revision",
+    "incident_id",
+    "recommendation_id",
+    "subject_resource",
+    "acquisition_time",
+    "previous_state",
+    "probe_id",
+    "requested_observation",
+    "routing",
+    "evidence",
+    "recommendation_state",
+    "information_gap_status",
+    "progressed",
+    "next_action",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "recommendation_evidence_acquisition_result"},
+    "system_id": {"type": "string", "minLength": 1},
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "incident_id": {"type": "string", "minLength": 1},
+    "recommendation_id": {"type": "string", "minLength": 1},
+    "subject_resource": {"type": "string", "minLength": 1},
+    "acquisition_time": {"type": "string", "format": "date-time"},
+    "previous_state": {"$ref": "#/$defs/recommendation_state"},
+    "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
+    "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"},
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instrument_id", "instrument_kind", "execution_mode", "target_resource"],
+      "properties": {
+        "instrument_id": {"type": "string", "minLength": 1},
+        "instrument_kind": {"const": "diagnostic_provider"},
+        "execution_mode": {"const": "direct"},
+        "target_resource": {"type": "string", "minLength": 1},
+        "provider_type": {"type": "string", "minLength": 1},
+        "runner": {"type": "string", "minLength": 1},
+        "endpoint_resource": {"type": "string", "minLength": 1}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance_ids", "matching_instance_ids"],
+      "properties": {
+        "instance_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "matching_instance_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "recommendation_state": {"$ref": "#/$defs/recommendation_state"},
+    "information_gap_status": {
+      "enum": [
+        "EVIDENCE_REFRESH_REQUIRED",
+        "INFORMATION_GAP",
+        "EXPERIMENT_REQUIRED",
+        "CANDIDATE_REJECTED",
+        "HUMAN_REVIEW_READY"
+      ]
+    },
+    "progressed": {"type": "boolean"},
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "execution_boundary"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "operator_question",
+            "read_only_probe",
+            "safe_experiment",
+            "human_decision",
+            "stop_candidate"
+          ]
+        },
+        "execution_boundary": {
+          "enum": [
+            "question_only",
+            "existing_read_only_probe",
+            "experiment_plan_only",
+            "human_decision_required",
+            "stop_without_more_evidence"
+          ]
+        },
+        "gap_id": {"type": "string", "minLength": 1},
+        "probe_id": {"type": "string", "minLength": 1},
+        "requested_observation": {"type": "string", "minLength": 1}
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "recommendation_state": {
+      "enum": [
+        "NO_PROBLEM_EVIDENCE",
+        "INSUFFICIENT_CONTEXT",
+        "EXPERIMENT_REQUIRED",
+        "BENEFIT_NOT_DEMONSTRATED",
+        "ESTIMATED_BENEFIT",
+        "READY_FOR_HUMAN_REVIEW"
+      ]
+    }
+  }
+}
