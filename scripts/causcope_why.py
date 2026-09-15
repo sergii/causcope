@@ -6,7 +6,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
+from causal_projection import ROOT, load_concepts
 from causcope_cli import (
     DEFAULT_WORKSPACE,
     default_incident_id,
@@ -15,7 +17,12 @@ from causcope_cli import (
     load_state,
     persist_state,
 )
+from instrument_router import InstrumentRouter
+from instrument_routing_projection import build_instrument_routing_projection
+from probe_executor_runtime import build_probe_execution_capabilities
 from rails_pool_vertical_slice import build_summary, load_document, render
+
+WORKSPACE_DIAGNOSIS = "diagnosis.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,7 +58,7 @@ def diagnostic_paths(args: argparse.Namespace) -> tuple[Path, Path, Path] | None
     return None
 
 
-def render_scoping(problem: str, projection: dict) -> str:
+def render_scoping(problem: str, projection: dict[str, Any]) -> str:
     action = projection.get("next_action")
     lines = [
         "Causcope investigation",
@@ -79,14 +86,14 @@ def render_scoping(problem: str, projection: dict) -> str:
                 "  SCOPING_COMPLETE",
                 "",
                 "Diagnosis",
-                "  No diagnostic evidence bundle is attached to this front door yet.",
-                "  Continue with evidence acquisition or provide canonical diagnostic artifacts.",
+                "  No diagnostic evidence bundle is available in this workspace yet.",
+                "  Continue with evidence acquisition; `causcope why` will consume diagnosis.json automatically when it appears.",
             ]
         )
     return "\n".join(lines) + "\n"
 
 
-def scoping_projection(args: argparse.Namespace) -> tuple[str, dict]:
+def scoping_projection(args: argparse.Namespace) -> tuple[str, dict[str, Any]]:
     context_path = args.workspace / "incident-context.yaml"
     if context_path.exists():
         context, _session, projection = load_state(args.workspace)
@@ -103,6 +110,172 @@ def scoping_projection(args: argparse.Namespace) -> tuple[str, dict]:
     session = initial_session(incident_id)
     projection = persist_state(args.workspace, context, session)
     return args.problem, projection
+
+
+def load_workspace_diagnosis(workspace: Path) -> dict[str, Any] | None:
+    path = workspace / WORKSPACE_DIAGNOSIS
+    if not path.exists():
+        return None
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or document.get("kind") != "diagnosis_snapshot":
+        raise ValueError(f"{path} is not a diagnosis_snapshot")
+    return document
+
+
+def workspace_problem(args: argparse.Namespace, snapshot: dict[str, Any]) -> str:
+    if args.problem:
+        return args.problem
+    context_path = args.workspace / "incident-context.yaml"
+    if context_path.exists():
+        context, _session, _projection = load_state(args.workspace)
+        return context["summary"]
+    return f"investigation {snapshot['incident_id']}"
+
+
+def workspace_routing(snapshot: dict[str, Any]) -> dict[str, Any]:
+    concepts = load_concepts(ROOT)
+    router = InstrumentRouter(
+        concepts=concepts,
+        host_capabilities=build_probe_execution_capabilities(concepts),
+        providers=[],
+    )
+    return build_instrument_routing_projection(snapshot, router)
+
+
+def _top_candidate(diagnosis: dict[str, Any]) -> dict[str, Any] | None:
+    ranking = diagnosis.get("ranking")
+    candidates = ranking.get("candidates", []) if isinstance(ranking, dict) else []
+    if not isinstance(candidates, list) or not candidates:
+        return None
+    candidate = candidates[0]
+    return candidate if isinstance(candidate, dict) else None
+
+
+def _top_probe(diagnosis: dict[str, Any]) -> dict[str, Any] | None:
+    ranking = diagnosis.get("probe_ranking")
+    probes = ranking.get("probes", []) if isinstance(ranking, dict) else []
+    if not isinstance(probes, list) or not probes:
+        return None
+    probe = probes[0]
+    return probe if isinstance(probe, dict) else None
+
+
+def _candidate_evidence(candidate: dict[str, Any]) -> tuple[list[str], list[str]]:
+    factors = candidate.get("factors", {})
+    supporting: set[str] = set()
+    contradicting: set[str] = set()
+    if isinstance(factors, dict):
+        for item in factors.get("matched_path_observations", []):
+            if isinstance(item, str):
+                supporting.add(item)
+        predictions = factors.get("prediction_matches", {})
+        if isinstance(predictions, dict):
+            for values in predictions.values():
+                if isinstance(values, list):
+                    supporting.update(item for item in values if isinstance(item, str))
+        for item in factors.get("conflicting_observations", []):
+            if isinstance(item, str):
+                contradicting.add(item)
+    return sorted(supporting), sorted(contradicting)
+
+
+def _route_index(routing: dict[str, Any]) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    index: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for route in routing.get("routes", []):
+        target = route.get("target")
+        probe_id = route.get("probe_id")
+        if isinstance(target, str) and isinstance(probe_id, str):
+            index.setdefault((target, probe_id), []).append(route)
+    return index
+
+
+def render_workspace_diagnosis(
+    problem: str,
+    snapshot: dict[str, Any],
+    routing: dict[str, Any],
+) -> str:
+    lines = [
+        "Causcope investigation",
+        "",
+        "Problem",
+        f"  {problem}",
+        "",
+        "Status",
+        f"  DIAGNOSIS_AVAILABLE (evidence revision {snapshot['evidence_revision']})",
+    ]
+    routes = _route_index(routing)
+    diagnosis_count = 0
+
+    for partition in snapshot.get("partitions", []):
+        scope = partition.get("scope")
+        for diagnosis in partition.get("diagnoses", []):
+            diagnosis_count += 1
+            target = diagnosis.get("target", "<unknown>")
+            candidate = _top_candidate(diagnosis)
+            probe = _top_probe(diagnosis)
+            lines.extend(["", f"Diagnosis {diagnosis_count}", f"  target: {target}"])
+            if scope:
+                lines.append("  scope: " + json.dumps(scope, sort_keys=True))
+
+            if candidate is None:
+                lines.append("  leading hypothesis: not established")
+            else:
+                hypothesis = candidate.get("source", {}).get("id", "<unknown>")
+                lines.append(f"  leading hypothesis: {hypothesis}")
+                supporting, contradicting = _candidate_evidence(candidate)
+                lines.append("  supported by:")
+                if supporting:
+                    lines.extend(f"    + {item}" for item in supporting)
+                else:
+                    lines.append("    + no explicit supporting observation beyond the ranked causal path")
+                lines.append("  contradicted by:")
+                if contradicting:
+                    lines.extend(f"    - {item}" for item in contradicting)
+                else:
+                    lines.append("    - none currently known")
+
+            if probe is None:
+                reason = diagnosis.get("probe_ranking", {}).get("not_found_reason")
+                lines.append(f"  next probe: none ({reason or 'not required'})")
+                continue
+
+            probe_id = probe.get("probe", {}).get("id", "<unknown>")
+            lines.append(f"  next probe: {probe_id}")
+            matching_routes = routes.get((str(target), str(probe_id)), [])
+            if not matching_routes:
+                lines.append("  instrument: unresolved")
+                continue
+            for route in matching_routes:
+                selected = route.get("decision", {}).get("selected_instrument")
+                if isinstance(selected, dict):
+                    lines.append(f"  instrument: {selected.get('id', '<unknown>')}")
+                    lines.append(f"  action: {route.get('agent_action', {}).get('kind', 'unknown')}")
+                else:
+                    stop_reason = route.get("decision", {}).get("stop_reason") or "no_safe_available_instrument"
+                    lines.append(f"  instrument: not selected ({stop_reason})")
+
+    if diagnosis_count == 0:
+        lines.extend(
+            [
+                "",
+                "Diagnosis",
+                "  No ranked diagnosis is currently available from active evidence.",
+            ]
+        )
+
+    unranked = sorted(
+        {
+            item
+            for partition in snapshot.get("partitions", [])
+            for item in partition.get("unranked_observations", [])
+            if isinstance(item, str)
+        }
+    )
+    if unranked:
+        lines.extend(["", "Unranked observations"])
+        lines.extend(f"  ? {item}" for item in unranked)
+
+    return "\n".join(lines) + "\n"
 
 
 def command(args: argparse.Namespace) -> int:
@@ -122,6 +295,33 @@ def command(args: argparse.Namespace) -> int:
             print(json.dumps(summary, indent=2, sort_keys=True))
         else:
             print(render(summary), end="")
+        return 0
+
+    snapshot = load_workspace_diagnosis(args.workspace)
+    if snapshot is not None:
+        if args.require_confirmed:
+            raise ValueError(
+                "--require-confirmed currently applies only to the Rails D3.1 concrete proof; "
+                "workspace diagnosis is ordinal and does not claim causal confirmation"
+            )
+        problem = workspace_problem(args, snapshot)
+        routing = workspace_routing(snapshot)
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "kind": "causcope_why",
+                        "problem": problem,
+                        "status": "diagnosis_available",
+                        "diagnosis": snapshot,
+                        "routing": routing,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(render_workspace_diagnosis(problem, snapshot, routing), end="")
         return 0
 
     if args.require_confirmed:
