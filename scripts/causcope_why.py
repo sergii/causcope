@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime", type=Path, help="Concrete Runtime Facts document")
     parser.add_argument("--pool", type=Path, help="Resource-pool runtime evidence document")
     parser.add_argument("--json", action="store_true", help="Print the selected canonical projection as JSON")
+    parser.add_argument(
+        "--require-confirmed",
+        action="store_true",
+        help="Fail closed unless an attached diagnostic projection reaches CAUSAL_DIAGNOSIS_CONFIRMED",
+    )
     return parser
 
 
@@ -111,11 +116,16 @@ def command(args: argparse.Namespace) -> int:
             load_document(runtime_path),
             load_document(pool_path),
         )
+        if args.require_confirmed and summary["status"] != "confirmed":
+            raise ValueError(f"diagnosis not confirmed: {summary['epistemic_state']}")
         if args.json:
             print(json.dumps(summary, indent=2, sort_keys=True))
         else:
             print(render(summary), end="")
         return 0
+
+    if args.require_confirmed:
+        raise ValueError("--require-confirmed requires --static, --runtime, and --pool")
 
     problem, projection = scoping_projection(args)
     if args.json:

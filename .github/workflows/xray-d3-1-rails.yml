@@ -4,13 +4,15 @@ on:
   push:
     branches: [main]
     paths:
+      - "bin/causcope"
       - "integrations/rails/**"
       - "scripts/causcope_scan.py"
+      - "scripts/causcope_why.py"
+      - "scripts/rails_pool_vertical_slice.py"
       - "scripts/rails_repository_scan.rb"
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/otlp_concrete_receiver.py"
       - "scripts/xray_engine.py"
-      - "scripts/rails_pool_vertical_slice.py"
       - "schema/concrete-system-facts.schema.json"
       - "schema/concrete-runtime-facts.schema.json"
       - "schema/resource-pool-runtime-evidence.schema.json"
@@ -23,13 +25,15 @@ on:
       - ".github/workflows/xray-d3-1-rails.yml"
   pull_request:
     paths:
+      - "bin/causcope"
       - "integrations/rails/**"
       - "scripts/causcope_scan.py"
+      - "scripts/causcope_why.py"
+      - "scripts/rails_pool_vertical_slice.py"
       - "scripts/rails_repository_scan.rb"
       - "scripts/otel_concrete_runtime_facts.py"
       - "scripts/otlp_concrete_receiver.py"
       - "scripts/xray_engine.py"
-      - "scripts/rails_pool_vertical_slice.py"
       - "schema/concrete-system-facts.schema.json"
       - "schema/concrete-runtime-facts.schema.json"
       - "schema/resource-pool-runtime-evidence.schema.json"
@@ -265,15 +269,30 @@ jobs:
 
           cat /tmp/rails-d3-xray.json
 
-      - name: Render product diagnosis from live Rails evidence
+      - name: Run product-shaped causcope why diagnosis over the same live artifacts
         run: |
-          python scripts/rails_pool_vertical_slice.py \
+          ./bin/causcope why "checkout is slow" \
             --static /tmp/rails-d3-static.json \
             --runtime /tmp/rails-d3-runtime.json \
             --pool /tmp/rails-d3-pool.json \
-            --problem "checkout is slow" \
-            --json \
             --require-confirmed \
+            > /tmp/rails-d3-diagnosis.txt
+
+          cat /tmp/rails-d3-diagnosis.txt
+
+          grep -F "CONFIRMED (CAUSAL_DIAGNOSIS_CONFIRMED)" /tmp/rails-d3-diagnosis.txt
+          grep -F "application-side database connection pool exhaustion" /tmp/rails-d3-diagnosis.txt
+          grep -F "code:PoolController#work()" /tmp/rails-d3-diagnosis.txt
+          grep -F "pool:active_record.primary" /tmp/rails-d3-diagnosis.txt
+          grep -F "PostgreSQL-wide connection admission exhaustion" /tmp/rails-d3-diagnosis.txt
+          grep -F "not established by this bounded slice" /tmp/rails-d3-diagnosis.txt
+
+          ./bin/causcope why "checkout is slow" \
+            --static /tmp/rails-d3-static.json \
+            --runtime /tmp/rails-d3-runtime.json \
+            --pool /tmp/rails-d3-pool.json \
+            --require-confirmed \
+            --json \
             > /tmp/rails-d3-diagnosis.json
 
           python - <<'PY'
@@ -281,6 +300,7 @@ jobs:
           from pathlib import Path
 
           diagnosis = json.loads(Path('/tmp/rails-d3-diagnosis.json').read_text())
+          assert diagnosis['problem'] == 'checkout is slow'
           assert diagnosis['status'] == 'confirmed'
           assert diagnosis['epistemic_state'] == 'CAUSAL_DIAGNOSIS_CONFIRMED'
           assert diagnosis['root_cause'] == 'application-side database connection pool exhaustion'
@@ -289,23 +309,7 @@ jobs:
           assert diagnosis['blast_radius'] == 'not established by this bounded slice'
           assert 'slow SQL execution as the primary explanation' in diagnosis['rejected_nearby_explanations']
           assert 'PostgreSQL-wide connection admission exhaustion' in diagnosis['rejected_nearby_explanations']
-          print(json.dumps(diagnosis, indent=2, sort_keys=True))
           PY
-
-          python scripts/rails_pool_vertical_slice.py \
-            --static /tmp/rails-d3-static.json \
-            --runtime /tmp/rails-d3-runtime.json \
-            --pool /tmp/rails-d3-pool.json \
-            --problem "checkout is slow" \
-            --require-confirmed \
-            > /tmp/rails-d3-diagnosis.txt
-
-          cat /tmp/rails-d3-diagnosis.txt
-          grep -F "Root cause" /tmp/rails-d3-diagnosis.txt
-          grep -F "application-side database connection pool exhaustion" /tmp/rails-d3-diagnosis.txt
-          grep -F "code:PoolController#work()" /tmp/rails-d3-diagnosis.txt
-          grep -F "pool:active_record.primary" /tmp/rails-d3-diagnosis.txt
-          grep -F "not established by this bounded slice" /tmp/rails-d3-diagnosis.txt
 
       - name: Verify technology and identity fail closed
         run: |
