@@ -8,7 +8,7 @@ from typing import Any
 
 import causcope_why
 from causal_verification import build_causal_verification_projection
-from runtime_evidence import load_runtime_evidence
+from causal_verification_source import load_causal_verification_source
 
 
 def load_workspace_verification(workspace: Path, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -18,7 +18,9 @@ def load_workspace_verification(workspace: Path, snapshot: dict[str, Any]) -> di
             f"canonical causal verification requires {evidence_path}; "
             "the diagnosis snapshot alone cannot establish intervention outcomes"
         )
-    return build_causal_verification_projection(snapshot, load_runtime_evidence(evidence_path))
+    return build_causal_verification_projection(
+        snapshot, load_causal_verification_source(evidence_path)
+    )
 
 
 def verified_claims(projection: dict[str, Any]) -> list[dict[str, Any]]:
