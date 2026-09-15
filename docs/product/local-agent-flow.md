@@ -64,6 +64,9 @@ problem statement
   -> rank empirically grounded alternatives
   -> choose next discriminator
   -> resolve exact operational target
+  -> if exactly one safe read-only execution set is ready, acquire it
+  -> atomically commit the next evidence revision
+  -> rerank
   -> render ordinary persisted `causcope why` diagnosis
 ```
 
@@ -96,19 +99,13 @@ Plain:
 causcope why
 ```
 
-reads the persisted Investigation state and does not execute a live diagnostic provider.
+is now both the persisted Investigation projection and the autonomous diagnostic continuation point.
 
-When Causcope has one current, exact, safe, read-only provider route, the user may explicitly authorize the next evidence acquisition step:
-
-```bash
-causcope why --acquire
-```
-
-That path is:
+When Causcope has exactly one current, exact, safe, read-only provider execution set, it executes that set without asking the operator to choose the semantic probe, target, provider, or acquisition command.
 
 ```text
 current diagnosis revision N
-  -> ranked next probe
+  -> ranked next semantic probe
   -> exact target
   -> configured provider instance
   -> revalidate revision + route + provider + target
@@ -119,17 +116,19 @@ current diagnosis revision N
   -> rerank
 ```
 
-Observation and provider acquisition remain separate authorization boundaries.
+If no execution set is ready, `causcope why` only renders current state. If more than one independent set is ready, this proof does not choose arbitrarily; multi-set autonomous policy remains future work.
+
+The old `--acquire` parser input may remain temporarily for compatibility, but it is not operator-visible product UX and is not required by the canonical flow.
+
+Observation remains a distinct boundary because the bounded application command is chosen by the operator:
 
 ```text
---observe
-  local user explicitly runs one bounded instrumented application command
+--observe -- <command>
+  explicit bounded application execution
 
---acquire
-  user explicitly authorizes one ranked read-only diagnostic provider operation
+normal why continuation
+  only semantic-probe-ranked, exact-target, capability-constrained read-only provider execution
 ```
-
-They cannot be combined in one `why` invocation.
 
 ## Lower-level/debugging surfaces
 
@@ -204,10 +203,11 @@ human problem statement
   -> causal alternatives
   -> best next discriminator
   -> exact operational target
-  -> optional explicit evidence acquisition
+  -> autonomous bounded read-only evidence acquisition
   -> reranked diagnosis
+  -> causal verification when the required intervention evidence exists
 ```
 
-without requiring Causcope Cloud.
+without requiring Causcope Cloud and without exposing the internal acquisition step as operator UX.
 
 The next product work should improve lifecycle ergonomics, knowledge breadth, and human/team projections without weakening this contract.
