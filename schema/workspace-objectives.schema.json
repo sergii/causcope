@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/workspace-objectives.schema.json",
+  "title": "Causcope workspace objectives",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "objectives"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "workspace_objectives"},
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/objective"}
+    }
+  },
+  "$defs": {
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation", "operator", "threshold", "source"],
+      "properties": {
+        "observation": {"type": "string", "minLength": 1},
+        "operator": {"enum": ["above"]},
+        "threshold": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit"],
+          "properties": {
+            "value": {"type": "number", "minimum": 0},
+            "unit": {"enum": ["ms"]}
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {"enum": ["user_declared"]}
+          }
+        }
+      }
+    }
+  }
+}
