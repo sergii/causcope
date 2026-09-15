@@ -7,19 +7,23 @@ on:
       - "scripts/routed_execution_set_mcp_tool.py"
       - "scripts/routed_execution_set_journal.py"
       - "scripts/routed_execution_set_status.py"
+      - "scripts/routed_execution_set_recovery.py"
       - "scripts/test_multi_target_execution_set.py"
       - "scripts/test_routed_execution_set_journal.py"
       - "scripts/test_routed_execution_set_status.py"
+      - "scripts/test_routed_execution_set_recovery.py"
       - "scripts/routed_agent_plan.py"
       - "scripts/routing_mcp_server.py"
       - "scripts/test_routing_mcp_server.py"
       - "schema/routed-execution-sets.schema.json"
       - "schema/routed-execution-set-journal-event.schema.json"
       - "schema/routed-execution-set-status.schema.json"
+      - "schema/routed-execution-set-recovery.schema.json"
       - "schema/routed-agent-plan.schema.json"
       - "RFC/0069-multi-target-execution-set-lifecycle.md"
       - "RFC/0071-durable-execution-set-journal.md"
       - "RFC/0073-execution-set-status-projection.md"
+      - "RFC/0074-execution-set-recovery-policy.md"
       - ".github/workflows/multi-target-execution-set.yml"
   push:
     branches: [main]
@@ -28,19 +32,23 @@ on:
       - "scripts/routed_execution_set_mcp_tool.py"
       - "scripts/routed_execution_set_journal.py"
       - "scripts/routed_execution_set_status.py"
+      - "scripts/routed_execution_set_recovery.py"
       - "scripts/test_multi_target_execution_set.py"
       - "scripts/test_routed_execution_set_journal.py"
       - "scripts/test_routed_execution_set_status.py"
+      - "scripts/test_routed_execution_set_recovery.py"
       - "scripts/routed_agent_plan.py"
       - "scripts/routing_mcp_server.py"
       - "scripts/test_routing_mcp_server.py"
       - "schema/routed-execution-sets.schema.json"
       - "schema/routed-execution-set-journal-event.schema.json"
       - "schema/routed-execution-set-status.schema.json"
+      - "schema/routed-execution-set-recovery.schema.json"
       - "schema/routed-agent-plan.schema.json"
       - "RFC/0069-multi-target-execution-set-lifecycle.md"
       - "RFC/0071-durable-execution-set-journal.md"
       - "RFC/0073-execution-set-status-projection.md"
+      - "RFC/0074-execution-set-recovery-policy.md"
       - ".github/workflows/multi-target-execution-set.yml"
 
 jobs:
@@ -66,3 +74,6 @@ jobs:
 
       - name: Validate execution-set status projection
         run: python scripts/test_routed_execution_set_status.py
+
+      - name: Validate execution-set recovery policy
+        run: python scripts/test_routed_execution_set_recovery.py
