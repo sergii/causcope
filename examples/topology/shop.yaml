@@ -38,6 +38,11 @@ relationships:
   - from: service.checkout.prod
     relation: depends_on
     to: db.payments.prod
+runtime_bindings:
+  - runtime_resource: pool:active_record.primary
+    target_resource: db.orders.prod
+  - runtime_resource: pool:active_record.replica
+    target_resource: db.payments.prod
 runners:
   - id: runner.shop.prod
     kind: edge_runner
