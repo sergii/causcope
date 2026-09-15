@@ -70,24 +70,25 @@ def validate_pool_document(document: dict[str, Any]) -> None:
         )
 
 
+def _attributes(instance: dict[str, Any]) -> dict[str, Any]:
+    source = instance.get("source", {})
+    attributes = source.get("attributes", {}) if isinstance(source, dict) else {}
+    return attributes if isinstance(attributes, dict) else {}
+
+
 def _exact_seed_instance(existing: dict[str, Any], pool: dict[str, Any]) -> dict[str, Any]:
     request = pool["request"]
     pool_id = pool["pool"]["id"]
-    matches: list[dict[str, Any]] = []
-    for instance in existing.get("instances", []):
-        if instance.get("observation") != POOL_WAIT or instance.get("state") != "observed":
-            continue
-        source = instance.get("source", {})
-        attributes = source.get("attributes", {}) if isinstance(source, dict) else {}
-        if not isinstance(attributes, dict):
-            continue
-        if (
-            attributes.get("otel.trace_id") == request["trace_id"]
-            and attributes.get("otel.span_id") == request["span_id"]
-            and attributes.get("causcope.code_symbol") == request["code_symbol"]
-            and attributes.get("causcope.runtime_resource") == pool_id
-        ):
-            matches.append(instance)
+    matches = [
+        instance
+        for instance in existing.get("instances", [])
+        if instance.get("observation") == POOL_WAIT
+        and instance.get("state") == "observed"
+        and _attributes(instance).get("otel.trace_id") == request["trace_id"]
+        and _attributes(instance).get("otel.span_id") == request["span_id"]
+        and _attributes(instance).get("causcope.code_symbol") == request["code_symbol"]
+        and _attributes(instance).get("causcope.runtime_resource") == pool_id
+    ]
     if len(matches) != 1:
         raise RailsPoolEvidenceImportError(
             "resource-pool evidence must bind to exactly one current canonical pool-wait instance; "
@@ -96,56 +97,47 @@ def _exact_seed_instance(existing: dict[str, Any], pool: dict[str, Any]) -> dict
     return matches[0]
 
 
-def _identity(seed: dict[str, Any], pool: dict[str, Any], incident_id: str) -> tuple[str, dict[str, Any]]:
+def _identity(seed: dict[str, Any], pool: dict[str, Any], incident_id: str) -> str:
     if pool.get("incident_id") != incident_id:
         raise RailsPoolEvidenceImportError(
             f"resource-pool evidence belongs to {pool.get('incident_id')!r}, expected {incident_id!r}"
         )
-    attributes = seed.get("source", {}).get("attributes", {})
-    if not isinstance(attributes, dict):
-        raise RailsPoolEvidenceImportError("canonical seed evidence has no source attributes")
-    expected = {
-        "system_id": attributes.get("causcope.system_id"),
-        "revision": attributes.get("causcope.revision"),
-        "target_resource": attributes.get("causcope.target_resource"),
-    }
-    if pool.get("system_id") != expected["system_id"]:
+    attributes = _attributes(seed)
+    if pool.get("system_id") != attributes.get("causcope.system_id"):
         raise RailsPoolEvidenceImportError("resource-pool evidence system_id does not match canonical seed evidence")
-    if pool.get("revision", {}).get("value") != expected["revision"]:
+    if pool.get("revision", {}).get("value") != attributes.get("causcope.revision"):
         raise RailsPoolEvidenceImportError("resource-pool evidence revision does not match canonical seed evidence")
-    target_resource = expected["target_resource"]
+    target_resource = attributes.get("causcope.target_resource")
     if not isinstance(target_resource, str) or not target_resource:
         raise RailsPoolEvidenceImportError("canonical seed evidence has no exact target_resource binding")
-    return target_resource, attributes
+    return target_resource
+
+
+def _digest(*parts: object) -> str:
+    return hashlib.sha256("\0".join(str(part) for part in parts).encode("utf-8")).hexdigest()[:16]
 
 
 def _evidence_id(incident_id: str, pool: dict[str, Any], observation: str, phase: str) -> str:
-    payload = "\0".join(
-        (
-            incident_id,
-            str(pool["request"]["trace_id"]),
-            str(pool["request"]["span_id"]),
-            str(pool["pool"]["id"]),
-            observation,
-            phase,
-            str(pool["observed_at"]),
-        )
+    return "evidence.rails_pool." + _digest(
+        incident_id,
+        pool["request"]["trace_id"],
+        pool["request"]["span_id"],
+        pool["pool"]["id"],
+        observation,
+        phase,
+        pool["observed_at"],
     )
-    return "evidence.rails_pool." + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _verification_id(incident_id: str, pool: dict[str, Any], target_resource: str) -> str:
-    payload = "\0".join(
-        (
-            incident_id,
-            target_resource,
-            str(pool["request"]["trace_id"]),
-            str(pool["request"]["span_id"]),
-            str(pool["pool"]["id"]),
-            INTERVENTION_KIND,
-        )
+    return "verification.rails_pool." + _digest(
+        incident_id,
+        target_resource,
+        pool["request"]["trace_id"],
+        pool["request"]["span_id"],
+        pool["pool"]["id"],
+        INTERVENTION_KIND,
     )
-    return "verification.rails_pool." + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _leading_hypothesis(snapshot: dict[str, Any], scope: dict[str, Any]) -> tuple[str | None, int | None]:
@@ -165,13 +157,8 @@ def _leading_hypothesis(snapshot: dict[str, Any], scope: dict[str, Any]) -> tupl
 
 
 def _source(
-    *,
-    pool: dict[str, Any],
-    seed: dict[str, Any],
-    target_resource: str,
-    verification_id: str,
-    baseline_revision: int,
-    baseline_hypothesis: str | None,
+    *, pool: dict[str, Any], seed: dict[str, Any], target_resource: str,
+    verification_id: str, baseline_revision: int, baseline_hypothesis: str | None,
     phase: str,
 ) -> dict[str, Any]:
     attributes = {
@@ -191,26 +178,13 @@ def _source(
     }
     if baseline_hypothesis is not None:
         attributes["causcope.baseline_leading_hypothesis"] = baseline_hypothesis
-    return {
-        "type": "experiment",
-        "name": "causcope.rails.connection_pool_probe",
-        "attributes": attributes,
-    }
+    return {"type": "experiment", "name": "causcope.rails.connection_pool_probe", "attributes": attributes}
 
 
 def _instance(
-    *,
-    incident_id: str,
-    pool: dict[str, Any],
-    observation: str,
-    state: str,
-    phase: str,
-    source: dict[str, Any],
-    scope: dict[str, Any],
-    target_resource: str,
-    measurement: dict[str, Any],
-    note: str,
-    labels: dict[str, str] | None = None,
+    *, incident_id: str, pool: dict[str, Any], observation: str, state: str, phase: str,
+    source: dict[str, Any], scope: dict[str, Any], target_resource: str,
+    measurement: dict[str, Any], note: str, labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     item_labels = {
         "target_resource": target_resource,
@@ -234,22 +208,26 @@ def _instance(
 
 
 def build_canonical_pool_evidence(
-    pool: dict[str, Any],
-    existing: dict[str, Any],
-    snapshot: dict[str, Any],
+    pool: dict[str, Any], existing: dict[str, Any], snapshot: dict[str, Any]
 ) -> dict[str, Any]:
     validate_pool_document(pool)
     incident_id = existing.get("incident_id")
     if not isinstance(incident_id, str) or not incident_id:
         raise RailsPoolEvidenceImportError("current runtime evidence has no incident_id")
     seed = _exact_seed_instance(existing, pool)
-    target_resource, _seed_attributes = _identity(seed, pool, incident_id)
+    target_resource = _identity(seed, pool, incident_id)
     scope = copy.deepcopy(seed.get("scope"))
     if not isinstance(scope, dict):
         raise RailsPoolEvidenceImportError("canonical seed evidence has no reusable exact scope")
 
-    baseline_hypothesis, baseline_rank = _leading_hypothesis(snapshot, scope)
     verification_id = _verification_id(incident_id, pool, target_resource)
+    if any(
+        _attributes(instance).get("causcope.verification_id") == verification_id
+        for instance in existing.get("instances", [])
+    ):
+        raise RailsPoolEvidenceImportError("resource-pool proof produced no new canonical evidence")
+
+    baseline_hypothesis, baseline_rank = _leading_hypothesis(snapshot, scope)
     baseline_revision = int(snapshot["evidence_revision"])
 
     def source(phase: str) -> dict[str, Any]:
@@ -263,18 +241,14 @@ def build_canonical_pool_evidence(
             phase=phase,
         )
 
+    assertions = pool["assertions"]
     instances: list[dict[str, Any]] = []
-    at_capacity = bool(pool["assertions"]["application_pool_was_at_capacity"])
+    at_capacity = bool(assertions["application_pool_was_at_capacity"])
     instances.append(
         _instance(
-            incident_id=incident_id,
-            pool=pool,
-            observation=POOL_UTILIZATION,
-            state="observed" if at_capacity else "absent",
-            phase="pre_intervention",
-            source=source("pre_intervention"),
-            scope=scope,
-            target_resource=target_resource,
+            incident_id=incident_id, pool=pool, observation=POOL_UTILIZATION,
+            state="observed" if at_capacity else "absent", phase="pre_intervention",
+            source=source("pre_intervention"), scope=scope, target_resource=target_resource,
             measurement={
                 "value": pool["pool"]["busy"],
                 "baseline": pool["pool"]["observed_capacity"],
@@ -283,83 +257,52 @@ def build_canonical_pool_evidence(
                 "comparison": "equal" if at_capacity else "below_baseline",
             },
             labels={
-                "mechanism_explains_request_delta": str(bool(pool["assertions"]["checkout_wait_explains_request_delta"])).lower(),
+                "mechanism_explains_request_delta": str(bool(assertions["checkout_wait_explains_request_delta"])).lower(),
                 "baseline_hypothesis_rank": str(baseline_rank or 0),
             },
-            note=(
-                "Exact application pool occupancy before capacity release. The bounded experiment "
-                "binds this mechanism observation to the canonical seed request and exact target."
-            ),
+            note="Exact application pool occupancy before capacity release, bound to the canonical seed request and target.",
         )
     )
 
-    if pool["assertions"]["query_latency_stayed_near_baseline"]:
+    if assertions["query_latency_stayed_near_baseline"]:
         current = float(pool["request"]["dependency_latency_ms"])
         baseline = float(pool["baseline"]["dependency_latency_ms"])
         instances.append(
             _instance(
-                incident_id=incident_id,
-                pool=pool,
-                observation=QUERY_LATENCY,
-                state="absent",
-                phase="control",
-                source=source("control"),
-                scope=scope,
+                incident_id=incident_id, pool=pool, observation=QUERY_LATENCY,
+                state="absent", phase="control", source=source("control"), scope=scope,
                 target_resource=target_resource,
                 measurement={"value": current, "baseline": baseline, "delta": current - baseline, "unit": "ms"},
                 labels={
-                    "independent_database_control": (
-                        "reachable" if pool["assertions"]["database_still_accepts_direct_connections"] else "not_established"
-                    )
+                    "independent_database_control": "reachable" if assertions["database_still_accepts_direct_connections"] else "not_established"
                 },
-                note=(
-                    "Query latency stayed near the bounded baseline while the application pool was saturated. "
-                    "State=absent means elevated query latency was not present."
-                ),
+                note="Elevated query latency was absent while the application pool was saturated.",
             )
         )
 
-    if pool["assertions"]["recovery_checkout_wait_returned_to_baseline"]:
-        current = float(pool["recovery"]["checkout_wait_ms"])
-        baseline = float(pool["baseline"]["checkout_wait_ms"])
+    recovery_specs = [
+        (
+            "recovery_checkout_wait_returned_to_baseline", POOL_WAIT,
+            "checkout_wait_ms", "After capacity release, checkout wait returned to the experiment baseline."
+        ),
+        (
+            "recovery_request_latency_returned_to_baseline", REQUEST_LATENCY,
+            "request_latency_ms", "After capacity release, request latency returned to the experiment baseline."
+        ),
+    ]
+    for assertion, observation, field, note in recovery_specs:
+        if not assertions[assertion]:
+            continue
+        current = float(pool["recovery"][field])
+        baseline = float(pool["baseline"][field])
         instances.append(
             _instance(
-                incident_id=incident_id,
-                pool=pool,
-                observation=POOL_WAIT,
-                state="absent",
-                phase="post_intervention",
-                source=source("post_intervention"),
-                scope=scope,
-                target_resource=target_resource,
+                incident_id=incident_id, pool=pool, observation=observation,
+                state="absent", phase="post_intervention", source=source("post_intervention"),
+                scope=scope, target_resource=target_resource,
                 measurement={"value": current, "baseline": baseline, "delta": current - baseline, "unit": "ms"},
                 labels={"intervention_outcome": "predicted_recovery"},
-                note=(
-                    "After the bounded pool-capacity holder completed and released its slot, checkout wait "
-                    "returned to the experiment baseline."
-                ),
-            )
-        )
-
-    if pool["assertions"]["recovery_request_latency_returned_to_baseline"]:
-        current = float(pool["recovery"]["request_latency_ms"])
-        baseline = float(pool["baseline"]["request_latency_ms"])
-        instances.append(
-            _instance(
-                incident_id=incident_id,
-                pool=pool,
-                observation=REQUEST_LATENCY,
-                state="absent",
-                phase="post_intervention",
-                source=source("post_intervention"),
-                scope=scope,
-                target_resource=target_resource,
-                measurement={"value": current, "baseline": baseline, "delta": current - baseline, "unit": "ms"},
-                labels={"intervention_outcome": "predicted_recovery"},
-                note=(
-                    "After the bounded pool-capacity holder completed and released its slot, request latency "
-                    "returned to the experiment baseline."
-                ),
+                note=note,
             )
         )
 
@@ -367,10 +310,7 @@ def build_canonical_pool_evidence(
         "schema_version": "0.1",
         "kind": "runtime_evidence",
         "incident_id": incident_id,
-        "description": (
-            "Canonical mechanism, control, and post-intervention recovery observations projected from "
-            "the exact Rails D3.1 resource-pool experiment."
-        ),
+        "description": "Canonical mechanism, control, and post-intervention recovery observations from the exact Rails D3.1 experiment.",
         "instances": instances,
     }
 
@@ -417,11 +357,7 @@ def import_pool_evidence(*, workspace: Path, pool_path: Path) -> dict[str, Any]:
             next_revision = snapshot["evidence_revision"] + 1
             as_of = parse_timestamp(pool["observed_at"], "resource-pool observed_at")
             next_snapshot = build_diagnosis_snapshot(
-                composed,
-                concepts,
-                edges,
-                as_of=as_of,
-                evidence_revision=next_revision,
+                composed, concepts, edges, as_of=as_of, evidence_revision=next_revision
             )
             commit = prepare_commit(
                 incident_id=snapshot["incident_id"],
@@ -445,18 +381,15 @@ def import_pool_evidence(*, workspace: Path, pool_path: Path) -> dict[str, Any]:
         "previous_evidence_revision": snapshot["evidence_revision"],
         "evidence_revision": next_revision,
         "added_instance_ids": added_ids,
-        "target_resource": produced["instances"][0]["source"]["attributes"]["causcope.target_resource"],
+        "target_resource": _attributes(produced["instances"][0])["causcope.target_resource"],
         "projected_observations": [item["observation"] for item in produced["instances"]],
-        "verification_id": produced["instances"][0]["source"]["attributes"]["causcope.verification_id"],
+        "verification_id": _attributes(produced["instances"][0])["causcope.verification_id"],
     }
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=(
-            "Project one exact Rails D3.1 resource-pool experiment into canonical runtime evidence and "
-            "atomically rerank the persisted Investigation."
-        )
+        description="Project one exact Rails D3.1 resource-pool experiment into canonical runtime evidence and atomically rerank the persisted Investigation."
     )
     parser.add_argument("--workspace", type=Path, default=Path(".causcope"))
     parser.add_argument("--pool-evidence", type=Path, required=True)
@@ -477,10 +410,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
-        print(
-            f"Investigation {result['incident_id']}: evidence revision "
-            f"{result['previous_evidence_revision']} -> {result['evidence_revision']}"
-        )
+        print(f"Investigation {result['incident_id']}: evidence revision {result['previous_evidence_revision']} -> {result['evidence_revision']}")
         print("Projected: " + ", ".join(result["projected_observations"]))
         print(f"Exact target: {result['target_resource']}")
         print(f"Verification: {result['verification_id']}")
