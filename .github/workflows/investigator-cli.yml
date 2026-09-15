@@ -43,7 +43,7 @@ jobs:
         run: python scripts/test_causcope_why_workspace_golden.py
       - name: Validate why provider bindings
         run: python scripts/test_causcope_why_provider_binding.py
-      - name: Validate why explicit evidence acquisition
+      - name: Validate why implicit evidence acquisition
         run: python scripts/test_causcope_why_acquire.py
       - name: Validate why live pgbot CLI acquisition
         run: python scripts/test_causcope_why_pgbot_cli.py
