@@ -128,7 +128,7 @@ def main() -> int:
         next_snapshot = snapshot(revision + 1)
         result = {
             "kind": "routed_execution_set_result",
-            "execution_set_id": f"execution-set.budget.{budget_calls}",
+            "execution_set_id": f"execution-set.budget.{revision}",
             "probe_id": f"probe.budget.{budget_calls}",
             "previous_evidence_revision": revision,
             "evidence_revision": revision + 1,
