@@ -10,7 +10,7 @@ It is descriptive rather than aspirational.
 
 ## Summary
 
-Causcope is no longer only a troubleshooting ontology or a collection of empirical labs.
+Causcope is no longer only a troubleshooting ontology or collection of empirical labs.
 
 The repository contains a deterministic investigation substrate with:
 
@@ -37,11 +37,17 @@ Concrete System / X-Ray projections
 Rails / OpenTelemetry / PostgreSQL / pgbot evidence paths
 ```
 
-The current product direction remains:
+The product direction remains:
 
 > Agent First, not Agent Only.
 
-The local product is the first execution surface. Dashboard, Cloud, Relay, Slack/PagerDuty-style integrations, Helm, and private deployment should project the same investigation contracts later.
+The local agent is the first execution surface. Dashboard, Cloud, Relay, Slack/PagerDuty-style integrations, Helm, and private deployment should project the same Investigation contracts later.
+
+For the shortest description of the current local UX, see:
+
+```text
+docs/product/local-agent-flow.md
+```
 
 ## Strongest proofs
 
@@ -49,7 +55,7 @@ The local product is the first execution surface. Dashboard, Cloud, Relay, Slack
 
 `RFC/0075-golden-vertical-slice-rails-connection-pool.md` is implemented.
 
-The bounded live proof demonstrates:
+The live proof demonstrates:
 
 ```text
 slow request
@@ -66,19 +72,14 @@ slow request
 
 Blast radius remains unknown unless a separate evidence source proves affected-user/request counts.
 
-That is intentional: unknown evidence stays unknown.
+Unknown evidence stays unknown.
 
 ### Generic local acquisition loop
 
-The human-facing command:
+The persisted Investigation path can expose the next discriminator, resolve the exact operational target, route to a configured provider, and keep provider acquisition explicit:
 
-```text
+```bash
 causcope why
-```
-
-can consume canonical diagnosis state, expose the next discriminator, resolve the exact operational target, route to a configured provider, and keep acquisition explicit:
-
-```text
 causcope why --acquire
 ```
 
@@ -100,15 +101,17 @@ diagnosis revision N
 
 The path is proven with both captured `pgbot_file` evidence and live `pgbot_cli` execution.
 
-`pgbot_cli` is deliberately constrained to:
+`pgbot_cli` is constrained to:
 
 ```text
 pgbot inspect --json
 ```
 
-It is not a generic subprocess runner. The DSN is resolved only through a named environment variable and database identity is revalidated on every read.
+It is not a generic subprocess runner. The DSN is resolved through a named environment variable and database identity is revalidated on every read.
 
-### Rails/PostgreSQL system bootstrap
+## Local Agent First product path
+
+### System bootstrap
 
 `RFC/0079-agent-first-rails-postgresql-bootstrap.md` is implemented.
 
@@ -118,16 +121,7 @@ causcope bootstrap . \
   --database-url-env CAUSCOPE_PRODUCTION_DATABASE_URL
 ```
 
-creates:
-
-```text
-.causcope/concrete-system-facts.json
-.causcope/resource-topology.yaml
-.causcope/pgbot-postgresql.yaml
-.causcope/provider-bindings.yaml
-```
-
-The command discovers system/configuration facts and provider routing only.
+creates the revision-bound system facts, resource topology, pgbot adapter, and provider binding.
 
 It does not manufacture runtime evidence or diagnosis.
 
@@ -135,7 +129,7 @@ Multi-database applications require explicit pool selection rather than guessing
 
 ### Workspace objectives
 
-`RFC/0081-workspace-incident-objectives.md` is implemented for the current bounded Rails/PostgreSQL incident bootstrap.
+`RFC/0081-workspace-incident-objectives.md` is implemented for the current Rails/PostgreSQL slice.
 
 ```bash
 causcope objectives set . \
@@ -143,7 +137,7 @@ causcope objectives set . \
   --pool-wait-ms 50
 ```
 
-persists explicit user-declared comparison boundaries in:
+persists explicit `user_declared` comparison boundaries in:
 
 ```text
 .causcope/objectives.yaml
@@ -156,27 +150,17 @@ observation.http.request_latency
 observation.database.connection_pool_wait_time
 ```
 
-Causcope does not invent numeric defaults and does not silently treat a single incident trace as a learned baseline.
+Causcope does not invent numeric defaults and does not silently treat one incident trace as a learned baseline or SLO.
 
-### Observed Rails incident bootstrap
+### Observed incident bootstrap
 
-`RFC/0080-observed-rails-incident-bootstrap.md` is implemented for the first bounded slice.
+`RFC/0080-observed-rails-incident-bootstrap.md` is implemented.
 
-The lower-level path is:
+The lower-level path remains available:
 
 ```text
-causcope bootstrap
-  -> system knowledge + exact DB target + provider binding
-
-causcope why "checkout is slow"
-  -> create/resume Investigation
-
 causcope runtime start
-  -> bind OTLP receiver to the same Investigation
-
-reproduce observed request
-  -> concrete runtime facts
-  -> exact request / trace / ActiveRecord pool interaction
+  -> exact concrete runtime facts
 
 causcope runtime seed
   -> runtime evidence revision 1
@@ -186,21 +170,14 @@ causcope runtime seed
   -> next discriminator
 ```
 
-The first seed uses explicit request-latency and pool-wait objectives and emits two observations from the same trace and scope:
-
-```text
-observation.http.request_latency
-observation.database.connection_pool_wait_time
-```
-
-For the proven slice, the request-latency diagnosis ranks these empirically grounded alternatives:
+For the proven slow-request slice, the first diagnosis ranks:
 
 ```text
 1. hypothesis.database.connection_pool_exhaustion
 2. hypothesis.latency.database
 ```
 
-and the existing deterministic probe ranker chooses:
+and chooses:
 
 ```text
 probe.database.measure_query_latency
@@ -208,122 +185,111 @@ probe.database.measure_query_latency
 
 as the next discriminator.
 
-This is candidate ranking, not confirmed root cause.
+This is ordinal candidate ranking, not causal confirmation.
 
-The exact target path is preserved:
+### Bounded observation primitive
 
-```text
-request observation
-  -> trace
-  -> runtime used_resource relationship
-  -> pool:active_record.primary
-  -> explicit topology binding
-  -> exact PostgreSQL resource
-```
-
-No provider is routed from natural-language similarity or from the assumption that the app has only one database.
-
-### Bounded runtime observation session
-
-`RFC/0082-bounded-runtime-observation-session.md` is implemented for the first local orchestration slice.
-
-The manual receiver/application/seed lifecycle can now be composed as:
+`RFC/0082-bounded-runtime-observation-session.md` is implemented.
 
 ```bash
 causcope runtime observe . -- <bounded-application-command>
 ```
 
-The command:
+composes:
 
 ```text
-validates workspace objectives before execution
-starts the existing OTLP receiver
-waits for receiver readiness
-launches the command through the existing revision-bound Rails runtime wrapper
-captures exact concrete runtime facts
-stops the receiver
-runs the existing incident seed
-persists diagnosis revision 1
+workspace-objective validation
+  -> OTLP receiver lifecycle
+  -> revision-bound Rails runtime wrapper
+  -> explicit bounded application command
+  -> exact runtime snapshot
+  -> existing incident seed
+  -> diagnosis revision 1
 ```
 
-The first slice deliberately accepts only a command that exits on its own with status `0`.
+The application command must exit on its own with status `0` in the first slice.
 
-Safety behavior is proven for:
+Missing objectives, non-zero command exit, missing bound runtime facts, or failed exact-target resolution do not create a diagnosis.
+
+### Product front door with observation
+
+The bounded observation primitive is now composed directly from `causcope why`:
+
+```bash
+causcope why "checkout is slow" \
+  --observe . \
+  -- <bounded-application-command>
+```
+
+This is now a proven product path.
+
+The wrapper:
 
 ```text
-missing objectives -> application command not started
-non-zero application exit -> no seed
-no explicitly bound runtime facts -> no seed
-standard seed exact-target constraints remain authoritative
+creates/resumes the Investigation
+  -> defaults workspace to <rails-root>/.causcope when not supplied
+  -> delegates to existing runtime observe
+  -> persists the ordinary canonical evidence + diagnosis artifacts
+  -> re-enters the normal causcope why renderer
 ```
 
-This local explicit application-command surface is not a generic Cloud/Relay remote-execution capability.
+It does not add a second reasoning engine or a new diagnosis format.
+
+It does not auto-run provider evidence acquisition.
+
+Observation and acquisition remain separate authorization boundaries:
+
+```text
+--observe
+  -> explicit local bounded application command
+
+--acquire
+  -> explicit ranked read-only diagnostic provider operation
+```
+
+They cannot be combined in one invocation.
+
+A second initial `--observe` is rejected if `diagnosis.json` already exists; the Investigation should then continue through normal `why` / `why --acquire` semantics.
+
+## Exact-target invariant
+
+The current Rails/PostgreSQL path preserves:
+
+```text
+request observation
+  -> exact trace
+  -> runtime used_resource relationship
+  -> exact ActiveRecord pool
+  -> explicit topology runtime binding
+  -> exact PostgreSQL resource
+  -> ranked probe
+  -> eligible provider instance
+```
+
+No provider is routed from natural-language similarity or from the assumption that an application has only one database.
 
 ## Current product front door
 
-### No diagnostic evidence yet
-
-```text
-causcope why "something is wrong"
-```
-
-creates or resumes durable scoping state and asks the next unresolved question.
-
-It does not invent a diagnosis from text.
-
-### Diagnosis available
-
-When `.causcope/diagnosis.json` exists, `why` projects:
-
-```text
-target
-ranked hypotheses
-supporting observations
-contradictions
-next probe
-exact target resolution when proven
-selected provider or explicit routing stop
-```
-
-The snapshot is identity-checked against the current Investigation.
-
-### Explicit evidence acquisition
-
-Plain `why` remains non-mutating with respect to live provider reads.
-
-```text
-causcope why --acquire
-```
-
-is the explicit boundary for one bounded evidence acquisition step.
-
-Safety properties include:
-
-```text
-stale revision -> fail closed
-route drift -> fail closed
-provider drift -> fail closed
-wrong target -> fail closed
-cross-Investigation evidence -> fail closed
-partial execution failure -> no partial canonical commit
-no new canonical evidence -> fail closed
-```
-
-## Current CLI/product commands
-
-Important implemented surfaces include:
+The primary implemented surfaces now include:
 
 ```text
 causcope bootstrap
 causcope objectives set
 causcope objectives show
+causcope why "<problem>"
+causcope why "<problem>" --observe <rails-root> -- <bounded-command>
+causcope why
+causcope why --acquire
+```
+
+Lower-level/debugging surfaces remain available:
+
+```text
 causcope investigate
 causcope next
 causcope answer
 causcope status
 causcope report
-causcope why
-causcope why --acquire
 causcope runtime start
 causcope runtime seed
 causcope runtime observe
@@ -349,7 +315,7 @@ Includes:
 - deterministic causal ranking;
 - deterministic probe ranking.
 
-The knowledge base is not complete across every failure domain, but it is already sufficient for real product-shaped proofs.
+The knowledge base is not complete across every failure domain, but it is sufficient for real product-shaped proofs.
 
 ## Evidence and providers
 
@@ -373,7 +339,7 @@ pgbot_file
 pgbot_cli
 ```
 
-Provider breadth is not the immediate goal. A complete causal loop is preferred over accumulating adapters without a concrete investigation use case.
+Provider breadth is not the immediate goal. Complete investigations are preferred over adding adapters without concrete use cases.
 
 ## Agent integration
 
@@ -394,13 +360,13 @@ The repository already contains:
 - workflow recovery;
 - verification machinery.
 
-The remaining work is increasingly product consolidation and ergonomics rather than inventing an agent architecture.
+The remaining work is increasingly product consolidation, knowledge coverage, and ergonomics rather than inventing an agent architecture.
 
 ## Dashboard
 
-State: **planned, not yet implemented as the shared product surface described in `docs/`**
+State: **planned, not yet implemented as the shared product surface described in docs**
 
-Dashboard remains important and should be an early second surface after the local agent path becomes coherent.
+Dashboard remains an important early second surface now that the bounded local path is coherent enough to visualize.
 
 It must project canonical Investigation state instead of introducing another diagnosis model.
 
@@ -415,7 +381,7 @@ docs/architecture/cloud-component-model.md
 docs/architecture/deployment-model.md
 ```
 
-Cloud is expected to provide managed ingestion, collaboration, orchestration, history, policy and enterprise integration surfaces around the same core.
+Cloud is expected to provide managed ingestion, collaboration, history, orchestration, policy, and enterprise integrations around the same core.
 
 The local product must not depend on Cloud for reasoning.
 
@@ -423,7 +389,7 @@ The local product must not depend on Cloud for reasoning.
 
 State: **planned product architecture**
 
-Current priority set includes:
+Priority set currently includes:
 
 ```text
 GitHub App
@@ -438,7 +404,7 @@ Teams
 Telegram
 ```
 
-These are signal, evidence, incident-system and communication adapters around the same Investigation core.
+These are signal, evidence, incident-system, and communication adapters around the same Investigation core.
 
 ## Relay / enterprise deployment
 
@@ -454,9 +420,9 @@ Helm chart
 private/on-prem deployment later
 ```
 
-Relay should remain a capability-constrained customer-side evidence plane, not a second reasoning implementation and not a remote arbitrary shell.
+Relay remains a capability-constrained customer-side evidence plane, not a second reasoning implementation and not a remote arbitrary shell.
 
-The local `runtime observe -- <command>` UX must not be reused as a generic remote-shell transport.
+The local `runtime observe -- <command>` / `why --observe -- <command>` UX is explicitly **not** a precedent for generic Cloud or Relay remote command execution.
 
 ## Trust Manifest / Trust Diff
 
@@ -468,7 +434,7 @@ The model is documented in:
 docs/architecture/trust-access-blast-radius.md
 ```
 
-The intended model covers:
+It covers the direction for:
 
 ```text
 Principal
@@ -483,15 +449,13 @@ Consequence
 Control
 ```
 
-with multidimensional blast radius, declared-vs-effective access, Trust Diff and access drift.
+with multidimensional blast radius, declared-vs-effective access, Trust Diff, and access drift.
 
 ## Investigation vs Incident identity
 
 State: **compatibility design proposed**
 
 `RFC/0076-investigation-case-and-incident-compatibility.md` defines `Investigation` as the intended Causcope-owned case object while preserving current `incident_context` / `incident_id` storage during migration.
-
-The current Rails runtime/bootstrap path still uses those compatibility identifiers.
 
 No silent breaking rename has been authorized.
 
@@ -519,7 +483,9 @@ system discovery
 workspace objectives
   -> explicit comparison boundaries
 
-bounded local observation
+problem statement
+  -> Investigation
+  -> bounded observation
   -> exact runtime facts
   -> canonical revision-1 evidence
   -> ranked alternatives
@@ -533,39 +499,26 @@ exact target
   -> rerank
 ```
 
-Therefore the immediate problem is no longer “how do we get into the investigation loop at all?” or “how do we coordinate receiver + bounded command + seed manually?”
+Therefore the immediate problem is no longer how to enter the investigation loop from the product front door.
 
 ## Immediate product gaps
 
 The highest-value gaps are now:
 
 ```text
-1. compose bounded observation directly from `causcope why` so the product front door can guide/launch it;
-2. define interactive long-running Rails server observation only with explicit lifecycle and signal semantics;
-3. converge the generic persisted Investigation path further with the confirmed D3.1 X-Ray proof;
-4. support additional symptom bootstrap shapes only when backed by concrete empirical knowledge;
-5. add runtime/provider targets only for concrete investigation use cases;
-6. begin the shared Dashboard projection once the local Investigation UX is coherent enough to visualize;
-7. keep Cloud/Relay contracts compatible while remaining secondary to the Agent First core.
+1. decide whether interactive long-running Rails observation is worth adding and define explicit lifecycle/signal semantics first;
+2. converge the generic persisted Investigation path further with the confirmed D3.1 X-Ray proof;
+3. support additional symptom bootstrap shapes only when backed by concrete empirical knowledge;
+4. add runtime/provider targets only for concrete investigation use cases;
+5. begin a read-only shared Dashboard projection of canonical Investigation state;
+6. keep Cloud/Relay contracts compatible while remaining secondary to the Agent First core.
 ```
 
-A likely next UX progression is:
-
-```text
-causcope why "checkout is slow"
-  -> knows configured objectives
-  -> offers/launches bounded observation
-  -> receives exact runtime facts
-  -> seeds revision 1 through the existing contract
-  -> presents alternatives + next discriminator
-  -> asks for explicit acquisition authorization when a provider read is needed
-```
-
-The key constraint is that fewer commands must not mean weaker provenance, heuristic target guessing, or hidden execution authority.
+The important change is that Dashboard work can now begin as a **projection problem**, not as an excuse to invent another backend reasoning model.
 
 ## Guardrail
 
-A new abstraction should be treated skeptically unless it moves this path forward:
+A new abstraction should be treated skeptically unless it advances this path:
 
 ```text
 problem
@@ -577,4 +530,4 @@ problem
   -> verify
 ```
 
-Causcope currently needs product integration, ergonomics, additional proven knowledge coverage, and human surfaces more than additional conceptual layers.
+Causcope currently needs product ergonomics, broader empirical knowledge coverage, convergence of generic and confirmed diagnosis paths, and human/team projections more than additional conceptual layers.
