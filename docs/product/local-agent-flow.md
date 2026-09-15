@@ -62,9 +62,10 @@ problem statement
   -> project runtime relationships
   -> seed canonical evidence revision 1
   -> rank empirically grounded alternatives
-  -> choose next discriminator
-  -> resolve exact operational target
-  -> if exactly one safe read-only execution set is ready, acquire it
+  -> choose next discriminator per diagnosis
+  -> resolve exact operational targets
+  -> form safe read-only execution sets
+  -> if one set has a unique best semantic discrimination priority, acquire it
   -> atomically commit the next evidence revision
   -> rerank
   -> render ordinary persisted `causcope why` diagnosis
@@ -101,22 +102,24 @@ causcope why
 
 is now both the persisted Investigation projection and the autonomous diagnostic continuation point.
 
-When Causcope has exactly one current, exact, safe, read-only provider execution set, it executes that set without asking the operator to choose the semantic probe, target, provider, or acquisition command.
+When Causcope has one or more current, exact, safe, read-only provider execution sets, it compares their current top semantic probes using the existing deterministic discrimination priority. If one set is strictly better, Causcope executes it without asking the operator to choose the semantic probe, target, provider, or acquisition command.
 
 ```text
 current diagnosis revision N
-  -> ranked next semantic probe
-  -> exact target
-  -> configured provider instance
+  -> ranked next semantic probe per diagnosis
+  -> exact targets
+  -> configured provider instances
+  -> ready read-only execution sets
+  -> unique best semantic diagnostic question
   -> revalidate revision + route + provider + target
-  -> execute one safe read-only evidence operation
+  -> execute one safe read-only evidence operation/set
   -> append canonical evidence
   -> atomic diagnosis commit
   -> revision N + 1
-  -> rerank
+  -> rerank before choosing anything else
 ```
 
-If no execution set is ready, `causcope why` only renders current state. If more than one independent set is ready, this proof does not choose arbitrarily; multi-set autonomous policy remains future work.
+If no execution set is ready, `causcope why` only renders current state. If several sets share the same best semantic priority, Causcope also renders without mutation rather than using target, probe, scope, provider, or execution-set names as an arbitrary tie-break.
 
 The old `--acquire` parser input may remain temporarily for compatibility, but it is not operator-visible product UX and is not required by the canonical flow.
 
@@ -181,6 +184,7 @@ wrong Investigation identity
 wrong revision
 missing exact runtime binding
 ambiguous target
+semantic priority tie across ready diagnostic questions
 provider drift
 wrong database identity
 stale diagnosis revision
@@ -201,8 +205,9 @@ For one bounded Rails/PostgreSQL slice, Causcope now has a product path from:
 human problem statement
   -> observed runtime evidence
   -> causal alternatives
-  -> best next discriminator
-  -> exact operational target
+  -> best next discriminator per diagnosis
+  -> exact operational targets
+  -> bounded selection among multiple ready diagnostic questions
   -> autonomous bounded read-only evidence acquisition
   -> reranked diagnosis
   -> causal verification when the required intervention evidence exists
