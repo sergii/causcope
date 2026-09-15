@@ -24,6 +24,8 @@ provider capability discovery
 instrument routing
 exact runtime target resolution
 workspace provider bindings
+revision-bound evidence acquisition
+crash-recoverable evidence + diagnosis commit
 MCP and HTTP projections
 persistent investigation/scoping state
 bounded autonomous investigation
@@ -32,6 +34,8 @@ Rails and PostgreSQL evidence providers
 ```
 
 The strongest current product proof is the Rails D3.1 golden vertical slice.
+
+A second product proof now closes a generic local read-only loop through `causcope why --acquire`.
 
 ## Proven product slice
 
@@ -139,7 +143,7 @@ If the exact target cannot be proven, Causcope preserves the unresolved state ra
 
 The first supported driver is `pgbot_file`, which binds a topology-declared provider instance to an already-produced pgbot report through the existing `PgbotAutonomousProbeProvider`.
 
-This closes the current deterministic path:
+This closes the deterministic routing path:
 
 ```text
 diagnosis
@@ -159,9 +163,69 @@ provider.pgbot.orders-prod
 
 for the canonical read-only query-latency probe.
 
-Provider selection does not itself execute the provider. `why` reports the handoff while preserving the existing execution/authorization boundary.
-
 The pgbot binding also verifies database identity. A pgbot report for a different database is rejected instead of being relabeled as evidence for the selected target.
+
+### Explicit evidence acquisition
+
+Plain `causcope why` remains read-only.
+
+The user must explicitly opt in to evidence acquisition:
+
+```text
+causcope why "database requests are slow" --acquire
+```
+
+`--acquire` does not add a second executor. It projects the current investigation through the existing target-aware execution-set machinery.
+
+The current bounded product path is:
+
+```text
+current diagnosis revision N
+  -> top-ranked read-only probe
+  -> exact runtime target resolution
+  -> configured provider instance
+  -> current safe route
+  -> one ready execution set
+  -> explicit --acquire authorization
+  -> revalidate incident + revision + route + provider
+  -> execute read-only provider
+  -> canonical evidence
+  -> execution-set journal
+  -> crash-recoverable evidence + diagnosis commit
+  -> evidence revision N + 1
+  -> one causal rerank
+```
+
+The product wrapper therefore inherits the existing execution safety properties:
+
+```text
+stale revision -> fail closed
+route drift -> fail closed
+provider drift -> fail closed
+wrong target -> fail closed
+provider evidence without exact target provenance -> fail closed
+member failure -> no partial incident-state commit
+no new canonical evidence -> fail closed
+```
+
+The first `why --acquire` product proof is intentionally bounded to exactly one ready execution set. If there are zero or multiple ready sets, the command stops instead of choosing implicitly.
+
+The proof demonstrates:
+
+```text
+evidence revision 7
+  -> exact db.orders.prod target
+  -> provider.pgbot.orders-prod
+  -> probe.database.measure_query_latency
+  -> new pgbot-backed canonical evidence
+  -> durable member_succeeded journal event
+  -> one atomic Causcope state transition
+  -> durable set_committed journal event
+  -> evidence revision 8
+  -> rerank_count = 1
+```
+
+This means the generic local product can now complete a real read-only investigation step from the same human-facing command instead of stopping at provider selection.
 
 ### Canonical Rails D3.1 artifacts available
 
@@ -188,6 +252,9 @@ causcope why
        -> exact target resolution when available
        -> InstrumentRouter
        -> workspace provider bindings when configured
+       -> explicit --acquire
+       -> canonical evidence revision N + 1
+       -> diagnosis rerank
   OR
   -> Rails D3.1 concrete proof
        -> generic X-Ray engine
@@ -215,7 +282,7 @@ This area is mature enough to support product proofs but not complete across all
 
 ### Local Investigator
 
-State: **implemented for scoping and increasingly productized for diagnosis/routing**
+State: **implemented for scoping, diagnosis projection, routing, and bounded read-only acquisition**
 
 Implemented:
 
@@ -226,13 +293,14 @@ causcope answer
 causcope status
 causcope report
 causcope why
+causcope why --acquire
 ```
 
 Scoping is durable under `.causcope/`.
 
-`why` can now consume generic diagnosis state, expose the next discriminating probe, resolve exact operational targets when the required runtime identity artifacts exist, and select configured provider instances through the existing router.
+`why` can consume generic diagnosis state, expose the next discriminating probe, resolve exact operational targets when the required runtime identity artifacts exist, select configured provider instances, and explicitly execute one current ready read-only execution set.
 
-It does not yet automatically create all required evidence artifacts from only a natural-language problem statement.
+It still does not automatically create the initial diagnosis/evidence/topology state from only a natural-language problem statement.
 
 ### Agent integration
 
@@ -248,7 +316,10 @@ Existing repository work includes:
 - workflow recovery/journaling;
 - provider capability discovery;
 - instrument routing;
-- exact target-aware routing.
+- exact target-aware routing;
+- multi-target execution sets;
+- durable execution-set journals;
+- crash recovery for evidence acquisition.
 
 The remaining work is product consolidation and ergonomic use of this machinery, not inventing agent support from scratch.
 
@@ -364,48 +435,61 @@ and CI prevents new unregistered numeric collisions while grandfathering the kno
 
 ## Immediate product gap
 
-The largest remaining gap has moved again.
+The previous gap - turning a safe target-aware provider route into canonical new evidence and a reranked diagnosis from the same product command - is now closed for a bounded read-only slice.
 
-Causcope can now deterministically join:
+The largest remaining gap is now **bootstrap and setup**, not the investigation loop itself.
 
-```text
-canonical diagnosis
-  -> next probe
-  -> exact operational target
-  -> configured provider instance
-```
-
-The next gap is turning that safe routing decision into a coherent **evidence-acquisition/resume loop from the same user-facing command**, without weakening the existing execution policy.
-
-Today, the repository already has safe read-only execution, autonomous loops, agent-plan state, and provider execution APIs. The work is to compose those existing contracts behind the product front door rather than create another executor.
-
-The desired next progression is:
+Today Causcope can already do:
 
 ```text
-causcope why
-  -> investigation
-  -> current diagnosis
+current canonical diagnosis
   -> next discriminator
-  -> exact target
-  -> safe instrument
-  -> explicit execution authorization
+  -> exact operational target
+  -> configured provider
+  -> explicit safe acquisition
   -> new canonical evidence
-  -> re-diagnosis
-  -> verification or next discriminator
+  -> rerank
 ```
 
-For external providers, future binding drivers also need practical secret/transport resolution without storing raw credentials in the workspace contract.
+But a new user still has to prepare several artifacts before that loop can start:
+
+```text
+initial runtime evidence
+initial diagnosis snapshot
+runtime relationships
+resource topology
+provider bindings
+```
+
+The next product problem is therefore:
+
+> How does `causcope why "something is wrong"` bootstrap enough concrete system context and initial evidence from an actual project/environment to enter the already-working loop?
+
+For a local Rails/PostgreSQL slice, this should primarily reuse existing work:
+
+```text
+repository scan
+portable Rails runtime
+OTLP receiver
+runtime relationship extraction
+resource topology
+configured pgbot/PostgreSQL provider
+```
+
+rather than invent another bootstrap engine.
+
+A second practical gap is provider setup for real environments. `pgbot_file` proves the binding contract, but production use needs network/process-backed provider drivers plus explicit secret resolution that does not place raw credentials in the workspace file.
 
 ## Current priority
 
 Near-term work should therefore favor:
 
 ```text
-1. keep `causcope why` as the product-level projection;
-2. reuse the existing safe execution/session machinery for the selected next probe;
-3. compose returned evidence into the canonical workspace and re-run diagnosis;
-4. add the next provider binding driver only when required by a real slice;
-5. make the Rails D3.1 live proof reachable through the same persisted workspace path;
+1. keep `causcope why` read-only by default and `--acquire` explicitly mutating investigation evidence;
+2. bootstrap a local Rails/PostgreSQL workspace from the existing scan/runtime/provider machinery;
+3. make the Rails D3.1 live proof reachable through the same persisted workspace path;
+4. add one practical process/network provider binding driver with explicit secret handling;
+5. reduce the number of hand-created `.causcope/` artifacts needed before the first useful diagnosis;
 6. keep Dashboard/Cloud architecture compatible but secondary.
 ```
 
@@ -422,4 +506,4 @@ problem
   -> verify
 ```
 
-Causcope currently needs integration and product consolidation more than additional conceptual layers.
+Causcope currently needs bootstrap, integration, and product consolidation more than additional conceptual layers.
