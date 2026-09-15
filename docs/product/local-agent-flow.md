@@ -65,9 +65,12 @@ problem statement
   -> choose next discriminator per diagnosis
   -> resolve exact operational targets
   -> form safe read-only execution sets
-  -> if one set has a unique best semantic discrimination priority, acquire it
-  -> atomically commit the next evidence revision
+  -> choose one unique best semantic diagnostic question
+  -> atomically acquire and commit one evidence revision
   -> rerank
+  -> choose again only from the new revision
+  -> repeat within the bounded read-only mutation budget
+  -> stop verified, blocked, ambiguous, or budget exhausted
   -> render ordinary persisted `causcope why` diagnosis
 ```
 
@@ -100,12 +103,15 @@ Plain:
 causcope why
 ```
 
-is now both the persisted Investigation projection and the autonomous diagnostic continuation point.
+is both the persisted Investigation projection and the autonomous diagnostic continuation point.
 
 When Causcope has one or more current, exact, safe, read-only provider execution sets, it compares their current top semantic probes using the existing deterministic discrimination priority. If one set is strictly better, Causcope executes it without asking the operator to choose the semantic probe, target, provider, or acquisition command.
 
+After that atomic commit, Causcope does not stop merely because a revision boundary was crossed. It reranks from the new canonical evidence revision and may choose the next uniquely preferred safe read-only question. The default product proof allows up to four such evidence-acquisition commits in one invocation.
+
 ```text
 current diagnosis revision N
+  -> already causally verified? stop verified
   -> ranked next semantic probe per diagnosis
   -> exact targets
   -> configured provider instances
@@ -116,10 +122,27 @@ current diagnosis revision N
   -> append canonical evidence
   -> atomic diagnosis commit
   -> revision N + 1
-  -> rerank before choosing anything else
+  -> rerank
+  -> repeat from revision N + 1
 ```
 
-If no execution set is ready, `causcope why` only renders current state. If several sets share the same best semantic priority, Causcope also renders without mutation rather than using target, probe, scope, provider, or execution-set names as an arbitrary tie-break.
+The loop stops explicitly as:
+
+```text
+verified
+  canonical intervention-based causal verification is established
+
+blocked
+  no exact safe read-only execution set can currently run
+
+ambiguous
+  multiple questions share the best semantic priority
+
+budget_exhausted
+  another safe uniquely preferred question exists, but this invocation reached its bounded mutation budget
+```
+
+If several sets share the same best semantic priority, Causcope does not use target, probe, scope, provider, or execution-set names as an arbitrary tie-break. No mutation is authorized in that state.
 
 The old `--acquire` parser input may remain temporarily for compatibility, but it is not operator-visible product UX and is not required by the canonical flow.
 
@@ -191,6 +214,7 @@ stale diagnosis revision
 non-zero bounded application exit
 no bound runtime facts
 partial provider execution failure
+acquisition result that does not advance exactly one evidence revision
 ```
 
 Unknown evidence remains unknown.
@@ -209,10 +233,13 @@ human problem statement
   -> exact operational targets
   -> bounded selection among multiple ready diagnostic questions
   -> autonomous bounded read-only evidence acquisition
+  -> atomic evidence revision
   -> reranked diagnosis
+  -> next bounded diagnostic question without another operator invocation
+  -> explicit verified / blocked / ambiguous / budget-exhausted stop
   -> causal verification when the required intervention evidence exists
 ```
 
-without requiring Causcope Cloud and without exposing the internal acquisition step as operator UX.
+without requiring Causcope Cloud and without exposing internal acquisition steps as operator UX.
 
 The next product work should improve lifecycle ergonomics, knowledge breadth, and human/team projections without weakening this contract.
