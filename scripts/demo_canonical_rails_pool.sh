@@ -85,10 +85,11 @@ printf '\n[4/6] Seeding canonical diagnosis revision 1\n'
 ./bin/causcope runtime seed "$APP_ROOT" --workspace "$WORKSPACE" --runtime-facts "$RUNTIME_FACTS" --request-latency-threshold-ms 200 --pool-wait-threshold-ms 50
 
 printf '\n[5/6] Letting Causcope select and execute the current semantic probe\n\n'
-./bin/causcope why "checkout is slow" --workspace "$WORKSPACE" --acquire --require-confirmed
+./bin/causcope why "checkout is slow" --workspace "$WORKSPACE" --require-confirmed
 
 printf '\n[6/6] Canonical autonomous product proof complete\n'
 printf '  workspace: %s\n' "$WORKSPACE"
 printf '  authority: diagnosis.json + runtime-evidence.json -> causal_verification\n'
+printf '  manual acquisition flag used: no\n'
 printf '  manual resource-pool import used: no\n'
 printf '  legacy X-Ray artifact flags used: no\n'
