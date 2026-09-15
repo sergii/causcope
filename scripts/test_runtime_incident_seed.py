@@ -152,7 +152,12 @@ def main() -> int:
         assert seed["pool_wait_ms"] == 260.0
         assert seed["runtime_resource"] == "pool:active_record.primary"
         assert seed["target_resource"] == "db.causcope.prod"
+        assert seed["candidate_hypotheses"][:2] == [
+            "hypothesis.database.connection_pool_exhaustion",
+            "hypothesis.latency.database",
+        ]
         assert seed["leading_hypothesis"] == "hypothesis.database.connection_pool_exhaustion"
+        assert seed["next_probe"] == "probe.database.measure_query_latency"
         assert seed["selected_execution"] == "execution.opentelemetry.0123456789abcdef"
         assert seed["selected_pool_interaction"] == "pool_interaction.opentelemetry.fedcba9876543210"
 
@@ -178,14 +183,20 @@ def main() -> int:
 
         diagnosis = json.loads((workspace / "diagnosis.json").read_text(encoding="utf-8"))
         assert diagnosis["evidence_revision"] == 1
-        pool_diagnosis = next(
+        request_diagnosis = next(
             item
             for partition in diagnosis["partitions"]
             for item in partition["diagnoses"]
-            if item["target"] == "observation.database.connection_pool_wait_time"
+            if item["target"] == "observation.http.request_latency"
         )
-        assert pool_diagnosis["ranking"]["candidates"][0]["source"]["id"] == (
-            "hypothesis.database.connection_pool_exhaustion"
+        ranked = request_diagnosis["ranking"]["candidates"]
+        assert [item["source"]["id"] for item in ranked[:2]] == [
+            "hypothesis.database.connection_pool_exhaustion",
+            "hypothesis.latency.database",
+        ]
+        assert request_diagnosis["probe_ranking"]["found"] is True
+        assert request_diagnosis["probe_ranking"]["probes"][0]["probe"]["id"] == (
+            "probe.database.measure_query_latency"
         )
 
         why = run("why", "--workspace", str(workspace), "--json")
@@ -194,9 +205,10 @@ def main() -> int:
         resolution = next(
             item
             for item in why_document["target_resolution"]["resolutions"]
-            if item["diagnosis_target"] == "observation.database.connection_pool_wait_time"
+            if item["diagnosis_target"] == "observation.http.request_latency"
         )
         assert resolution["status"] == "resolved"
+        assert resolution["probe_id"] == "probe.database.measure_query_latency"
         assert resolution["target_bindings"][0]["target_resource"] == "db.causcope.prod"
 
         overwrite = run(
