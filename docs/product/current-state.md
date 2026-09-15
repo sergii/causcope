@@ -35,7 +35,7 @@ Rails and PostgreSQL evidence providers
 
 The strongest current product proof is the Rails D3.1 golden vertical slice.
 
-A second product proof now closes a generic local read-only loop through `causcope why --acquire`.
+A second product proof closes a generic local read-only loop through `causcope why --acquire`, and the first live process-backed provider path now executes `pgbot inspect --json` under a narrow binding contract.
 
 ## Proven product slice
 
@@ -135,15 +135,32 @@ If the exact target cannot be proven, Causcope preserves the unresolved state ra
 
 ### Workspace provider binding
 
-`RFC/0078-workspace-provider-bindings.md` adds the first small runtime binding contract:
+`RFC/0078-workspace-provider-bindings.md` defines the workspace runtime binding contract:
 
 ```text
 .causcope/provider-bindings.yaml
 ```
 
-The first supported driver is `pgbot_file`, which binds a topology-declared provider instance to an already-produced pgbot report through the existing `PgbotAutonomousProbeProvider`.
+Implemented pgbot drivers are:
 
-This closes the deterministic routing path:
+```text
+pgbot_file
+pgbot_cli
+```
+
+`pgbot_file` binds a topology-declared provider instance to an already-produced pgbot JSON report.
+
+`pgbot_cli` is the first live process-backed binding. It is deliberately not a generic command runner. The executable shape is fixed to:
+
+```text
+pgbot inspect --json
+```
+
+The database URL is referenced by environment-variable name in the workspace and is supplied to the child only as `DATABASE_URL`; raw credentials are not stored in the binding or passed in command-line arguments.
+
+Plain `causcope why` does not run the CLI. It may check that `pgbot` exists and the configured environment variable is present, but the database read occurs only after explicit acquisition authorization.
+
+The deterministic routing path is:
 
 ```text
 diagnosis
@@ -163,7 +180,9 @@ provider.pgbot.orders-prod
 
 for the canonical read-only query-latency probe.
 
-The pgbot binding also verifies database identity. A pgbot report for a different database is rejected instead of being relabeled as evidence for the selected target.
+Both pgbot bindings verify database identity. The identity check is repeated on every evidence read, so changing a report or receiving a live CLI result for the wrong database cannot be silently relabeled as evidence for the selected target.
+
+The live CLI proof additionally verifies that a report-bearing pgbot exit code `2` is accepted, that the command shape remains exactly `pgbot inspect --json`, and that the configured DSN is not emitted by Causcope.
 
 ### Explicit evidence acquisition
 
@@ -225,7 +244,9 @@ evidence revision 7
   -> rerank_count = 1
 ```
 
-This means the generic local product can now complete a real read-only investigation step from the same human-facing command instead of stopping at provider selection.
+The same proof now runs through both replayed `pgbot_file` evidence and a live `pgbot_cli` process boundary.
+
+This means the generic local product can complete a real read-only investigation step from the same human-facing command instead of stopping at provider selection.
 
 ### Canonical Rails D3.1 artifacts available
 
@@ -336,7 +357,12 @@ Existing providers/adapters include:
 - structured logs;
 - selected local probe executors.
 
-Workspace provider bindings currently support only the initial `pgbot_file` driver. Other provider transports should be added only as concrete product slices require them.
+Workspace provider bindings now support:
+
+```text
+pgbot_file - replay/captured deterministic reports
+pgbot_cli  - live `pgbot inspect --json` with env-referenced DB credentials
+```
 
 Provider breadth is not the immediate goal. Complete product-shaped investigations are preferred over adding more adapters without a demonstrated use case.
 
@@ -435,9 +461,18 @@ and CI prevents new unregistered numeric collisions while grandfathering the kno
 
 ## Immediate product gap
 
-The previous gap - turning a safe target-aware provider route into canonical new evidence and a reranked diagnosis from the same product command - is now closed for a bounded read-only slice.
+The previous two gaps are now closed for bounded local slices:
 
-The largest remaining gap is now **bootstrap and setup**, not the investigation loop itself.
+```text
+safe target-aware provider route
+  -> explicit canonical evidence acquisition
+  -> reranked diagnosis
+
+logical pgbot provider instance
+  -> live process-backed read-only PostgreSQL evidence
+```
+
+The largest remaining product gap is **bootstrap and setup**, not the investigation loop itself.
 
 Today Causcope can already do:
 
@@ -478,7 +513,7 @@ configured pgbot/PostgreSQL provider
 
 rather than invent another bootstrap engine.
 
-A second practical gap is provider setup for real environments. `pgbot_file` proves the binding contract, but production use needs network/process-backed provider drivers plus explicit secret resolution that does not place raw credentials in the workspace file.
+Secret resolution beyond a local named environment variable also remains a deployment concern. Future Relay/cloud paths should map logical credential references to customer-controlled secret stores without changing the investigation semantics.
 
 ## Current priority
 
@@ -488,8 +523,8 @@ Near-term work should therefore favor:
 1. keep `causcope why` read-only by default and `--acquire` explicitly mutating investigation evidence;
 2. bootstrap a local Rails/PostgreSQL workspace from the existing scan/runtime/provider machinery;
 3. make the Rails D3.1 live proof reachable through the same persisted workspace path;
-4. add one practical process/network provider binding driver with explicit secret handling;
-5. reduce the number of hand-created `.causcope/` artifacts needed before the first useful diagnosis;
+4. reduce the number of hand-created `.causcope/` artifacts needed before the first useful diagnosis;
+5. add another provider transport only when bootstrap or a concrete investigation requires it;
 6. keep Dashboard/Cloud architecture compatible but secondary.
 ```
 
