@@ -38,6 +38,10 @@ def prepare_runtime(app: Path) -> tuple[Path, str]:
 
 
 def main() -> int:
+    help_result = run("runtime", "seed", "--help")
+    assert "--request-latency-threshold-ms" in help_result.stdout
+    assert "--pool-wait-threshold-ms" in help_result.stdout
+
     with tempfile.TemporaryDirectory(prefix="causcope-objectives-") as temporary:
         root = Path(temporary)
 
