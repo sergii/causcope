@@ -1,0 +1,18 @@
+id: causal.database.connection_pool_exhaustion.http_request_latency
+kind: causal_edge
+source: hypothesis.database.connection_pool_exhaustion
+target: observation.http.request_latency
+relation: contributes_to
+strength: strong
+conditions:
+  - Database connection checkout is on the synchronous request critical path and pool wait is materially above its normal objective.
+evidence:
+  claims:
+    - claim.database.connection_pool_exhaustion.checkout_wait_drives_latency
+  experiments:
+    - experiment.database.connection_pool_exhaustion.python_postgres
+explanation: When a request must wait for a saturated application database pool before useful database work can begin, that checkout delay contributes directly to end-to-end request latency.
+limitations:
+  - The experiment isolates application-side pool contention and does not prove that every slow request using a database is pool-bound.
+  - Query execution, locks, network latency, retries, and other work may contribute additional request latency.
+  - This edge requires checkout to be on the measured request critical path.
