@@ -1,4 +1,4 @@
-name: Validate Rails golden product demo
+name: Validate Rails X-Ray compatibility demo
 
 on:
   push:
@@ -14,6 +14,7 @@ on:
       - "integrations/rails/**"
       - "lab/rails-connection-pool/**"
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "RFC/0089-canonical-verification-authority.md"
       - ".github/workflows/golden-rails-demo.yml"
   pull_request:
     paths:
@@ -27,13 +28,14 @@ on:
       - "integrations/rails/**"
       - "lab/rails-connection-pool/**"
       - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - "RFC/0089-canonical-verification-authority.md"
       - ".github/workflows/golden-rails-demo.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: rails-golden-demo-${{ github.event.pull_request.number || github.ref }}
+  group: rails-xray-compatibility-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -74,7 +76,7 @@ jobs:
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
 
-      - name: Run the product-shaped Rails golden demo
+      - name: Run the explicit Rails X-Ray compatibility proof
         env:
           BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
           CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-golden-workspace
