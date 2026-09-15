@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
 import causcope_why
 
+ROOT = Path(__file__).resolve().parents[1]
+CLI = ROOT / "bin" / "causcope"
 DEFAULT_WORKSPACE = Path(".causcope")
 GOLDEN_FILES = {
     "--static": "concrete-system-facts.json",
@@ -26,6 +29,13 @@ def _workspace(argv: list[str]) -> Path:
     return DEFAULT_WORKSPACE
 
 
+def _has_workspace(argv: list[str]) -> bool:
+    return any(
+        argument == "--workspace" or argument.startswith("--workspace=")
+        for argument in argv
+    )
+
+
 def _has_explicit_golden_paths(argv: list[str]) -> bool:
     return any(
         argument == option or argument.startswith(f"{option}=")
@@ -35,7 +45,7 @@ def _has_explicit_golden_paths(argv: list[str]) -> bool:
 
 
 def resolve_workspace_golden_paths(argv: list[str]) -> list[str]:
-    if _has_explicit_golden_paths(argv) or "--acquire" in argv:
+    if _has_explicit_golden_paths(argv) or "--acquire" in argv or _has_observe(argv):
         return argv
 
     workspace = _workspace(argv)
@@ -58,11 +68,114 @@ def resolve_workspace_golden_paths(argv: list[str]) -> list[str]:
     return argv
 
 
+def _has_observe(argv: list[str]) -> bool:
+    return any(argument == "--observe" or argument.startswith("--observe=") for argument in argv)
+
+
+def _extract_observe(argv: list[str]) -> tuple[list[str], Path | None, list[str]]:
+    if not _has_observe(argv):
+        return argv, None, []
+
+    try:
+        separator = argv.index("--")
+    except ValueError as error:
+        raise ValueError("--observe requires a bounded application command after `--`") from error
+
+    control = list(argv[:separator])
+    application = list(argv[separator + 1 :])
+    if not application:
+        raise ValueError("--observe requires a bounded application command after `--`")
+
+    observe_root: Path | None = None
+    cleaned: list[str] = []
+    index = 0
+    while index < len(control):
+        argument = control[index]
+        if argument == "--observe":
+            if observe_root is not None:
+                raise ValueError("--observe may be supplied only once")
+            if index + 1 >= len(control):
+                raise ValueError("--observe requires a Rails root path")
+            observe_root = Path(control[index + 1]).expanduser().resolve()
+            index += 2
+            continue
+        if argument.startswith("--observe="):
+            if observe_root is not None:
+                raise ValueError("--observe may be supplied only once")
+            value = argument.split("=", 1)[1]
+            if not value:
+                raise ValueError("--observe requires a Rails root path")
+            observe_root = Path(value).expanduser().resolve()
+            index += 1
+            continue
+        cleaned.append(argument)
+        index += 1
+
+    if observe_root is None:
+        raise ValueError("--observe requires a Rails root path")
+    if not observe_root.is_dir():
+        raise ValueError(f"--observe Rails root does not exist: {observe_root}")
+    if "--acquire" in cleaned:
+        raise ValueError("--observe cannot be combined with --acquire; observe first, then authorize acquisition separately")
+    if "--require-confirmed" in cleaned:
+        raise ValueError("--observe cannot be combined with --require-confirmed")
+    if _has_explicit_golden_paths(cleaned):
+        raise ValueError("--observe cannot be combined with --static/--runtime/--pool")
+
+    if not _has_workspace(cleaned):
+        cleaned.extend(["--workspace", str((observe_root / ".causcope").resolve())])
+
+    return cleaned, observe_root, application
+
+
+def _run_observe(base_arguments: list[str], observe_root: Path, application: list[str]) -> int:
+    parsed = causcope_why.build_parser().parse_args(base_arguments)
+    parsed.workspace = parsed.workspace.expanduser().resolve()
+
+    if causcope_why.load_workspace_diagnosis(parsed.workspace) is not None:
+        raise ValueError(
+            "--observe is for creating the first observed diagnosis revision; "
+            "this workspace already has diagnosis.json. Use `causcope why` or `causcope why --acquire`."
+        )
+
+    # Create or resume the exact same Investigation that the observation session will use.
+    causcope_why.scoping_projection(parsed)
+
+    command = [
+        str(CLI),
+        "runtime",
+        "observe",
+        str(observe_root),
+        "--workspace",
+        str(parsed.workspace),
+        "--json",
+        "--",
+        *application,
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip() or "bounded observation failed"
+        raise ValueError(f"bounded observation failed: {detail}")
+
+    # Re-render through the normal why path. The observation command has persisted the
+    # canonical runtime evidence, relationships and diagnosis snapshot in the workspace.
+    return causcope_why.main(base_arguments)
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     try:
+        base_arguments, observe_root, application = _extract_observe(arguments)
+        if observe_root is not None:
+            return _run_observe(base_arguments, observe_root, application)
         resolved = resolve_workspace_golden_paths(arguments)
-    except ValueError as error:
+    except (ValueError, FileNotFoundError, OSError) as error:
         print(f"causcope: {error}", file=sys.stderr)
         return 2
     return causcope_why.main(resolved)
