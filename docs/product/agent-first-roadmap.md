@@ -10,6 +10,36 @@ The roadmap principle is:
 
 > Agent first, not agent only.
 
+## Current repository state
+
+The phases below describe **product sequencing**, not a claim that all earlier phases are still unimplemented.
+
+As of 2026-09-15 the repository already contains substantial machinery for the agent-first direction, including:
+
+```text
+runtime evidence
+causal ranking
+recommended next probes
+safe read-only probe execution
+MCP resources/tools
+agent-plan projections
+provider/capability discovery
+autonomous bounded read-only investigation
+investigation scoping/session state
+Concrete System / X-Ray projections
+Rails and PostgreSQL provider work
+```
+
+In particular, the accepted autonomous read-only investigation loop already reuses deterministic ranking and probe contracts rather than introducing another diagnosis engine.
+
+The current product-shaped milestone is the in-progress golden Rails D3.1 connection-pool vertical slice, which deliberately pauses generic platform expansion to prove one end-to-end diagnosis from a user-visible problem to verified causal evidence.
+
+Therefore the roadmap should increasingly ask:
+
+> Which existing machinery needs to be connected, simplified, hardened, or projected into a coherent user experience?
+
+rather than repeatedly inventing another generic subsystem.
+
 ## Phase 0 - Strengthen the semantic core
 
 Continue expanding and validating the existing knowledge model through concrete vertical slices.
@@ -24,7 +54,8 @@ Focus areas:
 - causal ranking;
 - investigation dimensions;
 - action risk and approval metadata;
-- coverage reporting.
+- coverage reporting;
+- human-learning projections from the same canonical knowledge.
 
 The goal is not to model all failures top-down. The goal is to grow through tested mechanisms that improve real diagnosis.
 
@@ -62,6 +93,8 @@ Prometheus query
 OpenTelemetry evidence
 ```
 
+Much of the underlying machinery already exists. The product task is to converge it behind a coherent front door and prove complete vertical slices.
+
 ## Phase 2 - Agent integration
 
 Expose the same Investigator cleanly to coding and operational agents.
@@ -93,7 +126,9 @@ Success criterion:
 
 > An external agent can advance an investigation without reimplementing Causcope semantics.
 
-## Phase 3 - Real local probes and vertical demonstrations
+This phase is already partially implemented and should be consolidated rather than restarted.
+
+## Phase 3 - Real local probes and golden vertical demonstrations
 
 Build several complete demonstrations where Causcope moves from symptom to discriminating evidence.
 
@@ -129,6 +164,8 @@ missing/duplicate asynchronous effect
 ```
 
 These slices should prove that Causcope can reduce ambiguity rather than only describe failure modes.
+
+The current golden slice is Rails + ActiveRecord D3.1 connection-pool exhaustion. Finish and simplify that user journey before broadening the surface again.
 
 ## Phase 4 - Dashboard
 
@@ -189,7 +226,7 @@ Slack thread + Dashboard
 
 This slice should work without private database or Kubernetes access.
 
-## Phase 6 - Broader SaaS evidence
+## Phase 6 - Broader SaaS evidence and communication
 
 Add high-value integrations such as:
 
@@ -198,6 +235,7 @@ Datadog
 Prometheus / OTel managed ingestion
 Microsoft Teams
 Telegram
+BugSnag
 additional incident systems
 ```
 
@@ -208,6 +246,15 @@ Goals:
 - stronger team workflows;
 - easier SMB onboarding;
 - dogfooding in real incidents.
+
+At this stage Causcope may also begin proactive investigations from selected detectors, while keeping incident creation policy separate:
+
+```text
+signal/anomaly
+  -> Investigation
+  -> evidence and impact assessment
+  -> maybe formal incident
+```
 
 ## Phase 7 - Customer-side daemon / Relay
 
@@ -224,10 +271,11 @@ systemd/binary deployment
 Primary requirements:
 
 - outbound-only connection where possible;
+- mutually authenticated control channel;
 - declared capabilities;
 - local policy;
 - read-only collectors first;
-- structured evidence;
+- structured/minimized evidence;
 - no arbitrary remote shell;
 - local credentials remain customer-controlled;
 - auditable probe execution.
@@ -361,7 +409,7 @@ REMEDIATION
 Until the agent core proves useful on real debugging tasks, a reasonable allocation is:
 
 ```text
-~80%  Knowledge + Investigator + Agent + real probes
+~80%  Knowledge + Investigator + Agent + real probes / golden slices
 ~20%  Cloud/dashboard/enterprise architecture and compatibility
 ~0%   heavy multi-tenant SaaS infrastructure unless required to validate a specific product slice
 ```
@@ -385,6 +433,7 @@ Before implementing a core feature, ask:
 3. Can it be tested through an executable lab or real evidence?
 4. Can a human and an agent both consume it?
 5. Does it avoid vendor lock-in at the semantic layer?
+6. Does an equivalent generic abstraction already exist and merely need product integration?
 
 ## Product destination
 
