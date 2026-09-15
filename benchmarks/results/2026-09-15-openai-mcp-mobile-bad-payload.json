@@ -1,0 +1,130 @@
+{
+  "schema_version": "0.1",
+  "kind": "acceptance_benchmark_result",
+  "benchmark_id": "benchmark.shop.mobile_bad_payload.openai_mcp",
+  "surface": "openai_mcp_agent",
+  "scenario_id": "scenario.shop.mobile_bad_payload",
+  "incident_id": "incident.benchmark.mobile_bad_payload.openai_mcp",
+  "llm": {
+    "enabled": true,
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "response_ids": [
+      "resp_008244179763385d006aa9b8b6505c87d0a35ddf8078268e20",
+      "resp_008244179763385d006aa9b8b90c9487d0a7848a967e6bc264",
+      "resp_008244179763385d006aa9b8bc1c7887d0b647b334cb4f0f4a",
+      "resp_008244179763385d006aa9b8c14bf087d09bef0f614629c0ba",
+      "resp_008244179763385d006aa9b8c41f6487d0a567cccb364b77f2",
+      "resp_008244179763385d006aa9b8c6b49887d093ceb53d67447b88",
+      "resp_008244179763385d006aa9b8c8c46887d08a0c24a8f9262c89"
+    ],
+    "usage": {
+      "response_count": 7,
+      "input_tokens": 64549,
+      "output_tokens": 909,
+      "total_tokens": 65458
+    },
+    "credential_environment_removed": [
+      "ANTHROPIC_API_KEY",
+      "GEMINI_API_KEY",
+      "GOOGLE_API_KEY",
+      "OPENAI_API_KEY"
+    ],
+    "api_key_exposed_to_testbed_children": false
+  },
+  "oracle_policy": {
+    "loaded_after_investigation": true,
+    "used_to_construct_diagnosis": false
+  },
+  "expectations": {
+    "target": "observation.http.request_failure",
+    "scope_contains": {
+      "method": "POST",
+      "path": "/orders",
+      "client_platform": "iOS",
+      "app_version": "7.42.0"
+    },
+    "top_hypothesis": "hypothesis.client.payload_contract_mismatch",
+    "required_completed_probes": [
+      "probe.http.compare_client_cohorts",
+      "probe.database.inspect_lock_error_events"
+    ],
+    "minimum_evidence_revision": 3
+  },
+  "observed": {
+    "target": "observation.http.request_failure",
+    "scope": {
+      "attributes": {
+        "method": "POST",
+        "path": "/orders",
+        "client_platform": "iOS",
+        "app_version": "7.42.0"
+      }
+    },
+    "top_hypothesis": "hypothesis.client.payload_contract_mismatch",
+    "next_probe": "probe.database.inspect_lock_waits",
+    "completed_probes": [
+      "probe.database.inspect_lock_error_events",
+      "probe.http.compare_client_cohorts"
+    ],
+    "final_evidence_revision": 3,
+    "stop_reason": "model_finished",
+    "mcp_tool_calls": [
+      "probe.database.inspect_lock_error_events",
+      "probe.http.compare_client_cohorts"
+    ],
+    "openai_stop_reason": "model_finished",
+    "openai_finish_reason": "Causcope state is sufficient to stop: the server-authorized read-only cohort probe completed at evidence revision 3, and the current routing exposes no safe direct route for the remaining ranked probe; no further authorized MCP execution remains."
+  },
+  "checks": [
+    {
+      "id": "single_expected_diagnosis_scope",
+      "passed": true,
+      "expected": 1,
+      "actual": 1
+    },
+    {
+      "id": "top_hypothesis",
+      "passed": true,
+      "expected": "hypothesis.client.payload_contract_mismatch",
+      "actual": "hypothesis.client.payload_contract_mismatch"
+    },
+    {
+      "id": "minimum_evidence_revision",
+      "passed": true,
+      "expected": ">=3",
+      "actual": 3
+    },
+    {
+      "id": "required_completed_probes",
+      "passed": true,
+      "expected": [
+        "probe.http.compare_client_cohorts",
+        "probe.database.inspect_lock_error_events"
+      ],
+      "actual": [
+        "probe.database.inspect_lock_error_events",
+        "probe.http.compare_client_cohorts"
+      ]
+    },
+    {
+      "id": "openai_client_explicit_finish",
+      "passed": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "openai_client_used_mcp_state",
+      "passed": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "id": "openai_client_no_failed_mcp_mutation",
+      "passed": true,
+      "expected": 0,
+      "actual": 0
+    }
+  ],
+  "passed": true
+}
