@@ -90,6 +90,9 @@ jobs:
       - name: Validate routing-aware MCP resources
         run: python scripts/test_routing_mcp_server.py
 
+      - name: Validate execution-set status projection
+        run: python scripts/test_routed_execution_set_status.py
+
       - name: Validate crash-recoverable incident commits
         run: python scripts/test_incident_state_commit.py
 
