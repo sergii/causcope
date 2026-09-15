@@ -68,6 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
             "atomically append its evidence, and recompute diagnosis"
         ),
     )
+    parser.add_argument(
+        "--observe",
+        type=Path,
+        metavar="RAILS_ROOT",
+        help=(
+            "Create/resume the Investigation, run one bounded local observation session for RAILS_ROOT, "
+            "then render the resulting canonical diagnosis. Place the application command after `--`."
+        ),
+    )
     return parser
 
 
@@ -477,6 +486,9 @@ def render_acquisition(result: dict[str, Any]) -> str:
 
 
 def command(args: argparse.Namespace) -> int:
+    if args.observe is not None:
+        raise ValueError("--observe is handled by the product entrypoint; invoke it through `causcope why`")
+
     paths = diagnostic_paths(args)
     if paths is not None:
         if args.acquire:
