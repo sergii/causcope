@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/routed-execution-set-status.schema.json",
+  "title": "Causcope routed execution-set status projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "current_evidence_revision",
+    "summary",
+    "sets"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "routed_execution_set_status"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "current_evidence_revision": {"type": "integer", "minimum": 0},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "current",
+        "historical",
+        "pending",
+        "in_progress",
+        "ready_to_commit",
+        "committed",
+        "stranded"
+      ],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "current": {"type": "integer", "minimum": 0},
+        "historical": {"type": "integer", "minimum": 0},
+        "pending": {"type": "integer", "minimum": 0},
+        "in_progress": {"type": "integer", "minimum": 0},
+        "ready_to_commit": {"type": "integer", "minimum": 0},
+        "committed": {"type": "integer", "minimum": 0},
+        "stranded": {"type": "integer", "minimum": 0}
+      }
+    },
+    "sets": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/status"}
+    }
+  },
+  "$defs": {
+    "nullable_string": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "minLength": 1}
+      ]
+    },
+    "nullable_timestamp": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "format": "date-time"}
+      ]
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ordinal",
+        "target_resource",
+        "instrument_id",
+        "state",
+        "produced_instance_ids"
+      ],
+      "properties": {
+        "ordinal": {"type": "integer", "minimum": 1},
+        "target_resource": {"type": "string", "minLength": 1},
+        "instrument_id": {"$ref": "#/$defs/nullable_string"},
+        "state": {"enum": ["pending", "succeeded"]},
+        "produced_instance_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_members", "completed_members", "remaining_members"],
+      "properties": {
+        "total_members": {"type": "integer", "minimum": 0},
+        "completed_members": {"type": "integer", "minimum": 0},
+        "remaining_members": {"type": "integer", "minimum": 0}
+      }
+    },
+    "journal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["present", "integrity", "event_count", "head_hash"],
+      "properties": {
+        "present": {"type": "boolean"},
+        "integrity": {"enum": ["absent", "verified", "invalid"]},
+        "event_count": {"type": "integer", "minimum": 0},
+        "head_hash": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          ]
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_set_id",
+        "incident_id",
+        "evidence_revision",
+        "current",
+        "current_route_state",
+        "state",
+        "executable",
+        "reason",
+        "diagnosis_target",
+        "probe_id",
+        "progress",
+        "members",
+        "journal",
+        "started_at",
+        "updated_at",
+        "committed_at"
+      ],
+      "properties": {
+        "execution_set_id": {
+          "type": "string",
+          "pattern": "^execution-set\\.[0-9a-f]{16}$"
+        },
+        "incident_id": {"type": "string", "minLength": 1},
+        "evidence_revision": {"type": "integer", "minimum": 0},
+        "current": {"type": "boolean"},
+        "current_route_state": {
+          "oneOf": [
+            {"type": "null"},
+            {"enum": ["ready", "blocked"]}
+          ]
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "in_progress",
+            "ready_to_commit",
+            "committed",
+            "stranded"
+          ]
+        },
+        "executable": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1},
+        "diagnosis_target": {"$ref": "#/$defs/nullable_string"},
+        "probe_id": {"$ref": "#/$defs/nullable_string"},
+        "progress": {"$ref": "#/$defs/progress"},
+        "members": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/member"}
+        },
+        "journal": {"$ref": "#/$defs/journal"},
+        "started_at": {"$ref": "#/$defs/nullable_timestamp"},
+        "updated_at": {"$ref": "#/$defs/nullable_timestamp"},
+        "committed_at": {"$ref": "#/$defs/nullable_timestamp"}
+      }
+    }
+  }
+}
