@@ -11,12 +11,7 @@ from typing import Any
 from autonomous_investigation import ProbeInsufficientEvidence
 from diagnosis_http_api import DiagnosisSnapshotReader
 from live_diagnosis import normalize_scope, scope_key
-from rails_pool_evidence_import import (
-    _exact_seed_instance,
-    _identity,
-    build_canonical_pool_evidence,
-    validate_pool_document,
-)
+from rails_pool_evidence_import import _exact_seed_instance, _identity, build_canonical_pool_evidence, validate_pool_document
 from runtime_evidence import load_runtime_evidence
 
 RAILS_POOL_PROVIDER_ID = "provider.rails.active_record_pool"
@@ -27,16 +22,7 @@ RAILS_POOL_PROBE_ID = "probe.database.inspect_connection_pool"
 class RailsPoolAutonomousProvider:
     """Expose one exact Rails pool experiment bundle behind a canonical read-only probe."""
 
-    def __init__(
-        self,
-        *,
-        pool_path: Path,
-        runtime_evidence_path: Path,
-        diagnosis_path: Path,
-        concepts: dict[str, dict[str, Any]],
-        incident_id: str,
-        source_uri: str,
-    ) -> None:
+    def __init__(self, *, pool_path: Path, runtime_evidence_path: Path, diagnosis_path: Path, concepts: dict[str, dict[str, Any]], incident_id: str, source_uri: str) -> None:
         if not incident_id:
             raise ValueError("Rails pool provider requires a non-empty incident_id")
         probe = concepts.get(RAILS_POOL_PROBE_ID)
@@ -98,10 +84,7 @@ class RailsPoolAutonomousProvider:
             "scope_mode": "fixed_exact",
             "scope": copy.deepcopy(scope),
             "availability": availability,
-            "contract": {
-                "name": "resource_pool_runtime_evidence",
-                "accepted_schema_versions": ["0.1"],
-            },
+            "contract": {"name": "resource_pool_runtime_evidence", "accepted_schema_versions": ["0.1"]},
             "evidence_semantics": {
                 "positive_findings_only": False,
                 "missing_positive_finding": "insufficient_evidence",
@@ -109,41 +92,20 @@ class RailsPoolAutonomousProvider:
                 "provenance_preserved": True,
                 "causal_authority": False,
             },
-            "probes": [
-                {
-                    "probe": {
-                        "id": RAILS_POOL_PROBE_ID,
-                        "title": probe.get("title", RAILS_POOL_PROBE_ID),
-                        "risk": "read_only",
-                    },
-                    "requires": sorted(
-                        item for item in probe.get("requires", []) if isinstance(item, str)
-                    ),
-                    "mapped_observations": sorted(
-                        item for item in probe.get("produces", []) if isinstance(item, str)
-                    ),
-                }
-            ],
+            "probes": [{
+                "probe": {"id": RAILS_POOL_PROBE_ID, "title": probe.get("title", RAILS_POOL_PROBE_ID), "risk": "read_only"},
+                "requires": sorted(item for item in probe.get("requires", []) if isinstance(item, str)),
+                "mapped_observations": sorted(item for item in probe.get("produces", []) if isinstance(item, str)),
+            }],
         }
 
-    def execute(
-        self,
-        probe_id: str,
-        target: str,
-        scope: dict[str, Any] | None,
-    ) -> dict[str, Any]:
+    def execute(self, probe_id: str, target: str, scope: dict[str, Any] | None) -> dict[str, Any]:
         if probe_id != RAILS_POOL_PROBE_ID:
             raise ValueError(f"unsupported Rails pool autonomous probe: {probe_id}")
         pool, existing, snapshot, target_resource, expected_scope = self._binding()
-        if target_resource != target:
-            raise ProbeInsufficientEvidence(
-                f"Rails pool evidence target {target_resource} does not match selected target {target}"
-            )
         normalized_scope = normalize_scope(scope, self.concepts)
         if scope_key(normalized_scope) != scope_key(expected_scope):
-            raise ProbeInsufficientEvidence(
-                "Rails pool evidence scope does not match the selected diagnosis scope"
-            )
+            raise ProbeInsufficientEvidence("Rails pool evidence scope does not match the selected diagnosis scope")
 
         evidence = build_canonical_pool_evidence(pool, existing, snapshot)
         for instance in evidence.get("instances", []):
@@ -152,7 +114,8 @@ class RailsPoolAutonomousProvider:
             attributes["provider"] = RAILS_POOL_PROVIDER_ID
             attributes["instrument"] = RAILS_POOL_INSTRUMENT
             attributes["selected_semantic_probe"] = RAILS_POOL_PROBE_ID
-            attributes["selected_target"] = target
+            attributes["selected_diagnosis_target"] = target
+            attributes["provider_bound_target_resource"] = target_resource
             if "uri" not in source:
                 source["uri"] = self.source_uri
             labels = instance.setdefault("labels", {})
@@ -160,8 +123,8 @@ class RailsPoolAutonomousProvider:
             labels["selected_semantic_probe"] = RAILS_POOL_PROBE_ID
 
         evidence["description"] = (
-            "Causcope selected the canonical read-only ActiveRecord pool probe and the local Rails "
-            "runtime provider supplied the already-captured, identity-bound experiment bundle. "
-            "The bundle is evidence, not causal authority."
+            "Causcope selected the canonical read-only ActiveRecord pool probe and the local Rails runtime "
+            "provider supplied the already-captured, identity-bound experiment bundle. The selected probe "
+            "authorizes inspection; linked control and recovery observations remain experiment evidence, not probe claims."
         )
         return evidence
