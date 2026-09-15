@@ -123,9 +123,64 @@ canonical diagnosis
 
 The MCP mutation controller recomputes the selection at call time and binds execution to exact incident, evidence revision, target, scope, probe, and instrument identity.
 
-## No LLM dependency
+## OpenAI-backed MCP agent benchmark
 
-Both implemented acceptance surfaces remove common AI-provider credentials from benchmark child processes:
+The third acceptance surface keeps the same Causcope authority boundaries but lets a real OpenAI model decide how to navigate the MCP surface.
+
+It reuses:
+
+```text
+scenario.shop.mobile_bad_payload
+surface = openai_mcp_agent
+```
+
+The model does not receive raw oracle data and does not become diagnosis authority. Its bridge is limited to:
+
+```text
+mcp_list_resources
+mcp_read_resource
+mcp_list_tools
+mcp_call_tool
+finish_investigation
+```
+
+Causcope remains authoritative for canonical evidence, semantic ranking, exact scope, read-only safety, execution eligibility, and revision-bound state commits.
+
+Run locally only when you explicitly want to make paid OpenAI API requests:
+
+```bash
+OPENAI_API_KEY=... \
+python scripts/run_openai_mcp_acceptance_benchmark.py \
+  --model gpt-5.6-luna \
+  --workspace /tmp/causcope-openai-mcp \
+  --result /tmp/causcope-openai-mcp.json
+```
+
+The same real benchmark is available through the manual-only workflow:
+
+```text
+.github/workflows/acceptance-openai-mcp.yml
+```
+
+It uses `workflow_dispatch` only. It does not run on normal pushes or pull requests and is not scheduled.
+
+Default cost bounds are:
+
+```text
+model             gpt-5.6-luna
+max model turns   8
+max output/turn   1200 tokens
+```
+
+The model and both limits are explicit CLI/workflow parameters.
+
+`OPENAI_API_KEY` is used only by the benchmark process. Docker, the Shop testbed, Causcope CLI children, and scenario-control subprocesses receive an environment with common AI credentials removed.
+
+The OpenAI client must explicitly call `finish_investigation`. A prose answer without that function call is recorded as a bounded client-policy failure rather than being accepted as a diagnosis.
+
+## LLM independence of the core
+
+The deterministic local and deterministic MCP acceptance surfaces remove common AI-provider credentials from child processes:
 
 ```text
 OPENAI_API_KEY
@@ -134,9 +189,9 @@ GOOGLE_API_KEY
 GEMINI_API_KEY
 ```
 
-An LLM token is not required for either deterministic benchmark.
+They prove Causcope's canonical evidence and investigation contracts independently of model behavior.
 
-This is deliberate. These benchmarks prove Causcope's canonical evidence and investigation contracts independently of model behavior.
+The OpenAI-backed surface is additive. It evaluates a model as a client of Causcope, not as a replacement for Causcope reasoning.
 
 ## Result
 
@@ -159,6 +214,7 @@ Current surfaces include:
 ```text
 deterministic_shop_autonomous
 deterministic_mcp_agent
+openai_mcp_agent
 ```
 
 The hidden expected Causcope outcome lives beside scenario ground truth in:
@@ -173,14 +229,14 @@ Public `scenario.json` files are validated so oracle-only benchmark keys cannot 
 
 Acceptance surfaces should reuse the same semantic scenario/oracle discipline rather than inventing surface-specific answers.
 
-The first local and MCP proofs currently use different Shop scenarios because the available provider and safety contracts differ. Over time the benchmark matrix should run the same scenario through multiple surfaces once each surface has explicit audited semantics for provider fallback and insufficient evidence.
+The first local proof uses the SQLite scenario while both MCP surfaces use the mobile scenario. Over time the benchmark matrix should run the same scenarios through every applicable surface once each surface has explicit audited semantics for provider fallback and insufficient evidence.
 
 Current and planned surfaces are:
 
 ```text
 deterministic local loop      implemented
 deterministic MCP agent       implemented
-LLM-backed MCP agent          next candidate
+OpenAI-backed MCP agent       harness implemented, real API run opt-in
 Dashboard                     planned
 Cloud / Relay                 planned
 ```
