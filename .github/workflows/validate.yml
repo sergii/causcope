@@ -93,6 +93,9 @@ jobs:
       - name: Validate execution-set status projection
         run: python scripts/test_routed_execution_set_status.py
 
+      - name: Validate execution-set recovery policy
+        run: python scripts/test_routed_execution_set_recovery.py
+
       - name: Validate crash-recoverable incident commits
         run: python scripts/test_incident_state_commit.py
 

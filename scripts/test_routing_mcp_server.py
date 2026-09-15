@@ -20,6 +20,7 @@ from diagnosis_mcp_server import (
 )
 from live_diagnosis import build_diagnosis_snapshot
 from routing_mcp_server import (
+    EXECUTION_SET_RECOVERY_URI,
     EXECUTION_SET_STATUS_URI,
     INSTRUMENT_ROUTING_URI,
     ROUTED_AGENT_PLAN_URI,
@@ -108,16 +109,20 @@ class RoutingMcpServerTest(unittest.TestCase):
             routing = self.read(server, INSTRUMENT_ROUTING_URI)
             routed_plan = self.read(server, ROUTED_AGENT_PLAN_URI)
             status = self.read(server, EXECUTION_SET_STATUS_URI)
+            recovery = self.read(server, EXECUTION_SET_RECOVERY_URI)
 
             self.assertEqual("instrument_routing_projection", routing["kind"])
             self.assertEqual("routed_agent_plan", routed_plan["kind"])
             self.assertEqual("routed_execution_set_status", status["kind"])
+            self.assertEqual("routed_execution_set_recovery", recovery["kind"])
             self.assertEqual(11, routing["evidence_revision"])
             self.assertEqual(11, routed_plan["evidence_revision"])
             self.assertEqual(11, status["current_evidence_revision"])
+            self.assertEqual(11, recovery["current_evidence_revision"])
             self.assertEqual(routing, routed_plan["routing"])
             self.assertEqual("agent_plan", routed_plan["plan"]["kind"])
             self.assertEqual(0, status["summary"]["total"])
+            self.assertEqual(0, recovery["summary"]["total"])
 
             route = next(item for item in routing["routes"] if item["target"] == TARGET)
             self.assertEqual(
@@ -140,6 +145,7 @@ class RoutingMcpServerTest(unittest.TestCase):
             self.assertIn(INSTRUMENT_ROUTING_URI, uris)
             self.assertIn(ROUTED_AGENT_PLAN_URI, uris)
             self.assertIn(EXECUTION_SET_STATUS_URI, uris)
+            self.assertIn(EXECUTION_SET_RECOVERY_URI, uris)
 
 
 if __name__ == "__main__":

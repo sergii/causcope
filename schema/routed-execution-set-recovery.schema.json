@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/routed-execution-set-recovery.schema.json",
+  "title": "Causcope routed execution-set recovery policy projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "incident_id", "current_evidence_revision", "summary", "candidates"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "routed_execution_set_recovery"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "current_evidence_revision": {"type": "integer", "minimum": 0},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "safe_to_resume", "safe_to_replay", "requires_operator_review", "superseded", "garbage_collectable"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "safe_to_resume": {"type": "integer", "minimum": 0},
+        "safe_to_replay": {"type": "integer", "minimum": 0},
+        "requires_operator_review": {"type": "integer", "minimum": 0},
+        "superseded": {"type": "integer", "minimum": 0},
+        "garbage_collectable": {"type": "integer", "minimum": 0}
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/candidate"}
+    }
+  },
+  "$defs": {
+    "nullable_set_id": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^execution-set\\.[0-9a-f]{16}$"}
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execution_set_id",
+        "evidence_revision",
+        "current",
+        "lifecycle_state",
+        "journal_integrity",
+        "classification",
+        "reason",
+        "current_execution_set_id",
+        "advisory_only",
+        "automatic_cleanup_allowed"
+      ],
+      "properties": {
+        "execution_set_id": {"type": "string", "pattern": "^execution-set\\.[0-9a-f]{16}$"},
+        "evidence_revision": {"type": "integer", "minimum": 0},
+        "current": {"type": "boolean"},
+        "lifecycle_state": {"enum": ["in_progress", "ready_to_commit", "committed", "stranded"]},
+        "journal_integrity": {"enum": ["verified", "invalid"]},
+        "classification": {"enum": ["safe_to_resume", "safe_to_replay", "requires_operator_review", "superseded", "garbage_collectable"]},
+        "reason": {"type": "string", "minLength": 1},
+        "current_execution_set_id": {"$ref": "#/$defs/nullable_set_id"},
+        "advisory_only": {"const": true},
+        "automatic_cleanup_allowed": {"const": false}
+      }
+    }
+  }
+}
