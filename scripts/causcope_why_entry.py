@@ -12,11 +12,7 @@ from causal_verification_surfaces import run_canonical_workspace
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "bin" / "causcope"
 DEFAULT_WORKSPACE = Path(".causcope")
-GOLDEN_FILES = {
-    "--static": "concrete-system-facts.json",
-    "--runtime": "concrete-runtime-facts.json",
-    "--pool": "resource-pool-runtime-evidence.json",
-}
+GOLDEN_OPTIONS = ("--static", "--runtime", "--pool")
 
 
 def _workspace(argv: list[str]) -> Path:
@@ -37,36 +33,12 @@ def _has_workspace(argv: list[str]) -> bool:
     )
 
 
-def _has_explicit_golden_paths(argv: list[str]) -> bool:
+def _has_explicit_compatibility_paths(argv: list[str]) -> bool:
     return any(
         argument == option or argument.startswith(f"{option}=")
         for argument in argv
-        for option in GOLDEN_FILES
+        for option in GOLDEN_OPTIONS
     )
-
-
-def resolve_workspace_golden_paths(argv: list[str]) -> list[str]:
-    if _has_explicit_golden_paths(argv) or "--acquire" in argv or _has_observe(argv):
-        return argv
-
-    workspace = _workspace(argv)
-    paths = {option: workspace / filename for option, filename in GOLDEN_FILES.items()}
-    existing = {option: path.exists() for option, path in paths.items()}
-
-    if all(existing.values()):
-        resolved = list(argv)
-        for option, path in paths.items():
-            resolved.extend([option, str(path)])
-        return resolved
-
-    if "--require-confirmed" in argv and any(existing.values()):
-        missing = [path.name for option, path in paths.items() if not existing[option]]
-        raise ValueError(
-            "workspace does not contain a complete Rails D3.1 proof; missing: "
-            + ", ".join(missing)
-        )
-
-    return argv
 
 
 def _has_observe(argv: list[str]) -> bool:
@@ -120,7 +92,7 @@ def _extract_observe(argv: list[str]) -> tuple[list[str], Path | None, list[str]
         raise ValueError("--observe cannot be combined with --acquire; observe first, then authorize acquisition separately")
     if "--require-confirmed" in cleaned:
         raise ValueError("--observe cannot be combined with --require-confirmed")
-    if _has_explicit_golden_paths(cleaned):
+    if _has_explicit_compatibility_paths(cleaned):
         raise ValueError("--observe cannot be combined with --static/--runtime/--pool")
 
     if not _has_workspace(cleaned):
@@ -167,7 +139,7 @@ def _run_observe(base_arguments: list[str], observe_root: Path, application: lis
 
 
 def _run_canonical_if_available(arguments: list[str]) -> int | None:
-    if _has_explicit_golden_paths(arguments):
+    if _has_explicit_compatibility_paths(arguments):
         return None
     parsed = causcope_why.build_parser().parse_args(arguments)
     parsed.workspace = parsed.workspace.expanduser().resolve()
@@ -189,11 +161,13 @@ def main(argv: list[str] | None = None) -> int:
         canonical = _run_canonical_if_available(arguments)
         if canonical is not None:
             return canonical
-        resolved = resolve_workspace_golden_paths(arguments)
     except (ValueError, FileNotFoundError, OSError) as error:
         print(f"causcope: {error}", file=sys.stderr)
         return 2
-    return causcope_why.main(resolved)
+
+    # Compatibility X-Ray projection is explicit-only. Merely retaining old
+    # concrete proof artifacts in a workspace must never shadow product state.
+    return causcope_why.main(arguments)
 
 
 if __name__ == "__main__":

@@ -110,10 +110,12 @@ done
   exit 1
 }
 
-printf '\n[4/5] Workspace now contains the real proof artifacts\n'
+printf '\n[4/5] Compatibility X-Ray proof artifacts are ready\n'
 printf '  %s\n' "$CAUSCOPE_STATIC_FACTS" "$RUNTIME_FACTS" "$POOL_EVIDENCE"
 
-printf '\n[5/5] Asking Causcope why the request is slow\n\n'
+printf '\n[5/5] Rendering the explicit legacy X-Ray compatibility proof\n\n'
 ./bin/causcope why "checkout is slow" \
-  --workspace "$WORKSPACE" \
+  --static "$CAUSCOPE_STATIC_FACTS" \
+  --runtime "$RUNTIME_FACTS" \
+  --pool "$POOL_EVIDENCE" \
   --require-confirmed
