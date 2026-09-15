@@ -178,6 +178,37 @@ The model and both limits are explicit CLI/workflow parameters.
 
 The OpenAI client must explicitly call `finish_investigation`. A prose answer without that function call is recorded as a bounded client-policy failure rather than being accepted as a diagnosis.
 
+### Proven real API run
+
+A real paid OpenAI run passed on 2026-09-15 using GitHub Actions run `35025847376` and `gpt-5.6-luna`.
+
+Observed result:
+
+```text
+hidden oracle             PASS
+final evidence revision   3
+leading hypothesis        hypothesis.client.payload_contract_mismatch
+completed probes          probe.database.inspect_lock_error_events
+                          probe.http.compare_client_cohorts
+failed MCP mutations      0
+explicit finish           yes
+model turns/responses     7
+input tokens              64,549
+output tokens             909
+total tokens              65,458
+API key in testbed child  no
+```
+
+The model first inspected MCP resources/tools, executed both server-authorized read-only probes with exact revision-bound arguments, re-read Causcope state after each mutation, and explicitly stopped when the remaining semantic probe had no safe direct route.
+
+The schema-valid persisted result is:
+
+```text
+benchmarks/results/2026-09-15-openai-mcp-mobile-bad-payload.json
+```
+
+The hidden oracle was loaded only after the model-driven investigation stopped and was not used to construct the diagnosis.
+
 ## LLM independence of the core
 
 The deterministic local and deterministic MCP acceptance surfaces remove common AI-provider credentials from child processes:
@@ -234,9 +265,9 @@ The first local proof uses the SQLite scenario while both MCP surfaces use the m
 Current and planned surfaces are:
 
 ```text
-deterministic local loop      implemented
-deterministic MCP agent       implemented
-OpenAI-backed MCP agent       harness implemented, real API run opt-in
+deterministic local loop      implemented + proven
+deterministic MCP agent       implemented + proven
+OpenAI-backed MCP agent       implemented + real API proven
 Dashboard                     planned
 Cloud / Relay                 planned
 ```
