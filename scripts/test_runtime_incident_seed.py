@@ -16,13 +16,20 @@ FIXTURE = ROOT / "lab" / "rails-connection-pool"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         [str(CLI), *args],
         cwd=ROOT,
-        check=check,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if check and result.returncode != 0:
+        raise AssertionError(
+            "command failed: "
+            + " ".join([str(CLI), *args])
+            + f"\nexit={result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+    return result
 
 
 def write_json(path: Path, document: dict) -> None:
