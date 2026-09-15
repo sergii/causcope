@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import causcope_why
+from bounded_workspace_acquisition import acquire_best_workspace_evidence
 from causal_verification import build_causal_verification_projection
 from causal_verification_source import load_causal_verification_source
 from execution_set_selection import select_ready_execution_set
@@ -89,7 +90,7 @@ def run_canonical_workspace(args: Any) -> int | None:
 
     problem = causcope_why.workspace_problem(args, snapshot)
     if args.acquire or implicit_acquisition_ready(snapshot, args.workspace):
-        acquisition, snapshot, routing, target_resolution = causcope_why.acquire_workspace_evidence(
+        acquisition, snapshot, routing, target_resolution = acquire_best_workspace_evidence(
             snapshot, args.workspace
         )
     else:
