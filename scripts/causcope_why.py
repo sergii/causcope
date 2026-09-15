@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from causal_projection import ROOT, load_concepts
+from causal_projection import ROOT, load_concepts, load_edges
 from causcope_cli import (
     DEFAULT_WORKSPACE,
     default_incident_id,
@@ -17,12 +17,19 @@ from causcope_cli import (
     load_state,
     persist_state,
 )
+from diagnosis_http_api import DiagnosisSnapshotReader
+from information_gain_router import InformationGainInstrumentRouter
 from instrument_router import InstrumentRouter
 from instrument_routing_projection import build_instrument_routing_projection
 from probe_executor_runtime import build_probe_execution_capabilities
 from provider_bindings import load_provider_instance_bindings
 from rails_pool_vertical_slice import build_summary, load_document, render
 from resource_topology import load_resource_topology
+from routed_execution_set_mcp_tool import (
+    TOOL_NAME as EXECUTE_SET_TOOL,
+    RoutedExecutionSetToolController,
+)
+from routed_execution_sets import build_routed_execution_sets
 from runtime_target_resolution import build_runtime_target_resolution
 
 WORKSPACE_DIAGNOSIS = "diagnosis.json"
@@ -52,6 +59,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-confirmed",
         action="store_true",
         help="Fail closed unless an attached diagnostic projection reaches CAUSAL_DIAGNOSIS_CONFIRMED",
+    )
+    parser.add_argument(
+        "--acquire",
+        action="store_true",
+        help=(
+            "Explicitly execute exactly one current ready target-aware read-only execution set, "
+            "atomically append its evidence, and recompute diagnosis"
+        ),
     )
     return parser
 
@@ -157,7 +172,15 @@ def workspace_problem(args: argparse.Namespace, snapshot: dict[str, Any]) -> str
 def workspace_route_context(
     snapshot: dict[str, Any],
     workspace: Path,
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    *,
+    external_execution_enabled: bool = False,
+    information_gain: bool = False,
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any] | None,
+    InstrumentRouter,
+    InformationGainInstrumentRouter | None,
+]:
     concepts = load_concepts(ROOT)
     runtime_evidence_path = workspace / WORKSPACE_RUNTIME_EVIDENCE
     relationships_path = workspace / WORKSPACE_RUNTIME_RELATIONSHIPS
@@ -197,12 +220,22 @@ def workspace_route_context(
         resource_topology=topology,
         provider_instance_bindings=provider_instance_bindings,
     )
+    information_gain_router = (
+        InformationGainInstrumentRouter(
+            router=router,
+            provider_instance_bindings=provider_instance_bindings,
+        )
+        if information_gain and target_resolution is not None and provider_instance_bindings
+        else None
+    )
     routing = build_instrument_routing_projection(
         snapshot,
         router,
+        external_mcp_execution_enabled=external_execution_enabled,
         target_resolution=target_resolution,
+        information_gain_router=information_gain_router,
     )
-    return routing, target_resolution
+    return routing, target_resolution, router, information_gain_router
 
 
 def _top_candidate(diagnosis: dict[str, Any]) -> dict[str, Any] | None:
@@ -344,9 +377,110 @@ def render_workspace_diagnosis(
     return "\n".join(lines) + "\n"
 
 
+def acquire_workspace_evidence(
+    snapshot: dict[str, Any],
+    workspace: Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+    runtime_evidence_path = workspace / WORKSPACE_RUNTIME_EVIDENCE
+    if not runtime_evidence_path.exists():
+        raise ValueError(f"--acquire requires {runtime_evidence_path}")
+
+    routing, _resolution, _router, information_gain_router = workspace_route_context(
+        snapshot,
+        workspace,
+        external_execution_enabled=True,
+        information_gain=True,
+    )
+    if information_gain_router is None:
+        raise ValueError(
+            "--acquire requires exact target resolution and at least one configured direct provider binding"
+        )
+
+    execution_sets = build_routed_execution_sets(routing)
+    ready = [item for item in execution_sets["sets"] if item["state"] == "ready"]
+    if len(ready) != 1:
+        blocked = [
+            f"{item['id']}: {item['reason']}"
+            for item in execution_sets["sets"]
+            if item["state"] != "ready"
+        ]
+        detail = "; ".join(blocked) if blocked else "no ready execution set"
+        raise ValueError(
+            f"--acquire requires exactly one ready execution set, found {len(ready)}: {detail}"
+        )
+
+    diagnosis_path = workspace / WORKSPACE_DIAGNOSIS
+    concepts = load_concepts(ROOT)
+    edges = load_edges(ROOT)
+
+    def current_routing(current_snapshot: dict[str, Any]) -> dict[str, Any]:
+        return workspace_route_context(
+            current_snapshot,
+            workspace,
+            external_execution_enabled=True,
+            information_gain=True,
+        )[0]
+
+    def current_information_gain_router() -> InformationGainInstrumentRouter:
+        current_snapshot = load_workspace_diagnosis(workspace)
+        if current_snapshot is None:
+            raise ValueError("current diagnosis snapshot disappeared during acquisition")
+        router = workspace_route_context(
+            current_snapshot,
+            workspace,
+            external_execution_enabled=True,
+            information_gain=True,
+        )[3]
+        if router is None:
+            raise ValueError("current workspace no longer has an executable information-gain provider route")
+        return router
+
+    controller = RoutedExecutionSetToolController(
+        reader=DiagnosisSnapshotReader(diagnosis_path),
+        snapshot_path=diagnosis_path,
+        runtime_evidence_path=runtime_evidence_path,
+        concepts=concepts,
+        edges=edges,
+        routing_projection_provider=current_routing,
+        information_gain_router_provider=current_information_gain_router,
+        mutation_lock_dir=workspace / "locks",
+    )
+    result = controller.call(EXECUTE_SET_TOOL, ready[0]["arguments"])
+
+    next_snapshot = load_workspace_diagnosis(workspace)
+    if next_snapshot is None:
+        raise ValueError("evidence acquisition committed without a diagnosis snapshot")
+    next_routing, next_resolution, _next_router, _next_information_gain_router = workspace_route_context(
+        next_snapshot,
+        workspace,
+        information_gain=True,
+    )
+    return result, next_snapshot, next_routing, next_resolution
+
+
+def render_acquisition(result: dict[str, Any]) -> str:
+    lines = [
+        "Evidence acquisition",
+        f"  execution set: {result['execution_set_id']}",
+        f"  probe: {result['probe_id']}",
+        (
+            "  evidence revision: "
+            f"{result['previous_evidence_revision']} -> {result['evidence_revision']}"
+        ),
+    ]
+    for member in result["member_results"]:
+        lines.append(
+            f"  target: {member['target_resource']} via {member['instrument_id']}"
+        )
+    lines.append("  added evidence: " + ", ".join(result["added_instance_ids"]))
+    return "\n".join(lines) + "\n"
+
+
 def command(args: argparse.Namespace) -> int:
     paths = diagnostic_paths(args)
     if paths is not None:
+        if args.acquire:
+            raise ValueError("--acquire cannot be combined with --static/--runtime/--pool")
         static_path, runtime_path, pool_path = paths
         problem = args.problem or "request is slow"
         summary = build_summary(
@@ -371,7 +505,18 @@ def command(args: argparse.Namespace) -> int:
                 "workspace diagnosis is ordinal and does not claim causal confirmation"
             )
         problem = workspace_problem(args, snapshot)
-        routing, target_resolution = workspace_route_context(snapshot, args.workspace)
+        if args.acquire:
+            acquisition, snapshot, routing, target_resolution = acquire_workspace_evidence(
+                snapshot,
+                args.workspace,
+            )
+        else:
+            routing, target_resolution, _router, _information_gain_router = workspace_route_context(
+                snapshot,
+                args.workspace,
+            )
+            acquisition = None
+
         if args.json:
             document: dict[str, Any] = {
                 "kind": "causcope_why",
@@ -382,11 +527,17 @@ def command(args: argparse.Namespace) -> int:
             }
             if target_resolution is not None:
                 document["target_resolution"] = target_resolution
+            if acquisition is not None:
+                document["acquisition"] = acquisition
             print(json.dumps(document, indent=2, sort_keys=True))
         else:
+            if acquisition is not None:
+                print(render_acquisition(acquisition))
             print(render_workspace_diagnosis(problem, snapshot, routing), end="")
         return 0
 
+    if args.acquire:
+        raise ValueError("--acquire requires an existing diagnosis snapshot")
     if args.require_confirmed:
         raise ValueError("--require-confirmed requires --static, --runtime, and --pool")
 
