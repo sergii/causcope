@@ -8,56 +8,25 @@ import unittest
 from pathlib import Path
 
 from causal_projection import load_concepts
-from postgresql_health_provider import (
-    POSTGRESQL_HEALTH_PROVIDER_ID,
-    PostgresqlHealthAutonomousProvider,
-    _blocking_chains,
-)
+from postgresql_health_provider import POSTGRESQL_HEALTH_PROVIDER_ID, PostgresqlHealthAutonomousProvider, _blocking_chains
 from runtime_evidence import load_runtime_evidence, validate_runtime_references
 
 ROOT = Path(__file__).resolve().parents[1]
 INCIDENT_ID = "incident.test.postgresql-health"
-SCOPE = {
-    "boundaries": ["boundary.application.database"],
-    "attributes": {"service": "checkout-api", "dependency": "postgresql"},
-}
+SCOPE = {"boundaries": ["boundary.application.database"], "attributes": {"service": "checkout-api", "dependency": "postgresql"}}
 TARGET_RESOURCE = "db.postgresql.checkout.primary"
 
 
 def snapshot() -> dict:
     return {
-        "collected_at": "2026-09-16T00:10:00Z",
-        "database": "checkout",
+        "collected_at": "2026-09-16T00:10:00Z", "database": "checkout",
         "long_transaction_threshold_seconds": 60,
         "blocking_chains": [[301, 201, 101]],
-        "long_running_transactions": [
-            {"pid": 101, "state": "idle in transaction", "age_seconds": 180.0}
-        ],
-        "vacuum": {
-            "autovacuum_enabled": True,
-            "tables": [
-                {
-                    "schema": "public",
-                    "table": "orders",
-                    "dead_tuples": 5000.0,
-                    "estimated_tuples": 10000.0,
-                    "vacuum_trigger": 2050.0,
-                    "pressure_ratio": 2.439,
-                    "autovacuum_enabled": True,
-                    "trigger_exceeded": True,
-                },
-                {
-                    "schema": "public",
-                    "table": "audit_log",
-                    "dead_tuples": 10.0,
-                    "estimated_tuples": 100.0,
-                    "vacuum_trigger": 70.0,
-                    "pressure_ratio": 0.143,
-                    "autovacuum_enabled": False,
-                    "trigger_exceeded": False,
-                },
-            ],
-        },
+        "long_running_transactions": [{"pid": 101, "state": "idle in transaction", "age_seconds": 180.0}],
+        "vacuum": {"autovacuum_enabled": True, "tables": [
+            {"schema": "public", "table": "orders", "dead_tuples": 5000.0, "estimated_tuples": 10000.0, "vacuum_trigger": 2050.0, "pressure_ratio": 2.439, "autovacuum_enabled": True, "trigger_exceeded": True},
+            {"schema": "public", "table": "audit_log", "dead_tuples": 10.0, "estimated_tuples": 100.0, "vacuum_trigger": 70.0, "pressure_ratio": 0.143, "autovacuum_enabled": False, "trigger_exceeded": False},
+        ]},
     }
 
 
@@ -69,11 +38,8 @@ class PostgreSQLHealthProviderTest(unittest.TestCase):
     def provider(self, document: dict | None = None) -> PostgresqlHealthAutonomousProvider:
         current = snapshot() if document is None else document
         return PostgresqlHealthAutonomousProvider(
-            concepts=self.concepts,
-            incident_id=INCIDENT_ID,
-            scope=SCOPE,
-            target_resource=TARGET_RESOURCE,
-            collector=lambda: current,
+            concepts=self.concepts, incident_id=INCIDENT_ID, scope=SCOPE,
+            target_resource=TARGET_RESOURCE, collector=lambda: current,
             source_uri="postgresql://test/checkout",
         )
 
@@ -85,42 +51,24 @@ class PostgreSQLHealthProviderTest(unittest.TestCase):
             validate_runtime_references(loaded, self.concepts)
 
     def test_blocking_chain_reconstruction_keeps_maximal_dependency_path(self) -> None:
-        activity = [
-            {"pid": 301, "blocking_pids": [201]},
-            {"pid": 201, "blocking_pids": [101]},
-            {"pid": 101, "blocking_pids": []},
-        ]
+        activity = [{"pid": 301, "blocking_pids": [201]}, {"pid": 201, "blocking_pids": [101]}, {"pid": 101, "blocking_pids": []}]
         self.assertEqual([[301, 201, 101]], _blocking_chains(activity))
 
     def test_provider_exposes_three_explicit_read_only_probes(self) -> None:
         provider = self.provider()
-        self.assertEqual(
-            {
-                "probe.database.inspect_blocking_chains",
-                "probe.database.inspect_long_running_transactions",
-                "probe.database.inspect_vacuum_health",
-            },
-            provider.supported_probe_ids,
-        )
+        self.assertEqual({"probe.database.inspect_lock_waits", "probe.database.inspect_long_running_transactions", "probe.database.inspect_vacuum_health"}, provider.supported_probe_ids)
         projection = provider.capability_projection()
         self.assertEqual(POSTGRESQL_HEALTH_PROVIDER_ID, projection["id"])
         self.assertEqual("postgresql", projection["instrument"])
         self.assertTrue(projection["evidence_semantics"]["complete_snapshot"])
         self.assertFalse(projection["evidence_semantics"]["sql_text_collected"])
+        lock_probe = next(item for item in projection["probes"] if item["probe"]["id"] == "probe.database.inspect_lock_waits")
+        self.assertNotIn("observation.database.lock_wait_time", lock_probe["mapped_observations"])
 
-    def test_blocking_chain_probe_emits_target_bound_positive_evidence(self) -> None:
-        provider = self.provider()
-        evidence = provider.execute(
-            "probe.database.inspect_blocking_chains",
-            "observation.http.request_latency",
-            SCOPE,
-        )
+    def test_lock_wait_probe_emits_target_bound_blocking_chain_evidence(self) -> None:
+        evidence = self.provider().execute("probe.database.inspect_lock_waits", "observation.http.request_latency", SCOPE)
         self.validate_evidence(evidence)
-        self.assertEqual(2, len(evidence["instances"]))
-        blocking = next(
-            item for item in evidence["instances"]
-            if item["observation"] == "observation.database.blocking_chain"
-        )
+        blocking = next(item for item in evidence["instances"] if item["observation"] == "observation.database.blocking_chain")
         self.assertEqual("observed", blocking["state"])
         self.assertEqual(1, blocking["measurement"]["value"])
         self.assertEqual("2", blocking["labels"]["max_depth"])
@@ -128,11 +76,7 @@ class PostgreSQLHealthProviderTest(unittest.TestCase):
         self.assertNotIn("query", json.dumps(evidence).lower())
 
     def test_long_transaction_probe_preserves_threshold_as_evidence_policy(self) -> None:
-        evidence = self.provider().execute(
-            "probe.database.inspect_long_running_transactions",
-            "observation.http.request_latency",
-            SCOPE,
-        )
+        evidence = self.provider().execute("probe.database.inspect_long_running_transactions", "observation.http.request_latency", SCOPE)
         self.validate_evidence(evidence)
         instance = evidence["instances"][0]
         self.assertEqual("observed", instance["state"])
@@ -141,11 +85,7 @@ class PostgreSQLHealthProviderTest(unittest.TestCase):
         self.assertEqual("60", instance["labels"]["threshold_seconds"])
 
     def test_vacuum_probe_separates_pressure_from_disabled_configuration(self) -> None:
-        evidence = self.provider().execute(
-            "probe.database.inspect_vacuum_health",
-            "observation.database.query_latency",
-            SCOPE,
-        )
+        evidence = self.provider().execute("probe.database.inspect_vacuum_health", "observation.database.query_latency", SCOPE)
         self.validate_evidence(evidence)
         by_observation = {item["observation"]: item for item in evidence["instances"]}
         self.assertEqual("observed", by_observation["observation.database.vacuum_pressure"]["state"])
