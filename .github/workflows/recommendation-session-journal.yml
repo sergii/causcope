@@ -18,7 +18,7 @@ on:
       - "examples/recommendations/database-read-model/**"
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/topology/shop.yaml"
-      - "RFC/0071-recommendation-session-journal.md"
+      - "RFC/0072-recommendation-session-journal.md"
       - ".github/workflows/recommendation-session-journal.yml"
   pull_request:
     paths:
@@ -36,7 +36,7 @@ on:
       - "examples/recommendations/database-read-model/**"
       - "examples/adapters/pgbot/postgresql.yaml"
       - "examples/topology/shop.yaml"
-      - "RFC/0071-recommendation-session-journal.md"
+      - "RFC/0072-recommendation-session-journal.md"
       - ".github/workflows/recommendation-session-journal.yml"
 
 permissions:
