@@ -41,6 +41,9 @@ jobs:
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
 
+      - name: Validate why bounded observation composition
+        run: python scripts/test_causcope_why_observe.py
+
       - name: Validate workspace-native Rails golden why path
         run: python scripts/test_causcope_why_workspace_golden.py
 
