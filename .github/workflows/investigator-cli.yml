@@ -35,6 +35,9 @@ jobs:
       - name: Validate observed Rails incident bootstrap
         run: python scripts/test_runtime_incident_seed.py
 
+      - name: Validate bounded runtime observation session
+        run: python scripts/test_runtime_observe.py
+
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
 
