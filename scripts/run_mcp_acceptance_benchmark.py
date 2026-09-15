@@ -29,8 +29,12 @@ from diagnosis_mcp_server import (
 from instrument_router import InstrumentRouter
 from live_diagnosis import build_diagnosis_snapshot
 from probe_executor_runtime import build_probe_execution_capabilities
-from routed_instrument_mcp_tool import TOOL_NAME, RoutedInstrumentToolController
-from routing_mcp_server import ROUTED_AGENT_PLAN_URI, RoutingDiagnosisMcpServer
+from ranked_routable_mcp_tool import (
+    TOOL_NAME,
+    RankedRoutableInstrumentToolController,
+)
+from ranked_routable_projection import build_ranked_routable_projection
+from routing_mcp_server import INSTRUMENT_ROUTING_URI, RoutingDiagnosisMcpServer
 from run_acceptance_benchmark import (
     AI_CREDENTIAL_ENV_KEYS,
     deterministic_env,
@@ -137,10 +141,10 @@ def public_failing_scope(scenario: dict[str, Any]) -> dict[str, Any]:
     return {"attributes": attributes}
 
 
-def matching_route(plan: dict[str, Any], wanted_scope: dict[str, Any]) -> dict[str, Any] | None:
+def matching_route(routing: dict[str, Any], wanted_scope: dict[str, Any]) -> dict[str, Any] | None:
     wanted_attributes = wanted_scope["attributes"]
     matches = []
-    for route in plan.get("routing", {}).get("routes", []):
+    for route in routing.get("routes", []):
         if route.get("target") != TARGET:
             continue
         attributes = (route.get("scope") or {}).get("attributes", {})
@@ -219,7 +223,7 @@ def run_mcp_agent(
             providers=[provider],
         )
 
-    controller = RoutedInstrumentToolController(
+    controller = RankedRoutableInstrumentToolController(
         reader=reader,
         snapshot_path=snapshot_path,
         runtime_evidence_path=evidence_path,
@@ -233,22 +237,26 @@ def run_mcp_agent(
         instrument_router_provider=router_provider,
         probe_capability_provider=lambda: build_probe_execution_capabilities(concepts),
         routed_tools=controller,
+        routing_projection_provider=lambda snapshot: build_ranked_routable_projection(
+            snapshot,
+            router_provider(),
+        ),
     )
 
     steps: list[dict[str, Any]] = []
     request_id = 1
     stop_reason = "max_steps"
     for index in range(1, max_steps + 1):
-        plan = read_mcp_resource(server, ROUTED_AGENT_PLAN_URI, request_id)
+        routing = read_mcp_resource(server, INSTRUMENT_ROUTING_URI, request_id)
         request_id += 1
-        route = matching_route(plan, public_scope)
+        route = matching_route(routing, public_scope)
         if route is None:
             stop_reason = "no_executable_route"
             break
         instrument = route["decision"]["selected_instrument"]
         arguments = {
-            "incidentId": plan["incident_id"],
-            "evidenceRevision": plan["evidence_revision"],
+            "incidentId": routing["incident_id"],
+            "evidenceRevision": routing["evidence_revision"],
             "target": route["target"],
             "scope": route["scope"],
             "probeId": route["probe_id"],
@@ -261,6 +269,7 @@ def run_mcp_agent(
                 "index": index,
                 "status": "completed",
                 "probe_id": route["probe_id"],
+                "probe_rank": route.get("probe_rank"),
                 "instrument_id": instrument["id"],
                 "previous_evidence_revision": execution["previous_evidence_revision"],
                 "evidence_revision": execution["evidence_revision"],
