@@ -30,6 +30,10 @@ def validate_instrument_routing_projection(document: dict[str, Any]) -> None:
         )
 
 
+def _scope_key(scope: dict[str, Any] | None) -> str:
+    return json.dumps(scope, sort_keys=True, separators=(",", ":"))
+
+
 def _route_agent_action(
     decision: dict[str, Any],
     *,
@@ -73,11 +77,46 @@ def _route_agent_action(
     }
 
 
+def _selection_fields(decision: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    selection = decision.get("selection")
+    if not isinstance(selection, dict):
+        return None, None
+    return copy.deepcopy(selection["instrument"]), selection.get("reason")
+
+
+def _target_resolution_index(
+    target_resolution: dict[str, Any],
+    *,
+    incident_id: str,
+    evidence_revision: int,
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    if target_resolution.get("kind") != "runtime_target_resolution":
+        raise ValueError("target-aware routing requires runtime_target_resolution")
+    if target_resolution.get("incident_id") != incident_id:
+        raise ValueError("runtime target resolution belongs to another incident")
+    if target_resolution.get("evidence_revision") != evidence_revision:
+        raise ValueError("runtime target resolution revision does not match diagnosis snapshot")
+
+    index: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for resolution in target_resolution.get("resolutions", []):
+        key = (
+            _scope_key(resolution.get("scope")),
+            resolution["diagnosis_target"],
+            resolution["probe_id"],
+        )
+        if key in index:
+            raise ValueError(f"duplicate runtime target resolution entry: {key}")
+        index[key] = resolution
+    return index
+
+
 def build_instrument_routing_projection(
     snapshot: dict[str, Any],
     router: InstrumentRouter,
     *,
     external_mcp_execution_enabled: bool = False,
+    target_resolution: dict[str, Any] | None = None,
+    information_gain_router: Any | None = None,
 ) -> dict[str, Any]:
     if snapshot.get("kind") != "diagnosis_snapshot":
         raise ValueError("instrument routing projection requires a diagnosis_snapshot")
@@ -87,6 +126,18 @@ def build_instrument_routing_projection(
         raise ValueError("diagnosis snapshot must include incident_id")
     if not isinstance(evidence_revision, int) or evidence_revision < 0:
         raise ValueError("diagnosis snapshot must include a non-negative evidence_revision")
+    if information_gain_router is not None and target_resolution is None:
+        raise ValueError("information-gain routing requires runtime target resolution")
+
+    resolution_index = (
+        _target_resolution_index(
+            target_resolution,
+            incident_id=incident_id,
+            evidence_revision=evidence_revision,
+        )
+        if target_resolution is not None
+        else None
+    )
 
     routes: list[dict[str, Any]] = []
     for partition in snapshot.get("partitions", []):
@@ -105,41 +156,121 @@ def build_instrument_routing_projection(
             probes = ranking.get("probes")
             if not isinstance(probes, list) or not probes:
                 continue
-            probe_id = probes[0].get("probe", {}).get("id")
+            probe_candidate = probes[0]
+            probe_id = probe_candidate.get("probe", {}).get("id")
             if not isinstance(probe_id, str) or not probe_id:
                 continue
 
-            decision = router.route(probe_id, scope, execution_requirement="any")
-            selection = decision.get("selection")
-            selected_instrument = (
-                copy.deepcopy(selection["instrument"])
-                if isinstance(selection, dict)
-                else None
-            )
-            routes.append(
-                {
-                    "scope": copy.deepcopy(decision.get("scope")),
-                    "target": target,
-                    "probe_id": probe_id,
-                    "decision": {
-                        "selected_instrument": selected_instrument,
-                        "stop_reason": decision.get("stop_reason"),
-                        "selection_reason": (
-                            selection.get("reason") if isinstance(selection, dict) else None
+            if resolution_index is None:
+                decision = router.route(probe_id, scope, execution_requirement="any")
+                selected_instrument, selection_reason = _selection_fields(decision)
+                routes.append(
+                    {
+                        "scope": copy.deepcopy(decision.get("scope")),
+                        "target": target,
+                        "probe_id": probe_id,
+                        "decision": {
+                            "selected_instrument": selected_instrument,
+                            "stop_reason": decision.get("stop_reason"),
+                            "selection_reason": selection_reason,
+                        },
+                        "agent_action": _route_agent_action(
+                            decision,
+                            external_mcp_execution_enabled=external_mcp_execution_enabled,
                         ),
-                    },
-                    "agent_action": _route_agent_action(
-                        decision,
-                        external_mcp_execution_enabled=external_mcp_execution_enabled,
-                    ),
-                }
-            )
+                    }
+                )
+                continue
+
+            key = (_scope_key(scope), target, probe_id)
+            resolution = resolution_index.get(key)
+            if resolution is None:
+                raise ValueError(f"missing runtime target resolution for diagnosis route: {key}")
+
+            if resolution.get("status") != "resolved":
+                stop_reason = (
+                    "target_resource_unresolved: "
+                    + str(resolution.get("unresolved_reason") or "unknown")
+                )
+                routes.append(
+                    {
+                        "scope": copy.deepcopy(scope),
+                        "target": target,
+                        "probe_id": probe_id,
+                        "target_resource": None,
+                        "routing_strategy": (
+                            "target_aware_information_gain"
+                            if information_gain_router is not None
+                            else "target_aware_safe_route"
+                        ),
+                        "target_resolution": {
+                            "status": "unresolved",
+                            "unresolved_reason": resolution.get("unresolved_reason"),
+                            "supporting_relationship_ids": [],
+                        },
+                        "decision": {
+                            "selected_instrument": None,
+                            "stop_reason": stop_reason,
+                            "selection_reason": None,
+                        },
+                        "agent_action": {
+                            "kind": "stop",
+                            "mcp_execution_available": False,
+                            "reason": stop_reason,
+                        },
+                    }
+                )
+                continue
+
+            for binding in resolution.get("target_bindings", []):
+                target_resource = binding["target_resource"]
+                if information_gain_router is not None:
+                    decision = information_gain_router.route(
+                        probe_candidate,
+                        scope,
+                        target_resource=target_resource,
+                        execution_requirement="any",
+                    )
+                    routing_strategy = "target_aware_information_gain"
+                else:
+                    decision = router.route(
+                        probe_id,
+                        scope,
+                        execution_requirement="any",
+                        target_resource=target_resource,
+                    )
+                    routing_strategy = "target_aware_safe_route"
+                selected_instrument, selection_reason = _selection_fields(decision)
+                routes.append(
+                    {
+                        "scope": copy.deepcopy(decision.get("scope")),
+                        "target": target,
+                        "probe_id": probe_id,
+                        "target_resource": target_resource,
+                        "routing_strategy": routing_strategy,
+                        "target_resolution": {
+                            "status": "resolved",
+                            "unresolved_reason": None,
+                            "supporting_relationship_ids": sorted(binding["relationship_ids"]),
+                        },
+                        "decision": {
+                            "selected_instrument": selected_instrument,
+                            "stop_reason": decision.get("stop_reason"),
+                            "selection_reason": selection_reason,
+                        },
+                        "agent_action": _route_agent_action(
+                            decision,
+                            external_mcp_execution_enabled=external_mcp_execution_enabled,
+                        ),
+                    }
+                )
 
     routes.sort(
         key=lambda item: (
-            json.dumps(item["scope"], sort_keys=True, separators=(",", ":")),
+            _scope_key(item["scope"]),
             item["target"],
             item["probe_id"],
+            item.get("target_resource") or "",
         )
     )
     document = {
@@ -164,14 +295,20 @@ def overlay_agent_plan_routing(
     if routing_projection.get("evidence_revision") != plan.get("evidence_revision"):
         raise ValueError("routing projection revision does not match agent plan")
 
-    indexed = {
-        (
-            json.dumps(route.get("scope"), sort_keys=True, separators=(",", ":")),
+    indexed: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for route in routing_projection.get("routes", []):
+        key = (
+            _scope_key(route.get("scope")),
             route["target"],
             route["probe_id"],
-        ): route
-        for route in routing_projection.get("routes", [])
-    }
+        )
+        if key in indexed:
+            raise ValueError(
+                "agent-plan routing overlay cannot collapse multiple exact target routes; "
+                "consume instrument_routing_projection directly for fan-out"
+            )
+        indexed[key] = route
+
     output = copy.deepcopy(plan)
     for step in output.get("steps", []):
         step["routing"] = None
@@ -182,7 +319,7 @@ def overlay_agent_plan_routing(
         if isinstance(step.get("session"), dict):
             continue
         key = (
-            json.dumps(step.get("scope"), sort_keys=True, separators=(",", ":")),
+            _scope_key(step.get("scope")),
             target,
             probe_id,
         )
