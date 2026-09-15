@@ -1,6 +1,6 @@
 # RFC 0083: Canonical deterministic acceptance benchmark
 
-- Status: Proposed implementation slice
+- Status: Implemented initial slice
 - Date: 2026-09-15
 
 ## Decision
@@ -250,3 +250,5 @@ The slice is complete when CI proves:
 7. the final hypothesis and evidence revision satisfy the hidden scoring contract;
 8. the correlated lock observation has canonical probe provenance;
 9. the benchmark result validates against its JSON Schema.
+
+All nine checks are now exercised by the Shop CI workflow and the initial slice is implemented.
