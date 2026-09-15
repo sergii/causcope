@@ -15,6 +15,9 @@ on:
         description: Maximum output tokens per Responses API turn
         required: false
         default: "1200"
+  push:
+    branches:
+      - benchmark/openai-mcp-current-main-20260916
 
 jobs:
   benchmark:
@@ -23,6 +26,9 @@ jobs:
       contents: read
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      BENCHMARK_MODEL: ${{ inputs.model || 'gpt-5.6-luna' }}
+      BENCHMARK_MAX_TURNS: ${{ inputs.max_turns || '8' }}
+      BENCHMARK_MAX_OUTPUT_TOKENS: ${{ inputs.max_output_tokens || '1200' }}
 
     steps:
       - name: Checkout
@@ -49,9 +55,9 @@ jobs:
       - name: Run real OpenAI-backed MCP acceptance benchmark
         run: |
           python scripts/run_openai_mcp_acceptance_benchmark.py \
-            --model "${{ inputs.model }}" \
-            --max-turns "${{ inputs.max_turns }}" \
-            --max-output-tokens "${{ inputs.max_output_tokens }}" \
+            --model "$BENCHMARK_MODEL" \
+            --max-turns "$BENCHMARK_MAX_TURNS" \
+            --max-output-tokens "$BENCHMARK_MAX_OUTPUT_TOKENS" \
             --workspace /tmp/causcope-openai-mcp \
             --result /tmp/causcope-openai-mcp-result.json
 
