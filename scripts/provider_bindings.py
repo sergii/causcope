@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 from jsonschema import Draft202012Validator
@@ -12,12 +13,15 @@ from causal_projection import ROOT
 from pgbot_adapter import load_adapter, load_context
 from pgbot_autonomous_provider import (
     PGBOT_PROVIDER_ID,
+    FileContextSupplier,
     PgbotAutonomousProbeProvider,
     file_context_supplier,
 )
+from pgbot_cli_context import PgbotCliContextSupplier
 from resource_topology import ResourceTopology
 
 SCHEMA_PATH = ROOT / "schema" / "provider-bindings.schema.json"
+PgbotContextSupplier = Callable[[], dict[str, Any]]
 
 
 def _load_schema() -> dict[str, Any]:
@@ -59,16 +63,24 @@ def _resolve_path(config_path: Path, value: str) -> Path:
     return (config_path.parent / candidate).resolve()
 
 
-def _validate_pgbot_target_identity(
+def _expected_database(
     *,
     provider_instance: str,
     topology: ResourceTopology,
-    context: dict[str, Any],
-) -> None:
+) -> str | None:
     instance = topology.provider_instance(provider_instance)
     target = topology.resource(instance["target"])
-    expected_database = target.get("attributes", {}).get("database")
-    if not isinstance(expected_database, str) or not expected_database:
+    value = target.get("attributes", {}).get("database")
+    return value if isinstance(value, str) and value else None
+
+
+def _validate_pgbot_database_identity(
+    *,
+    provider_instance: str,
+    expected_database: str | None,
+    context: dict[str, Any],
+) -> None:
+    if expected_database is None:
         return
     observed_database = context.get("server", {}).get("database")
     if observed_database != expected_database:
@@ -76,6 +88,80 @@ def _validate_pgbot_target_identity(
             f"pgbot provider binding {provider_instance} database identity mismatch: "
             f"topology target expects {expected_database!r}, report contains {observed_database!r}"
         )
+
+
+@dataclass(frozen=True)
+class TargetValidatedPgbotContextSupplier:
+    """Revalidate pgbot database identity on every evidence read."""
+
+    provider_instance: str
+    expected_database: str | None
+    delegate: PgbotContextSupplier
+
+    def __call__(self) -> dict[str, Any]:
+        context = self.delegate()
+        _validate_pgbot_database_identity(
+            provider_instance=self.provider_instance,
+            expected_database=self.expected_database,
+            context=context,
+        )
+        return context
+
+    def availability(self, adapter: dict[str, Any]) -> tuple[bool, str | None]:
+        checker = getattr(self.delegate, "availability", None)
+        if not callable(checker):
+            return False, "pgbot context supplier does not expose an availability check"
+        available, reason = checker(adapter)
+        if not available:
+            return available, reason
+
+        # File reads are non-invasive, so validate target identity during discovery too.
+        # Live CLI suppliers deliberately do not query the database during plain `why`.
+        if isinstance(self.delegate, FileContextSupplier):
+            context = self.delegate()
+            _validate_pgbot_database_identity(
+                provider_instance=self.provider_instance,
+                expected_database=self.expected_database,
+                context=context,
+            )
+        return True, None
+
+
+def _pgbot_supplier(
+    *,
+    config_path: Path,
+    entry: dict[str, Any],
+    provider_instance: str,
+    topology: ResourceTopology,
+) -> TargetValidatedPgbotContextSupplier:
+    expected_database = _expected_database(
+        provider_instance=provider_instance,
+        topology=topology,
+    )
+    driver = entry["driver"]
+
+    if driver == "pgbot_file":
+        context_path = _resolve_path(config_path, entry["context"])
+        context = load_context(context_path)
+        _validate_pgbot_database_identity(
+            provider_instance=provider_instance,
+            expected_database=expected_database,
+            context=context,
+        )
+        delegate: PgbotContextSupplier = file_context_supplier(context_path)
+    elif driver == "pgbot_cli":
+        delegate = PgbotCliContextSupplier(
+            database_url_env=entry["database_url_env"],
+            timeout_seconds=int(entry.get("timeout_seconds", 30)),
+        )
+    else:
+        raise ValueError(f"unsupported provider binding driver: {driver}")
+
+    return TargetValidatedPgbotContextSupplier(
+        provider_instance=provider_instance,
+        expected_database=expected_database,
+        delegate=delegate,
+    )
 
 
 def load_provider_instance_bindings(
@@ -96,11 +182,11 @@ def load_provider_instance_bindings(
         provider_type = topology.provider_type(instance["provider_type"])
         driver = entry["driver"]
 
-        if driver != "pgbot_file":
+        if driver not in {"pgbot_file", "pgbot_cli"}:
             raise ValueError(f"unsupported provider binding driver: {driver}")
         if provider_type.get("instrument") != "pgbot":
             raise ValueError(
-                f"provider binding {provider_instance} uses pgbot_file but topology provider type "
+                f"provider binding {provider_instance} uses {driver} but topology provider type "
                 f"instrument is {provider_type.get('instrument')!r}"
             )
         if provider_type.get("provider_id") != PGBOT_PROVIDER_ID:
@@ -110,19 +196,18 @@ def load_provider_instance_bindings(
             )
 
         adapter_path = _resolve_path(path, entry["adapter"])
-        context_path = _resolve_path(path, entry["context"])
         adapter = load_adapter(adapter_path)
-        context = load_context(context_path)
-        _validate_pgbot_target_identity(
+        supplier = _pgbot_supplier(
+            config_path=path,
+            entry=entry,
             provider_instance=provider_instance,
             topology=topology,
-            context=context,
         )
 
         provider = PgbotAutonomousProbeProvider(
             adapter=adapter,
             concepts=concepts,
-            context_supplier=file_context_supplier(context_path),
+            context_supplier=supplier,
             incident_id=incident_id,
             source_uri=f"provider-instance:{provider_instance}",
         )
