@@ -64,13 +64,11 @@ def main() -> int:
 
     demo = (ROOT / "scripts" / "demo_canonical_rails_pool.sh").read_text(encoding="utf-8")
     assert "runtime import-pool" not in demo
-    assert "--acquire" in demo
+    assert "--acquire" not in demo
     assert "--require-confirmed" in demo
-    acquire_position = demo.index("--acquire")
-    confirmed_position = demo.index("--require-confirmed")
-    assert abs(acquire_position - confirmed_position) < 300
+    assert 'causcope why "checkout is slow" --workspace "$WORKSPACE" --require-confirmed' in demo
 
-    print("canonical Rails autonomous acquisition contract: ok")
+    print("canonical Rails implicit acquisition contract: ok")
     return 0
 
 
