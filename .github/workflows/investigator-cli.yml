@@ -26,6 +26,9 @@ jobs:
       - name: Validate investigator CLI
         run: python scripts/test_causcope_cli.py
 
+      - name: Validate Rails PostgreSQL bootstrap
+        run: python scripts/test_causcope_bootstrap.py
+
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
 
