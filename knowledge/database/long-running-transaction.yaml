@@ -21,7 +21,7 @@ falsifiers:
     effect: decrease
 tested_by:
   - probe.database.inspect_long_running_transactions
-  - probe.database.inspect_blocking_chains
+  - probe.database.inspect_lock_waits
   - probe.database.inspect_vacuum_health
 related_to:
   - hypothesis.database.lock_contention
