@@ -31,7 +31,7 @@ tools:
 
   - id: tool.postgresql
     title: PostgreSQL
-    provides: [capability.database.query_metrics, capability.database.inspect_locks, capability.database.inspect_errors, capability.database.inspect_state, capability.database.inspect_connections]
+    provides: [capability.database.query_metrics, capability.database.inspect_locks, capability.database.inspect_activity, capability.database.inspect_vacuum, capability.database.inspect_errors, capability.database.inspect_state, capability.database.inspect_connections]
 
   - id: tool.socket_api
     title: Operating system socket, transport counter, and resolver APIs
