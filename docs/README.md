@@ -26,6 +26,7 @@ The first useful product should work locally with an engineer or autonomous agen
 - [Agent-first roadmap](product/agent-first-roadmap.md) - recommended product sequence from local investigator to dashboard and enterprise distribution.
 - [Operational terminology](product/operational-terminology.md) - concise distinction between signal, symptom, context, observation, evidence, mechanism, hypothesis, investigation, incident, diagnosis, mitigation, and verification.
 - [Repository strategy](product/repository-strategy.md) - why the project remains in `sergii/causcope` for now and the criteria for a future organization/repository split.
+- [Open architecture debts](product/open-architecture-debts.md) - known naming/governance inconsistencies that need deliberate RFC/schema resolution rather than silent changes.
 
 ## Relationship to the existing repository
 
@@ -93,3 +94,4 @@ When a directional architecture decision becomes stable and contract-defining, p
 9. **Dashboard remains important and should follow the useful agent core rather than precede it.**
 10. **Signals, incidents, raw telemetry, and Causcope Investigations have different authorities and must not be collapsed into one source of truth.**
 11. **Repository boundaries remain flexible until components have genuinely independent lifecycles.**
+12. **Known model/governance debts are tracked explicitly instead of being hidden by prose edits.**
