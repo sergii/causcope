@@ -102,7 +102,9 @@ causcope serve --mcp
 causcope daemon
 ```
 
-The exact implementation language is not fixed by this document, but a single distributable binary remains desirable for local, server, and customer-environment deployments.
+A single distributable binary remains desirable for local, server, and customer-environment deployments.
+
+Rust is the preferred candidate for a future packaged runtime/daemon because it can produce a small self-contained binary and fits the local/Relay deployment model well. This is a product engineering preference, not an architectural requirement and not a reason to rewrite stable semantic or reasoning code before contracts are ready.
 
 The runtime should expose capabilities, not arbitrary command execution.
 
@@ -123,6 +125,34 @@ unavailable:
 ```
 
 The investigation engine chooses among known probes based on the capabilities actually available.
+
+## Capability advertisement contract
+
+Local agent mode and enterprise Relay mode should converge on the same capability contract.
+
+Conceptually, the runtime advertises:
+
+```text
+what it can do
+what scope it can reach
+what policy currently allows
+what evidence type a probe produces
+what risk class an action belongs to
+```
+
+The engine should never infer permission from the mere existence of a tool binary.
+
+Example:
+
+```text
+implemented: postgres.inspect_locks
+available:   true
+scope:       database=checkout environment=production
+policy:      allowed
+risk:        read_only_diagnostic
+```
+
+Cloud orchestration, local CLI, MCP, and future agent harnesses should consume the same declaration.
 
 ## Why agent first
 
@@ -173,6 +203,34 @@ later
 
 A dashboard is still a first-class product surface because teams need shared state, history, auditability, navigation, comparisons, configuration, and trust controls. The decision is sequencing, not rejection of dashboards.
 
+## Human learning is a first-class projection
+
+The original Causcope idea includes self-learning and education, not only live incident automation.
+
+The same knowledge should support a human learning loop:
+
+```text
+mechanism
+  -> explanation
+  -> predicted observations
+  -> reproducible lab
+  -> inspect evidence
+  -> try discriminating probe
+  -> see why alternative hypotheses were rejected
+```
+
+Examples include learning why a deadlock differs from lock contention or serialization failure by reproducing each mechanism and observing the evidence that distinguishes them.
+
+This must not become a separate educational knowledge base. Human explanations, labs, agent reasoning, and production diagnosis should be projections over the same canonical semantic objects.
+
+Therefore Causcope has at least three consumers of one core:
+
+```text
+human learning
+human troubleshooting
+machine / agent investigation
+```
+
 ## Same core everywhere
 
 A central architecture rule is:
@@ -191,6 +249,7 @@ Slack/Teams
 PagerDuty annotations
 Causcope Cloud
 customer-side Relay
+learning/lab projections
 ```
 
 A cloud deployment should create and advance the same investigation state that a local CLI would.
@@ -293,4 +352,5 @@ For the near term:
 - implementation effort should prioritize Knowledge + Investigator + Agent + real probes;
 - cloud architecture should be documented and kept compatible, but not become a prerequisite for core progress;
 - dashboard should follow a demonstrably useful investigation engine and should visualize the same canonical state;
-- enterprise deployment constraints should shape capability and trust contracts now, even if enterprise distribution is implemented later.
+- enterprise deployment constraints should shape capability and trust contracts now, even if enterprise distribution is implemented later;
+- human learning/lab workflows should continue to validate that the knowledge remains understandable and empirically grounded.
