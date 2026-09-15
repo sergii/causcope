@@ -7,6 +7,7 @@ This document is the product projection of:
 ```text
 RFC/0079-agent-first-rails-postgresql-bootstrap.md
 RFC/0080-observed-rails-incident-bootstrap.md
+RFC/0081-workspace-incident-objectives.md
 ```
 
 ## Product boundary
@@ -92,6 +93,41 @@ Later live pgbot evidence is checked against that identity before it can enter t
 
 Raw DSNs are not stored in the workspace. `provider-bindings.yaml` stores only the name of the environment variable that resolves the DSN.
 
+## Workspace objectives
+
+The bounded incident bootstrap now persists its explicit comparison objectives instead of requiring the same numbers on every seed command:
+
+```bash
+causcope objectives set ./my-rails-app \
+  --request-latency-ms 200 \
+  --pool-wait-ms 50
+```
+
+This writes:
+
+```text
+.causcope/objectives.yaml
+```
+
+The v0.1 contract contains exactly the two observations used by the current Rails/PostgreSQL seed:
+
+```text
+observation.http.request_latency
+observation.database.connection_pool_wait_time
+```
+
+Both use `operator: above`, unit `ms`, and explicit `source.type: user_declared` provenance.
+
+The current objectives can be inspected with:
+
+```bash
+causcope objectives show ./my-rails-app
+```
+
+Causcope does not invent numeric defaults and does not infer these objectives from one incident trace.
+
+A declared objective is not the same semantic object as a historical baseline, learned anomaly boundary, provider alert threshold, or SLO target. Those may be modeled separately later.
+
 ## Investigation creation
 
 The human-facing front door remains:
@@ -130,15 +166,27 @@ The user then reproduces the observed behavior while Rails instrumentation emits
 
 ## Incident bootstrap
 
-The first implemented incident seed is intentionally narrow:
+With workspace objectives configured, the first implemented incident seed is now:
+
+```bash
+causcope runtime seed ./my-rails-app
+```
+
+The objectives remain explicit because a measured value alone does not prove abnormality. They are resolved deterministically using:
+
+```text
+explicit CLI override
+  > workspace objective
+  > fail closed
+```
+
+A one-run override can still be supplied without mutating `objectives.yaml`:
 
 ```bash
 causcope runtime seed ./my-rails-app \
-  --request-latency-threshold-ms 200 \
-  --pool-wait-threshold-ms 50
+  --request-latency-threshold-ms 250 \
+  --pool-wait-threshold-ms 75
 ```
-
-The two objectives are explicit because a measured value alone does not prove abnormality.
 
 The seed selects only an execution that satisfies all of these conditions:
 
@@ -159,7 +207,7 @@ Optional selectors can narrow the observation:
 --trace-id
 ```
 
-If the contract cannot be proven, Causcope fails closed and does not create diagnosis revision 1.
+If either required objective is unavailable, or if the runtime identity contract cannot be proven, Causcope fails closed and does not create diagnosis revision 1.
 
 ## Canonical revision-1 evidence
 
@@ -181,6 +229,8 @@ observation.database.connection_pool_wait_time
 The request-latency observation is the user-visible symptom.
 
 The pool-wait observation is a discriminating runtime fact. It favors an application-side pool mechanism but does not claim that SQL execution or PostgreSQL itself is healthy.
+
+The resolved objective becomes the comparison baseline in the emitted measurement. That means "comparison boundary for this product decision", not "historically measured normal value".
 
 ## Candidate model
 
@@ -312,10 +362,11 @@ The CI-backed local path now covers:
 ```text
 Rails repo
   -> system bootstrap
+  -> explicit workspace objectives
   -> Investigation creation
   -> runtime receiver bound to same Investigation
   -> concrete slow request + exact pool checkout observation
-  -> incident seed revision 1
+  -> incident seed revision 1 without repeated threshold flags
   -> D3.1 vs database-latency alternatives
   -> query-latency discriminator
   -> exact PostgreSQL target
@@ -325,6 +376,7 @@ Rails repo
 Negative paths include:
 
 ```text
+missing workspace objective and no CLI override -> no seed
 low checkout wait below objective -> no seed
 runtime facts from another Investigation -> no seed
 ambiguous/unbound target -> no seed
@@ -339,7 +391,6 @@ The remaining product work is primarily ergonomics and breadth:
 
 ```text
 orchestrate receiver + instrumented Rails process more cleanly
-store/service objectives instead of always passing thresholds on CLI
 reduce manual reproduce/start/seed steps
 support more observed symptom shapes
 support additional runtime/provider targets when a concrete use case requires them
@@ -360,6 +411,7 @@ Future deployment surfaces should produce or transport the same contracts:
 Concrete System Facts
 Resource Topology
 Provider Bindings / Capability declarations
+Workspace Objectives
 Runtime Evidence
 Runtime Relationships
 Diagnosis Snapshot
