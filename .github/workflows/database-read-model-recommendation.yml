@@ -19,7 +19,7 @@ on:
       - "knowledge/database/denormalized-read-model.yaml"
       - "RFC/0064-causally-justified-architecture-advice.md"
       - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
-      - "RFC/0066-recommendation-information-gap-ranking.md"
+      - "RFC/0067-recommendation-information-gap-ranking.md"
       - ".github/workflows/database-read-model-recommendation.yml"
   pull_request:
     paths:
@@ -38,7 +38,7 @@ on:
       - "knowledge/database/denormalized-read-model.yaml"
       - "RFC/0064-causally-justified-architecture-advice.md"
       - "RFC/0065-evidence-gated-database-read-model-recommendation.md"
-      - "RFC/0066-recommendation-information-gap-ranking.md"
+      - "RFC/0067-recommendation-information-gap-ranking.md"
       - ".github/workflows/database-read-model-recommendation.yml"
 
 permissions:
