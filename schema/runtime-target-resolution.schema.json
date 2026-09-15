@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/runtime-target-resolution.schema.json",
+  "title": "Causcope runtime target resolution",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "incident_id",
+    "evidence_revision",
+    "resolution_policy",
+    "resolutions"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "runtime_target_resolution"},
+    "incident_id": {"type": "string", "minLength": 1},
+    "evidence_revision": {"type": "integer", "minimum": 0},
+    "resolution_policy": {
+      "const": "exact_trace_relationships_then_explicit_runtime_bindings"
+    },
+    "resolutions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/resolution"}
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "target_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_resource",
+        "runtime_resources",
+        "relationship_ids",
+        "execution_ids",
+        "trace_ids"
+      ],
+      "properties": {
+        "target_resource": {"type": "string", "minLength": 1},
+        "runtime_resources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "relationship_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "execution_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "trace_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "diagnosis_target",
+        "probe_id",
+        "status",
+        "unresolved_reason",
+        "supporting_evidence_instance_ids",
+        "trace_ids",
+        "target_bindings"
+      ],
+      "properties": {
+        "scope": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/scope"}
+          ]
+        },
+        "diagnosis_target": {"type": "string", "minLength": 1},
+        "probe_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["resolved", "unresolved"]},
+        "unresolved_reason": {
+          "enum": [
+            null,
+            "no_active_target_evidence",
+            "no_exact_trace_context",
+            "no_runtime_resource_relationships",
+            "runtime_resource_unbound"
+          ]
+        },
+        "supporting_evidence_instance_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "target_bindings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/target_binding"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"const": "resolved"}}
+          },
+          "then": {
+            "properties": {
+              "unresolved_reason": {"const": null},
+              "target_bindings": {"minItems": 1}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "unresolved"}}
+          },
+          "then": {
+            "properties": {
+              "unresolved_reason": {"type": "string"},
+              "target_bindings": {"maxItems": 0}
+            }
+          }
+        }
+      ]
+    }
+  }
+}
