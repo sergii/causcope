@@ -5,24 +5,32 @@ on:
     paths:
       - "scripts/routed_execution_sets.py"
       - "scripts/routed_execution_set_mcp_tool.py"
+      - "scripts/routed_execution_set_journal.py"
       - "scripts/test_multi_target_execution_set.py"
+      - "scripts/test_routed_execution_set_journal.py"
       - "scripts/routed_agent_plan.py"
       - "scripts/routing_mcp_server.py"
       - "schema/routed-execution-sets.schema.json"
+      - "schema/routed-execution-set-journal-event.schema.json"
       - "schema/routed-agent-plan.schema.json"
       - "RFC/0069-multi-target-execution-set-lifecycle.md"
+      - "RFC/0071-durable-execution-set-journal.md"
       - ".github/workflows/multi-target-execution-set.yml"
   push:
     branches: [main]
     paths:
       - "scripts/routed_execution_sets.py"
       - "scripts/routed_execution_set_mcp_tool.py"
+      - "scripts/routed_execution_set_journal.py"
       - "scripts/test_multi_target_execution_set.py"
+      - "scripts/test_routed_execution_set_journal.py"
       - "scripts/routed_agent_plan.py"
       - "scripts/routing_mcp_server.py"
       - "schema/routed-execution-sets.schema.json"
+      - "schema/routed-execution-set-journal-event.schema.json"
       - "schema/routed-agent-plan.schema.json"
       - "RFC/0069-multi-target-execution-set-lifecycle.md"
+      - "RFC/0071-durable-execution-set-journal.md"
       - ".github/workflows/multi-target-execution-set.yml"
 
 jobs:
@@ -42,3 +50,6 @@ jobs:
 
       - name: Validate multi-target execution set
         run: python scripts/test_multi_target_execution_set.py
+
+      - name: Validate durable execution-set journal
+        run: python scripts/test_routed_execution_set_journal.py
