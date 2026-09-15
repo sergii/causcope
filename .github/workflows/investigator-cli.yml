@@ -29,6 +29,9 @@ jobs:
       - name: Validate Rails PostgreSQL bootstrap
         run: python scripts/test_causcope_bootstrap.py
 
+      - name: Validate workspace objectives
+        run: python scripts/test_workspace_objectives.py
+
       - name: Validate observed Rails incident bootstrap
         run: python scripts/test_runtime_incident_seed.py
 
