@@ -21,8 +21,13 @@ from instrument_router import InstrumentRouter
 from instrument_routing_projection import build_instrument_routing_projection
 from probe_executor_runtime import build_probe_execution_capabilities
 from rails_pool_vertical_slice import build_summary, load_document, render
+from resource_topology import load_resource_topology
+from runtime_target_resolution import build_runtime_target_resolution
 
 WORKSPACE_DIAGNOSIS = "diagnosis.json"
+WORKSPACE_RUNTIME_EVIDENCE = "runtime-evidence.json"
+WORKSPACE_RUNTIME_RELATIONSHIPS = "runtime-relationships.json"
+WORKSPACE_RESOURCE_TOPOLOGY = "resource-topology.yaml"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -112,12 +117,19 @@ def scoping_projection(args: argparse.Namespace) -> tuple[str, dict[str, Any]]:
     return args.problem, projection
 
 
+def _load_json_object(path: Path) -> dict[str, Any]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return document
+
+
 def load_workspace_diagnosis(workspace: Path) -> dict[str, Any] | None:
     path = workspace / WORKSPACE_DIAGNOSIS
     if not path.exists():
         return None
-    document = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(document, dict) or document.get("kind") != "diagnosis_snapshot":
+    document = _load_json_object(path)
+    if document.get("kind") != "diagnosis_snapshot":
         raise ValueError(f"{path} is not a diagnosis_snapshot")
     incident_id = document.get("incident_id")
     if not isinstance(incident_id, str) or not incident_id:
@@ -140,14 +152,39 @@ def workspace_problem(args: argparse.Namespace, snapshot: dict[str, Any]) -> str
     return f"investigation {snapshot['incident_id']}"
 
 
-def workspace_routing(snapshot: dict[str, Any]) -> dict[str, Any]:
+def workspace_route_context(
+    snapshot: dict[str, Any],
+    workspace: Path,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     concepts = load_concepts(ROOT)
+    runtime_evidence_path = workspace / WORKSPACE_RUNTIME_EVIDENCE
+    relationships_path = workspace / WORKSPACE_RUNTIME_RELATIONSHIPS
+    topology_path = workspace / WORKSPACE_RESOURCE_TOPOLOGY
+
+    target_resolution: dict[str, Any] | None = None
+    topology = None
+    if runtime_evidence_path.exists() and relationships_path.exists() and topology_path.exists():
+        topology = load_resource_topology(topology_path)
+        target_resolution = build_runtime_target_resolution(
+            snapshot,
+            _load_json_object(runtime_evidence_path),
+            _load_json_object(relationships_path),
+            topology,
+        )
+
     router = InstrumentRouter(
         concepts=concepts,
         host_capabilities=build_probe_execution_capabilities(concepts),
         providers=[],
+        resource_topology=topology,
+        provider_instance_bindings={},
     )
-    return build_instrument_routing_projection(snapshot, router)
+    routing = build_instrument_routing_projection(
+        snapshot,
+        router,
+        target_resolution=target_resolution,
+    )
+    return routing, target_resolution
 
 
 def _top_candidate(diagnosis: dict[str, Any]) -> dict[str, Any] | None:
@@ -254,6 +291,9 @@ def render_workspace_diagnosis(
                 lines.append("  instrument: unresolved")
                 continue
             for route in matching_routes:
+                target_resource = route.get("target_resource")
+                if isinstance(target_resource, str) and target_resource:
+                    lines.append(f"  operational target: {target_resource}")
                 selected = route.get("decision", {}).get("selected_instrument")
                 if isinstance(selected, dict):
                     lines.append(f"  instrument: {selected.get('id', '<unknown>')}")
@@ -313,21 +353,18 @@ def command(args: argparse.Namespace) -> int:
                 "workspace diagnosis is ordinal and does not claim causal confirmation"
             )
         problem = workspace_problem(args, snapshot)
-        routing = workspace_routing(snapshot)
+        routing, target_resolution = workspace_route_context(snapshot, args.workspace)
         if args.json:
-            print(
-                json.dumps(
-                    {
-                        "kind": "causcope_why",
-                        "problem": problem,
-                        "status": "diagnosis_available",
-                        "diagnosis": snapshot,
-                        "routing": routing,
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
+            document: dict[str, Any] = {
+                "kind": "causcope_why",
+                "problem": problem,
+                "status": "diagnosis_available",
+                "diagnosis": snapshot,
+                "routing": routing,
+            }
+            if target_resolution is not None:
+                document["target_resolution"] = target_resolution
+            print(json.dumps(document, indent=2, sort_keys=True))
         else:
             print(render_workspace_diagnosis(problem, snapshot, routing), end="")
         return 0
