@@ -1,0 +1,61 @@
+name: Validate causal verification surfaces
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bin/causcope"
+      - "scripts/causal_verification.py"
+      - "scripts/causal_verification_surfaces.py"
+      - "scripts/causcope_why.py"
+      - "scripts/causcope_why_entry.py"
+      - "scripts/routing_mcp_server.py"
+      - "scripts/test_causal_verification_surfaces.py"
+      - "scripts/test_routing_mcp_server.py"
+      - "schema/causal-verification-projection.schema.json"
+      - "RFC/0087-canonical-causal-verification.md"
+      - "RFC/0088-causal-verification-product-surfaces.md"
+      - ".github/workflows/causal-verification-surfaces.yml"
+  pull_request:
+    paths:
+      - "bin/causcope"
+      - "scripts/causal_verification.py"
+      - "scripts/causal_verification_surfaces.py"
+      - "scripts/causcope_why.py"
+      - "scripts/causcope_why_entry.py"
+      - "scripts/routing_mcp_server.py"
+      - "scripts/test_causal_verification_surfaces.py"
+      - "scripts/test_routing_mcp_server.py"
+      - "schema/causal-verification-projection.schema.json"
+      - "RFC/0087-canonical-causal-verification.md"
+      - "RFC/0088-causal-verification-product-surfaces.md"
+      - ".github/workflows/causal-verification-surfaces.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: causal-verification-surfaces-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install validator dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate canonical why verification surface
+        run: python scripts/test_causal_verification_surfaces.py
+
+      - name: Validate MCP causal verification resource
+        run: python scripts/test_routing_mcp_server.py
