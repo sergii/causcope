@@ -18,7 +18,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema opentelemetry-proto
 
       - name: Validate launcher
         run: ./bin/causcope --help >/dev/null
@@ -34,6 +34,9 @@ jobs:
 
       - name: Validate observed Rails incident bootstrap
         run: python scripts/test_runtime_incident_seed.py
+
+      - name: Validate bounded runtime observation session
+        run: python scripts/test_runtime_observe.py
 
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
