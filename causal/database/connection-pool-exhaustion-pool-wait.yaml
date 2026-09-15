@@ -1,0 +1,18 @@
+id: causal.database.connection_pool_exhaustion.pool_wait
+kind: causal_edge
+source: hypothesis.database.connection_pool_exhaustion
+target: observation.database.connection_pool_wait_time
+relation: causes
+strength: strong
+conditions:
+  - A bounded application database connection pool has no immediately available slot while a concurrent request attempts checkout.
+evidence:
+  claims:
+    - claim.database.connection_pool_exhaustion.checkout_wait_drives_latency
+  experiments:
+    - experiment.database.connection_pool_exhaustion.python_postgres
+explanation: When all application-side pool slots are occupied, a competing request must wait before it can obtain a database connection, directly increasing measured connection-pool checkout wait time.
+limitations:
+  - The empirical experiment uses a deliberately bounded Python psycopg_pool configuration and does not establish a safe production pool size.
+  - Elevated checkout wait identifies application-side pool contention but does not by itself prove that PostgreSQL connection admission, SQL execution, or lock waits are healthy.
+  - The edge applies only when the measured wait occurs before database work on the same request path.
