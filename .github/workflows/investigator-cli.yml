@@ -29,6 +29,9 @@ jobs:
       - name: Validate why product front door
         run: python scripts/test_causcope_why.py
 
+      - name: Validate workspace-native Rails golden why path
+        run: python scripts/test_causcope_why_workspace_golden.py
+
       - name: Validate why provider bindings
         run: python scripts/test_causcope_why_provider_binding.py
 
