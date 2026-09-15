@@ -32,6 +32,7 @@ from runtime_evidence import load_runtime_evidence
 from runtime_evidence_composition import compose_runtime_evidence
 
 TOOL_NAME = EXECUTE_SET_OPERATION
+TARGET_SCOPE_ATTRIBUTE = "target_resource"
 
 
 class RoutedExecutionSetInvocationError(ValueError):
@@ -57,6 +58,28 @@ def _find_diagnosis(
             f"expected exactly one current diagnosis for target {target} and selected scope, got {len(matches)}"
         )
     return matches[0]
+
+
+def _bind_evidence_scope_to_target(
+    produced: dict[str, Any],
+    *,
+    semantic_scope: dict[str, Any] | None,
+    target_resource: str,
+) -> None:
+    """Make exact routed target identity part of evidence partitioning, not only provenance."""
+
+    for instance in produced.get("instances", []):
+        if not isinstance(instance, dict):
+            continue
+        instance_scope = copy.deepcopy(instance.get("scope") or semantic_scope or {})
+        attributes = instance_scope.setdefault("attributes", {})
+        existing = attributes.get(TARGET_SCOPE_ATTRIBUTE)
+        if existing is not None and existing != target_resource:
+            raise RoutedExecutionSetInvocationError(
+                f"member evidence scope target mismatch: {target_resource}"
+            )
+        attributes[TARGET_SCOPE_ATTRIBUTE] = target_resource
+        instance["scope"] = instance_scope
 
 
 class RoutedExecutionSetToolController:
@@ -261,6 +284,11 @@ class RoutedExecutionSetToolController:
                     raise RoutedExecutionSetInvocationError(
                         f"member evidence target provenance mismatch: {target_resource}"
                     )
+            _bind_evidence_scope_to_target(
+                produced,
+                semantic_scope=scope,
+                target_resource=target_resource,
+            )
             produced_documents.append(produced)
             member_results.append(
                 {
