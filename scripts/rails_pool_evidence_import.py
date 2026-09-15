@@ -119,24 +119,15 @@ def _digest(*parts: object) -> str:
 
 def _evidence_id(incident_id: str, pool: dict[str, Any], observation: str, phase: str) -> str:
     return "evidence.rails_pool." + _digest(
-        incident_id,
-        pool["request"]["trace_id"],
-        pool["request"]["span_id"],
-        pool["pool"]["id"],
-        observation,
-        phase,
-        pool["observed_at"],
+        incident_id, pool["request"]["trace_id"], pool["request"]["span_id"],
+        pool["pool"]["id"], observation, phase, pool["observed_at"],
     )
 
 
 def _verification_id(incident_id: str, pool: dict[str, Any], target_resource: str) -> str:
     return "verification.rails_pool." + _digest(
-        incident_id,
-        target_resource,
-        pool["request"]["trace_id"],
-        pool["request"]["span_id"],
-        pool["pool"]["id"],
-        INTERVENTION_KIND,
+        incident_id, target_resource, pool["request"]["trace_id"],
+        pool["request"]["span_id"], pool["pool"]["id"], INTERVENTION_KIND,
     )
 
 
@@ -193,6 +184,9 @@ def _instance(
     }
     if labels:
         item_labels.update(labels)
+    instance_scope = copy.deepcopy(scope)
+    if phase == "post_intervention":
+        instance_scope.setdefault("attributes", {})["evidence_phase"] = "post_intervention"
     return {
         "id": _evidence_id(incident_id, pool, observation, phase),
         "observation": observation,
@@ -200,7 +194,7 @@ def _instance(
         "observed_at": pool["observed_at"],
         "confidence": "high",
         "source": source,
-        "scope": copy.deepcopy(scope),
+        "scope": instance_scope,
         "measurement": measurement,
         "labels": item_labels,
         "note": note,
@@ -232,13 +226,9 @@ def build_canonical_pool_evidence(
 
     def source(phase: str) -> dict[str, Any]:
         return _source(
-            pool=pool,
-            seed=seed,
-            target_resource=target_resource,
-            verification_id=verification_id,
-            baseline_revision=baseline_revision,
-            baseline_hypothesis=baseline_hypothesis,
-            phase=phase,
+            pool=pool, seed=seed, target_resource=target_resource,
+            verification_id=verification_id, baseline_revision=baseline_revision,
+            baseline_hypothesis=baseline_hypothesis, phase=phase,
         )
 
     assertions = pool["assertions"]
@@ -250,10 +240,8 @@ def build_canonical_pool_evidence(
             state="observed" if at_capacity else "absent", phase="pre_intervention",
             source=source("pre_intervention"), scope=scope, target_resource=target_resource,
             measurement={
-                "value": pool["pool"]["busy"],
-                "baseline": pool["pool"]["observed_capacity"],
-                "delta": pool["pool"]["busy"] - pool["pool"]["observed_capacity"],
-                "unit": "slots",
+                "value": pool["pool"]["busy"], "baseline": pool["pool"]["observed_capacity"],
+                "delta": pool["pool"]["busy"] - pool["pool"]["observed_capacity"], "unit": "slots",
                 "comparison": "equal" if at_capacity else "below_baseline",
             },
             labels={
@@ -281,14 +269,8 @@ def build_canonical_pool_evidence(
         )
 
     recovery_specs = [
-        (
-            "recovery_checkout_wait_returned_to_baseline", POOL_WAIT,
-            "checkout_wait_ms", "After capacity release, checkout wait returned to the experiment baseline."
-        ),
-        (
-            "recovery_request_latency_returned_to_baseline", REQUEST_LATENCY,
-            "request_latency_ms", "After capacity release, request latency returned to the experiment baseline."
-        ),
+        ("recovery_checkout_wait_returned_to_baseline", POOL_WAIT, "checkout_wait_ms", "After capacity release, checkout wait returned to the experiment baseline."),
+        ("recovery_request_latency_returned_to_baseline", REQUEST_LATENCY, "request_latency_ms", "After capacity release, request latency returned to the experiment baseline."),
     ]
     for assertion, observation, field, note in recovery_specs:
         if not assertions[assertion]:
@@ -301,8 +283,7 @@ def build_canonical_pool_evidence(
                 state="absent", phase="post_intervention", source=source("post_intervention"),
                 scope=scope, target_resource=target_resource,
                 measurement={"value": current, "baseline": baseline, "delta": current - baseline, "unit": "ms"},
-                labels={"intervention_outcome": "predicted_recovery"},
-                note=note,
+                labels={"intervention_outcome": "predicted_recovery"}, note=note,
             )
         )
 
@@ -331,14 +312,11 @@ def import_pool_evidence(*, workspace: Path, pool_path: Path) -> dict[str, Any]:
 
     try:
         with acquire_probe_filesystem_claim(
-            workspace,
-            purpose="rails_pool_evidence_import",
+            workspace, purpose="rails_pool_evidence_import",
             identity=incident_mutation_claim_identity(incident_id=pool.get("incident_id", "<invalid>")),
         ):
             recover_incident_state_commit(
-                commit_path=commit_path,
-                runtime_evidence_path=runtime_path,
-                snapshot_path=snapshot_path,
+                commit_path=commit_path, runtime_evidence_path=runtime_path, snapshot_path=snapshot_path,
             )
             snapshot, _etag = reader.read()
             existing = load_runtime_evidence(runtime_path)
@@ -360,16 +338,12 @@ def import_pool_evidence(*, workspace: Path, pool_path: Path) -> dict[str, Any]:
                 composed, concepts, edges, as_of=as_of, evidence_revision=next_revision
             )
             commit = prepare_commit(
-                incident_id=snapshot["incident_id"],
-                from_evidence_revision=snapshot["evidence_revision"],
-                runtime_evidence=composed,
-                diagnosis_snapshot=next_snapshot,
+                incident_id=snapshot["incident_id"], from_evidence_revision=snapshot["evidence_revision"],
+                runtime_evidence=composed, diagnosis_snapshot=next_snapshot,
             )
             commit_incident_state(
-                commit_path=commit_path,
-                runtime_evidence_path=runtime_path,
-                snapshot_path=snapshot_path,
-                commit=commit,
+                commit_path=commit_path, runtime_evidence_path=runtime_path,
+                snapshot_path=snapshot_path, commit=commit,
             )
     except (ProbeFilesystemClaimError, IncidentStateCommitError) as error:
         raise RailsPoolEvidenceImportError(str(error)) from error
@@ -401,8 +375,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         result = import_pool_evidence(
-            workspace=args.workspace.expanduser().resolve(),
-            pool_path=args.pool_evidence.expanduser().resolve(),
+            workspace=args.workspace.expanduser().resolve(), pool_path=args.pool_evidence.expanduser().resolve(),
         )
     except (OSError, RailsPoolEvidenceImportError) as error:
         print(f"causcope runtime import-pool: {error}", file=__import__("sys").stderr)
