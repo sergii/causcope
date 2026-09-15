@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/recommendation-session.schema.json",
+  "title": "Causcope recommendation session projection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "session_id",
+    "identity",
+    "session_revision",
+    "status",
+    "recommendation_state",
+    "information_gap_status",
+    "next_action",
+    "started_at",
+    "updated_at",
+    "event_count",
+    "head_hash",
+    "verified"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "recommendation_session"},
+    "session_id": {"type": "string", "pattern": "^recommendation-session\\.[0-9a-f]{16}$"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "session_revision": {"type": "integer", "minimum": 1},
+    "status": {
+      "enum": [
+        "active",
+        "awaiting_human_decision",
+        "candidate_rejected",
+        "approved",
+        "rejected",
+        "stopped"
+      ]
+    },
+    "recommendation_state": {
+      "enum": [
+        "NO_PROBLEM_EVIDENCE",
+        "INSUFFICIENT_CONTEXT",
+        "EXPERIMENT_REQUIRED",
+        "BENEFIT_NOT_DEMONSTRATED",
+        "ESTIMATED_BENEFIT",
+        "READY_FOR_HUMAN_REVIEW"
+      ]
+    },
+    "information_gap_status": {
+      "enum": [
+        "EVIDENCE_REFRESH_REQUIRED",
+        "INFORMATION_GAP",
+        "EXPERIMENT_REQUIRED",
+        "CANDIDATE_REJECTED",
+        "HUMAN_REVIEW_READY"
+      ]
+    },
+    "next_action": {"$ref": "#/$defs/action"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "event_count": {"type": "integer", "minimum": 1},
+    "head_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "verified": {"const": true}
+  },
+  "$defs": {
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["git", "opaque"]},
+        "value": {"type": "string", "minLength": 1},
+        "repository": {"type": "string", "minLength": 1}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_id",
+        "revision",
+        "incident_id",
+        "recommendation_id",
+        "subject_resource",
+        "query_object"
+      ],
+      "properties": {
+        "system_id": {"type": "string", "minLength": 1},
+        "revision": {"$ref": "#/$defs/revision"},
+        "incident_id": {"type": "string", "minLength": 1},
+        "recommendation_id": {"type": "string", "minLength": 1},
+        "subject_resource": {"type": "string", "minLength": 1},
+        "query_object": {"type": "string", "minLength": 1}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "boundaries": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "prompt", "reason", "execution_boundary"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "operator_question",
+            "read_only_probe",
+            "safe_experiment",
+            "human_decision",
+            "stop_candidate"
+          ]
+        },
+        "gap_id": {"type": "string", "pattern": "^information_gap\\.[a-z0-9_.-]+$"},
+        "prompt": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "execution_boundary": {
+          "enum": [
+            "question_only",
+            "existing_read_only_probe",
+            "experiment_plan_only",
+            "human_decision_required",
+            "stop_without_more_evidence"
+          ]
+        },
+        "probe_id": {"type": "string", "pattern": "^probe\\.[a-z0-9_.-]+$"},
+        "requested_observation": {"type": "string", "pattern": "^observation\\.[a-z0-9_.-]+$"},
+        "scope": {"$ref": "#/$defs/scope"}
+      }
+    }
+  }
+}
