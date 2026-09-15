@@ -1,0 +1,6 @@
+id: observation.database.long_running_transaction
+kind: observation
+title: Database long-running transaction
+summary: A current database transaction has remained open longer than the configured diagnostic threshold.
+explanation:
+  short: In PostgreSQL this is derived from pg_stat_activity.xact_start for client backends. The threshold is evidence-collection policy, not a universal claim that every transaction above it is pathological.
