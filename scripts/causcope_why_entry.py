@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import causcope_why
+from causal_verification_surfaces import run_canonical_workspace
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "bin" / "causcope"
@@ -138,7 +139,6 @@ def _run_observe(base_arguments: list[str], observe_root: Path, application: lis
             "this workspace already has diagnosis.json. Use `causcope why` or `causcope why --acquire`."
         )
 
-    # Create or resume the exact same Investigation that the observation session will use.
     causcope_why.scoping_projection(parsed)
 
     command = [
@@ -163,9 +163,21 @@ def _run_observe(base_arguments: list[str], observe_root: Path, application: lis
         detail = completed.stderr.strip() or completed.stdout.strip() or "bounded observation failed"
         raise ValueError(f"bounded observation failed: {detail}")
 
-    # Re-render through the normal why path. The observation command has persisted the
-    # canonical runtime evidence, relationships and diagnosis snapshot in the workspace.
     return causcope_why.main(base_arguments)
+
+
+def _run_canonical_if_available(arguments: list[str]) -> int | None:
+    if _has_explicit_golden_paths(arguments):
+        return None
+    parsed = causcope_why.build_parser().parse_args(arguments)
+    parsed.workspace = parsed.workspace.expanduser().resolve()
+    diagnosis_path = parsed.workspace / causcope_why.WORKSPACE_DIAGNOSIS
+    evidence_path = parsed.workspace / causcope_why.WORKSPACE_RUNTIME_EVIDENCE
+    if not diagnosis_path.exists():
+        return None
+    if not evidence_path.exists() and not parsed.require_confirmed:
+        return None
+    return run_canonical_workspace(parsed)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -174,6 +186,9 @@ def main(argv: list[str] | None = None) -> int:
         base_arguments, observe_root, application = _extract_observe(arguments)
         if observe_root is not None:
             return _run_observe(base_arguments, observe_root, application)
+        canonical = _run_canonical_if_available(arguments)
+        if canonical is not None:
+            return canonical
         resolved = resolve_workspace_golden_paths(arguments)
     except (ValueError, FileNotFoundError, OSError) as error:
         print(f"causcope: {error}", file=sys.stderr)
