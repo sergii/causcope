@@ -29,55 +29,64 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="causcope-why-workspace-golden-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="causcope-why-workspace-compatibility-") as temporary:
         workspace = Path(temporary) / ".causcope"
         static, runtime, pool = fixtures()
+        static_path = workspace / "concrete-system-facts.json"
+        runtime_path = workspace / "concrete-runtime-facts.json"
+        pool_path = workspace / "resource-pool-runtime-evidence.json"
 
-        write_json(workspace / "concrete-system-facts.json", static)
-        write_json(workspace / "concrete-runtime-facts.json", runtime)
-        write_json(workspace / "resource-pool-runtime-evidence.json", pool)
+        write_json(static_path, static)
+        write_json(runtime_path, runtime)
+        write_json(pool_path, pool)
 
-        diagnosed = run(
+        # Retaining old proof artifacts must not silently make the compatibility
+        # X-Ray a product authority. Compatibility requires explicit paths.
+        implicit = run(
             "why",
             "checkout is slow",
             "--workspace",
             str(workspace),
-            "--require-confirmed",
-        )
-        assert "CONFIRMED (CAUSAL_DIAGNOSIS_CONFIRMED)" in diagnosed.stdout
-        assert "application-side database connection pool exhaustion" in diagnosed.stdout
-        assert "code:CheckoutController#create()" in diagnosed.stdout
-        assert "pool:active_record.primary" in diagnosed.stdout
-        assert "PostgreSQL-wide connection admission exhaustion" in diagnosed.stdout
-        assert "not established by this bounded slice" in diagnosed.stdout
-
-        diagnosed_json = run(
-            "why",
-            "checkout is slow",
-            "--workspace",
-            str(workspace),
-            "--require-confirmed",
-            "--json",
-        )
-        document = json.loads(diagnosed_json.stdout)
-        assert document["status"] == "confirmed"
-        assert document["epistemic_state"] == "CAUSAL_DIAGNOSIS_CONFIRMED"
-        assert document["root_cause"] == "application-side database connection pool exhaustion"
-
-        incomplete = Path(temporary) / "incomplete" / ".causcope"
-        write_json(incomplete / "concrete-system-facts.json", static)
-        result = run(
-            "why",
-            "checkout is slow",
-            "--workspace",
-            str(incomplete),
             "--require-confirmed",
             check=False,
         )
-        assert result.returncode == 2
-        assert "complete Rails D3.1 proof" in result.stderr
+        assert implicit.returncode == 2
+        assert "requires --static, --runtime, and --pool" in implicit.stderr
+        assert "CAUSAL_DIAGNOSIS_CONFIRMED" not in implicit.stdout
 
-    print("Causcope why workspace golden proof: ok")
+        explicit = run(
+            "why",
+            "checkout is slow",
+            "--workspace",
+            str(workspace),
+            "--static",
+            str(static_path),
+            "--runtime",
+            str(runtime_path),
+            "--pool",
+            str(pool_path),
+            "--require-confirmed",
+        )
+        assert "CONFIRMED (CAUSAL_DIAGNOSIS_CONFIRMED)" in explicit.stdout
+        assert "application-side database connection pool exhaustion" in explicit.stdout
+
+        explicit_json = run(
+            "why",
+            "checkout is slow",
+            "--static",
+            str(static_path),
+            "--runtime",
+            str(runtime_path),
+            "--pool",
+            str(pool_path),
+            "--require-confirmed",
+            "--json",
+        )
+        document = json.loads(explicit_json.stdout)
+        assert document["status"] == "confirmed"
+        assert document["epistemic_state"] == "CAUSAL_DIAGNOSIS_CONFIRMED"
+
+    print("Causcope explicit compatibility proof boundary: ok")
     return 0
 
 
