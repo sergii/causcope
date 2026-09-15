@@ -25,3 +25,6 @@ jobs:
 
       - name: Validate investigator CLI
         run: python scripts/test_causcope_cli.py
+
+      - name: Validate recommendation investigator CLI
+        run: python scripts/test_causcope_recommendation.py
