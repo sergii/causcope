@@ -15,6 +15,7 @@
         "oneOf": [
           {"$ref": "#/$defs/pgbot_file_binding"},
           {"$ref": "#/$defs/pgbot_cli_binding"},
+          {"$ref": "#/$defs/postgresql_health_binding"},
           {"$ref": "#/$defs/rails_pool_file_binding"}
         ]
       }
@@ -27,6 +28,16 @@
     "environment_variable": {
       "type": "string",
       "pattern": "^[A-Z_][A-Z0-9_]*$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "entities": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "boundaries": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "attributes": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
     },
     "pgbot_file_binding": {
       "type": "object",
@@ -53,6 +64,23 @@
           "minimum": 1,
           "maximum": 300,
           "default": 30
+        }
+      }
+    },
+    "postgresql_health_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_instance", "driver", "database_url_env", "scope"],
+      "properties": {
+        "provider_instance": {"$ref": "#/$defs/provider_instance"},
+        "driver": {"const": "postgresql_health"},
+        "database_url_env": {"$ref": "#/$defs/environment_variable"},
+        "scope": {"$ref": "#/$defs/scope"},
+        "long_transaction_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "default": 60
         }
       }
     },
