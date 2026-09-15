@@ -9,6 +9,7 @@ from pathlib import Path
 
 import yaml
 
+import causcope_why
 from test_causcope_why import run, write_json
 from test_multi_target_execution_set import MultiTargetExecutionSetTest
 
@@ -63,32 +64,35 @@ def prepare_workspace(workspace: Path) -> None:
     )
 
 
+def assert_ready_route_before_acquisition(workspace: Path) -> None:
+    snapshot = causcope_why.load_workspace_diagnosis(workspace)
+    assert snapshot is not None
+    assert snapshot["evidence_revision"] == 7
+    routing, _resolution, _router, _information_gain_router = causcope_why.workspace_route_context(
+        snapshot,
+        workspace,
+    )
+    route = routing["routes"][0]
+    assert route["target_resource"] == "db.orders.prod"
+    assert route["decision"]["selected_instrument"]["id"] == "provider.pgbot.orders-prod"
+    assert route["agent_action"]["mcp_execution_available"] is False
+
+
 def main() -> int:
+    help_result = run("why", "--help")
+    assert "--acquire" not in help_result.stdout
+
     with tempfile.TemporaryDirectory(prefix="causcope-why-acquire-") as temporary:
         workspace = Path(temporary) / ".causcope"
         workspace.mkdir(parents=True)
         prepare_workspace(workspace)
-
-        before = run(
-            "why",
-            "database requests are slow",
-            "--workspace",
-            str(workspace),
-            "--json",
-        )
-        before_document = json.loads(before.stdout)
-        before_route = before_document["routing"]["routes"][0]
-        assert before_document["diagnosis"]["evidence_revision"] == 7
-        assert before_route["target_resource"] == "db.orders.prod"
-        assert before_route["decision"]["selected_instrument"]["id"] == "provider.pgbot.orders-prod"
-        assert before_route["agent_action"]["mcp_execution_available"] is False
+        assert_ready_route_before_acquisition(workspace)
 
         acquired = run(
             "why",
             "database requests are slow",
             "--workspace",
             str(workspace),
-            "--acquire",
             "--json",
         )
         document = json.loads(acquired.stdout)
@@ -138,14 +142,13 @@ def main() -> int:
             "database requests are slow",
             "--workspace",
             str(human_workspace),
-            "--acquire",
         )
         assert "Evidence acquisition" in human.stdout
         assert "evidence revision: 7 -> 8" in human.stdout
         assert "target: db.orders.prod via provider.pgbot.orders-prod" in human.stdout
         assert "Causcope investigation" in human.stdout
 
-    print("Causcope why explicit acquisition: ok")
+    print("Causcope why implicit acquisition: ok")
     return 0
 
 

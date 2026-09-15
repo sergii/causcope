@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -43,6 +44,20 @@ def _has_explicit_compatibility_paths(argv: list[str]) -> bool:
 
 def _has_observe(argv: list[str]) -> bool:
     return any(argument == "--observe" or argument.startswith("--observe=") for argument in argv)
+
+
+def _product_help_requested(argv: list[str]) -> bool:
+    control = argv[: argv.index("--")] if "--" in argv else argv
+    return any(argument in {"-h", "--help"} for argument in control)
+
+
+def _print_product_help() -> int:
+    parser = causcope_why.build_parser()
+    for action in parser._actions:
+        if "--acquire" in action.option_strings:
+            action.help = argparse.SUPPRESS
+    parser.print_help()
+    return 0
 
 
 def _extract_observe(argv: list[str]) -> tuple[list[str], Path | None, list[str]]:
@@ -89,7 +104,7 @@ def _extract_observe(argv: list[str]) -> tuple[list[str], Path | None, list[str]
     if not observe_root.is_dir():
         raise ValueError(f"--observe Rails root does not exist: {observe_root}")
     if "--acquire" in cleaned:
-        raise ValueError("--observe cannot be combined with --acquire; observe first, then authorize acquisition separately")
+        raise ValueError("--observe cannot be combined with --acquire; the acquisition flag is legacy compatibility only")
     if "--require-confirmed" in cleaned:
         raise ValueError("--observe cannot be combined with --require-confirmed")
     if _has_explicit_compatibility_paths(cleaned):
@@ -108,7 +123,7 @@ def _run_observe(base_arguments: list[str], observe_root: Path, application: lis
     if causcope_why.load_workspace_diagnosis(parsed.workspace) is not None:
         raise ValueError(
             "--observe is for creating the first observed diagnosis revision; "
-            "this workspace already has diagnosis.json. Use `causcope why` or `causcope why --acquire`."
+            "this workspace already has diagnosis.json. Use normal `causcope why` to continue autonomously."
         )
 
     causcope_why.scoping_projection(parsed)
@@ -135,6 +150,9 @@ def _run_observe(base_arguments: list[str], observe_root: Path, application: lis
         detail = completed.stderr.strip() or completed.stdout.strip() or "bounded observation failed"
         raise ValueError(f"bounded observation failed: {detail}")
 
+    canonical = _run_canonical_if_available(base_arguments)
+    if canonical is not None:
+        return canonical
     return causcope_why.main(base_arguments)
 
 
@@ -154,6 +172,8 @@ def _run_canonical_if_available(arguments: list[str]) -> int | None:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if _product_help_requested(arguments):
+        return _print_product_help()
     try:
         base_arguments, observe_root, application = _extract_observe(arguments)
         if observe_root is not None:
