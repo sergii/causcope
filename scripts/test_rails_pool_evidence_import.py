@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+from causal_verification import build_causal_verification_projection
 from test_runtime_incident_seed import FIXTURE, bootstrap, runtime_document
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -129,9 +130,11 @@ def main() -> int:
         app = root / "rails-app"
         shutil.copytree(FIXTURE, app)
         workspace, static, incident_id = seed(app)
+        baseline_snapshot = json.loads((workspace / "diagnosis.json").read_text(encoding="utf-8"))
+        assert leading_hypothesis(baseline_snapshot) == "hypothesis.database.connection_pool_exhaustion"
+
         pool_path = root / "pool-proof.json"
         write_json(pool_path, pool_document(static, incident_id))
-
         imported = run(
             "runtime", "import-pool",
             "--workspace", str(workspace),
@@ -143,35 +146,65 @@ def main() -> int:
         assert result["previous_evidence_revision"] == 1
         assert result["evidence_revision"] == 2
         assert result["target_resource"] == "db.causcope.prod"
+        assert result["verification_id"].startswith("verification.rails_pool.")
         assert result["projected_observations"] == [
             "observation.database.connection_pool_utilization",
             "observation.database.query_latency",
+            "observation.database.connection_pool_wait_time",
+            "observation.http.request_latency",
         ]
 
         evidence = json.loads((workspace / "runtime-evidence.json").read_text(encoding="utf-8"))
         observations = {(item["observation"], item["state"]) for item in evidence["instances"]}
         assert ("observation.database.connection_pool_utilization", "observed") in observations
         assert ("observation.database.query_latency", "absent") in observations
-        query = next(item for item in evidence["instances"] if item["observation"] == "observation.database.query_latency")
-        assert query["source"]["attributes"]["causcope.target_resource"] == "db.causcope.prod"
-        assert query["labels"]["independent_database_control"] == "reachable"
+        assert ("observation.database.connection_pool_wait_time", "absent") in observations
+        assert ("observation.http.request_latency", "absent") in observations
+
+        projected = [
+            item
+            for item in evidence["instances"]
+            if item.get("source", {}).get("attributes", {}).get("causcope.verification_id") == result["verification_id"]
+        ]
+        assert len(projected) == 4
+        assert {item["source"]["attributes"]["causcope.verification_phase"] for item in projected} == {
+            "pre_intervention", "control", "post_intervention"
+        }
+        assert all(
+            item["source"]["attributes"]["causcope.target_resource"] == "db.causcope.prod"
+            for item in projected
+        )
 
         diagnosis = json.loads((workspace / "diagnosis.json").read_text(encoding="utf-8"))
         assert diagnosis["evidence_revision"] == 2
-        assert leading_hypothesis(diagnosis) == "hypothesis.database.connection_pool_exhaustion"
+        verification = build_causal_verification_projection(diagnosis, evidence)
+        assert verification["kind"] == "causal_verification_projection"
+        assert len(verification["claims"]) == 1
+        claim = verification["claims"][0]
+        assert claim["id"] == result["verification_id"]
+        assert claim["status"] == "verified", claim
+        assert claim["hypothesis"] == "hypothesis.database.connection_pool_exhaustion"
+        assert claim["baseline_evidence_revision"] == 1
+        assert claim["verified_at_evidence_revision"] == 2
+        assert claim["target_resource"] == "db.causcope.prod"
+        assert claim["intervention"] == {
+            "kind": "resource_capacity_release",
+            "resource": "pool:active_record.primary",
+        }
+        assert len(claim["evidence_ids"]) == 5
 
-        why = json.loads(run("why", "--workspace", str(workspace), "--json").stdout)
-        assert why["status"] == "diagnosis_available"
-        assert why["diagnosis"]["evidence_revision"] == 2
-        request_diagnosis = next(
-            item
-            for partition in why["diagnosis"]["partitions"]
-            for item in partition["diagnoses"]
-            if item["target"] == "observation.http.request_latency"
+        cli_projection = subprocess.run(
+            [
+                "python", str(ROOT / "scripts" / "causal_verification.py"),
+                "--workspace", str(workspace), "--require-verified",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
         )
-        assert request_diagnosis["ranking"]["candidates"][0]["source"]["id"] == (
-            "hypothesis.database.connection_pool_exhaustion"
-        )
+        assert cli_projection.returncode == 0, cli_projection.stderr
+        assert json.loads(cli_projection.stdout)["claims"][0]["status"] == "verified"
 
         before_evidence = (workspace / "runtime-evidence.json").read_text(encoding="utf-8")
         before_diagnosis = (workspace / "diagnosis.json").read_text(encoding="utf-8")
@@ -185,6 +218,31 @@ def main() -> int:
         assert "produced no new canonical evidence" in duplicate.stderr
         assert (workspace / "runtime-evidence.json").read_text(encoding="utf-8") == before_evidence
         assert (workspace / "diagnosis.json").read_text(encoding="utf-8") == before_diagnosis
+
+        incomplete_app = root / "incomplete-app"
+        shutil.copytree(FIXTURE, incomplete_app)
+        incomplete_workspace, incomplete_static, incomplete_incident = seed(incomplete_app)
+        incomplete = pool_document(incomplete_static, incomplete_incident)
+        incomplete["assertions"]["recovery_request_latency_returned_to_baseline"] = False
+        incomplete_path = root / "incomplete-pool-proof.json"
+        write_json(incomplete_path, incomplete)
+        run(
+            "runtime", "import-pool",
+            "--workspace", str(incomplete_workspace),
+            "--pool-evidence", str(incomplete_path),
+        )
+        incomplete_projection = subprocess.run(
+            [
+                "python", str(ROOT / "scripts" / "causal_verification.py"),
+                "--workspace", str(incomplete_workspace), "--require-verified",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert incomplete_projection.returncode == 2
+        assert "no verified causal claim" in incomplete_projection.stderr
 
         mismatch_app = root / "mismatch-app"
         shutil.copytree(FIXTURE, mismatch_app)
@@ -203,7 +261,7 @@ def main() -> int:
         assert "bind to exactly one current canonical pool-wait instance" in failed.stderr
         assert json.loads((mismatch_workspace / "diagnosis.json").read_text())["evidence_revision"] == 1
 
-    print("Rails D3.1 canonical evidence import: ok")
+    print("Rails D3.1 canonical evidence import and causal verification: ok")
     return 0
 
 
