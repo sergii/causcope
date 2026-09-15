@@ -28,6 +28,7 @@ from pgbot_autonomous_provider import PgbotAutonomousProbeProvider, file_context
 from probe_executor_runtime import build_probe_execution_capabilities
 from routed_agent_plan import build_routed_agent_plan
 from routed_execution_set_mcp_tool import RoutedExecutionSetInvocationError
+from routed_execution_set_recovery import build_execution_set_recovery
 from routed_execution_set_status import build_execution_set_status
 from routed_execution_sets import build_routed_execution_sets
 from routed_instrument_mcp_tool import (
@@ -38,6 +39,7 @@ from routed_instrument_mcp_tool import (
 INSTRUMENT_ROUTING_URI = "causcope://diagnosis/instrument-routing"
 ROUTED_AGENT_PLAN_URI = "causcope://diagnosis/routed-agent-plan"
 EXECUTION_SET_STATUS_URI = "causcope://diagnosis/execution-set-status"
+EXECUTION_SET_RECOVERY_URI = "causcope://diagnosis/execution-set-recovery"
 
 RouterProvider = Callable[[], InstrumentRouter]
 RoutingProjectionProvider = Callable[[dict[str, Any]], dict[str, Any]]
@@ -84,6 +86,8 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             "and any current bounded target execution sets in one validated envelope."
             + f" Read {EXECUTION_SET_STATUS_URI} for operator-facing lifecycle state of current and "
             "historical durable execution sets without reading raw journal JSONL."
+            + f" Read {EXECUTION_SET_RECOVERY_URI} for advisory recovery classification of journaled "
+            "execution sets without granting new execution or cleanup authority."
         )
         if self.routed_tools is not None:
             instructions += (
@@ -126,11 +130,21 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
                 ),
                 "mimeType": "application/json",
             },
+            {
+                "uri": EXECUTION_SET_RECOVERY_URI,
+                "name": "execution_set_recovery",
+                "description": (
+                    "Read-only advisory recovery policy for journaled execution sets: safe-to-resume, "
+                    "safe-to-replay, operator-review, superseded, or garbage-collectable."
+                ),
+                "mimeType": "application/json",
+            },
         ]
         if modern:
             additions[0]["title"] = "Causcope instrument routing"
             additions[1]["title"] = "Causcope routed agent plan"
             additions[2]["title"] = "Causcope execution-set status"
+            additions[3]["title"] = "Causcope execution-set recovery"
         return sorted(resources + additions, key=lambda resource: resource["uri"])
 
     def _router(self, uri: str) -> InstrumentRouter:
@@ -167,6 +181,7 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             INSTRUMENT_ROUTING_URI,
             ROUTED_AGENT_PLAN_URI,
             EXECUTION_SET_STATUS_URI,
+            EXECUTION_SET_RECOVERY_URI,
         }:
             return super()._read_resource(uri, modern=modern)
 
@@ -176,12 +191,18 @@ class RoutingDiagnosisMcpServer(DiagnosisMcpServer):
             routing = self._routing_projection(snapshot, router)
             if uri == INSTRUMENT_ROUTING_URI:
                 document = routing
-            elif uri == EXECUTION_SET_STATUS_URI:
+            elif uri in {EXECUTION_SET_STATUS_URI, EXECUTION_SET_RECOVERY_URI}:
                 execution_sets = build_routed_execution_sets(routing)
-                document = build_execution_set_status(
-                    execution_sets,
-                    self.execution_set_state_dir,
-                )
+                if uri == EXECUTION_SET_STATUS_URI:
+                    document = build_execution_set_status(
+                        execution_sets,
+                        self.execution_set_state_dir,
+                    )
+                else:
+                    document = build_execution_set_recovery(
+                        execution_sets,
+                        self.execution_set_state_dir,
+                    )
             else:
                 base_plan = build_agent_plan_projection(
                     snapshot,
@@ -247,7 +268,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Expose current Causcope diagnosis, instrument routing, routed agent plan, execution-set "
-            "lifecycle status, and optionally revision-bound direct provider execution over MCP stdio."
+            "lifecycle/recovery projections, and optionally revision-bound direct provider execution over MCP stdio."
         )
     )
     parser.add_argument("--snapshot", type=Path, required=True)
