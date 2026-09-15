@@ -1,0 +1,81 @@
+name: Validate Rails golden product demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bin/causcope"
+      - "scripts/causcope_why_entry.py"
+      - "scripts/causcope_why.py"
+      - "scripts/demo_rails_pool.sh"
+      - "scripts/causcope_scan.py"
+      - "scripts/otlp_concrete_receiver.py"
+      - "scripts/rails_pool_vertical_slice.py"
+      - "integrations/rails/**"
+      - "lab/rails-connection-pool/**"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - ".github/workflows/golden-rails-demo.yml"
+  pull_request:
+    paths:
+      - "bin/causcope"
+      - "scripts/causcope_why_entry.py"
+      - "scripts/causcope_why.py"
+      - "scripts/demo_rails_pool.sh"
+      - "scripts/causcope_scan.py"
+      - "scripts/otlp_concrete_receiver.py"
+      - "scripts/rails_pool_vertical_slice.py"
+      - "integrations/rails/**"
+      - "lab/rails-connection-pool/**"
+      - "xray/profiles/d3-1-concrete-connection-pool.yaml"
+      - ".github/workflows/golden-rails-demo.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rails-golden-demo-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: causcope
+          POSTGRES_PASSWORD: causcope
+          POSTGRES_DB: causcope
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U causcope -d causcope"
+          --health-interval 1s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema opentelemetry-proto
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.8"
+          bundler-cache: true
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
+
+      - name: Run the product-shaped Rails golden demo
+        env:
+          BUNDLE_GEMFILE: ${{ github.workspace }}/lab/rails-connection-pool/Gemfile
+          CAUSCOPE_WORKSPACE: ${{ runner.temp }}/causcope-golden-workspace
+        run: bash scripts/demo_rails_pool.sh
