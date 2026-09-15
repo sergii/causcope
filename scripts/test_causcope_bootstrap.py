@@ -78,7 +78,7 @@ def main() -> int:
         assert {path.name for path in workspace.iterdir()} == expected
 
         topology = load_resource_topology(workspace / "resource-topology.yaml")
-        assert topology.resolve_runtime_resource("pool:active_record.primary") == "db.causcope.prod"
+        assert topology.target_for_runtime_resource("pool:active_record.primary") == "db.causcope.prod"
         provider = topology.provider_instance("provider.pgbot.causcope-prod")
         assert provider["target"] == "db.causcope.prod"
         database = topology.resource("db.causcope.prod")
@@ -133,7 +133,7 @@ def main() -> int:
         selected_document = json.loads(selected.stdout)
         assert selected_document["pool"] == "pool:active_record.replica"
         replica_topology = load_resource_topology(multi / ".causcope-replica" / "resource-topology.yaml")
-        assert replica_topology.resolve_runtime_resource("pool:active_record.replica") == "db.causcope.multi_database"
+        assert replica_topology.target_for_runtime_resource("pool:active_record.replica") == "db.causcope.multi_database"
 
     print("Causcope Rails/PostgreSQL bootstrap: ok")
     return 0
