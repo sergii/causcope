@@ -21,6 +21,7 @@ causal ranking
 next-probe ranking
 runtime evidence
 persistent Investigation/scoping state
+workspace objectives
 exact runtime relationships
 resource topology
 provider capability discovery
@@ -29,6 +30,7 @@ workspace provider bindings
 safe read-only execution
 revision-bound evidence acquisition
 crash-recoverable evidence + diagnosis commits
+bounded runtime observation orchestration
 bounded autonomous investigation
 CLI / HTTP / MCP projections
 Concrete System / X-Ray projections
@@ -131,11 +133,36 @@ It does not manufacture runtime evidence or diagnosis.
 
 Multi-database applications require explicit pool selection rather than guessing.
 
+### Workspace objectives
+
+`RFC/0081-workspace-incident-objectives.md` is implemented for the current bounded Rails/PostgreSQL incident bootstrap.
+
+```bash
+causcope objectives set . \
+  --request-latency-ms 200 \
+  --pool-wait-ms 50
+```
+
+persists explicit user-declared comparison boundaries in:
+
+```text
+.causcope/objectives.yaml
+```
+
+The current contract covers:
+
+```text
+observation.http.request_latency
+observation.database.connection_pool_wait_time
+```
+
+Causcope does not invent numeric defaults and does not silently treat a single incident trace as a learned baseline.
+
 ### Observed Rails incident bootstrap
 
 `RFC/0080-observed-rails-incident-bootstrap.md` is implemented for the first bounded slice.
 
-The product path is now:
+The lower-level path is:
 
 ```text
 causcope bootstrap
@@ -159,14 +186,7 @@ causcope runtime seed
   -> next discriminator
 ```
 
-The first seed requires explicit objectives:
-
-```text
-request latency threshold
-pool checkout-wait threshold
-```
-
-and emits two observations from the same trace and scope:
+The first seed uses explicit request-latency and pool-wait objectives and emits two observations from the same trace and scope:
 
 ```text
 observation.http.request_latency
@@ -202,6 +222,42 @@ request observation
 ```
 
 No provider is routed from natural-language similarity or from the assumption that the app has only one database.
+
+### Bounded runtime observation session
+
+`RFC/0082-bounded-runtime-observation-session.md` is implemented for the first local orchestration slice.
+
+The manual receiver/application/seed lifecycle can now be composed as:
+
+```bash
+causcope runtime observe . -- <bounded-application-command>
+```
+
+The command:
+
+```text
+validates workspace objectives before execution
+starts the existing OTLP receiver
+waits for receiver readiness
+launches the command through the existing revision-bound Rails runtime wrapper
+captures exact concrete runtime facts
+stops the receiver
+runs the existing incident seed
+persists diagnosis revision 1
+```
+
+The first slice deliberately accepts only a command that exits on its own with status `0`.
+
+Safety behavior is proven for:
+
+```text
+missing objectives -> application command not started
+non-zero application exit -> no seed
+no explicitly bound runtime facts -> no seed
+standard seed exact-target constraints remain authoritative
+```
+
+This local explicit application-command surface is not a generic Cloud/Relay remote-execution capability.
 
 ## Current product front door
 
@@ -259,6 +315,8 @@ Important implemented surfaces include:
 
 ```text
 causcope bootstrap
+causcope objectives set
+causcope objectives show
 causcope investigate
 causcope next
 causcope answer
@@ -268,6 +326,7 @@ causcope why
 causcope why --acquire
 causcope runtime start
 causcope runtime seed
+causcope runtime observe
 causcope rails install
 causcope rails run
 ```
@@ -329,6 +388,7 @@ The repository already contains:
 - provider capability discovery;
 - exact target-aware routing;
 - bounded autonomous investigation;
+- bounded local runtime observation orchestration;
 - multi-target execution sets;
 - durable journals and cross-process claims;
 - workflow recovery;
@@ -396,6 +456,8 @@ private/on-prem deployment later
 
 Relay should remain a capability-constrained customer-side evidence plane, not a second reasoning implementation and not a remote arbitrary shell.
 
+The local `runtime observe -- <command>` UX must not be reused as a generic remote-shell transport.
+
 ## Trust Manifest / Trust Diff
 
 State: **directional architecture, not yet canonical machine-readable schema**
@@ -454,7 +516,11 @@ For the bounded Rails/PostgreSQL path, these links are now proven:
 system discovery
   -> topology/provider setup
 
-observed request
+workspace objectives
+  -> explicit comparison boundaries
+
+bounded local observation
+  -> exact runtime facts
   -> canonical revision-1 evidence
   -> ranked alternatives
   -> next discriminator
@@ -467,19 +533,20 @@ exact target
   -> rerank
 ```
 
-Therefore the immediate problem is no longer “how do we get into the investigation loop at all?”
+Therefore the immediate problem is no longer “how do we get into the investigation loop at all?” or “how do we coordinate receiver + bounded command + seed manually?”
 
 ## Immediate product gaps
 
-The highest-value gaps are now ergonomic and breadth-related:
+The highest-value gaps are now:
 
 ```text
-1. reduce the number of commands needed to observe/reproduce/seed one local Investigation;
-2. represent service objectives/baselines as explicit machine-readable configuration so thresholds do not always come from CLI flags;
-3. connect the first observed revision more directly to `why` without weakening explicit authorization boundaries;
-4. make the Rails D3.1 confirmed X-Ray proof and generic persisted Investigation path converge further;
-5. add additional symptom/transport bootstrap paths only for concrete use cases;
-6. keep Dashboard/Cloud/Relay contracts compatible while remaining secondary to the agent core.
+1. compose bounded observation directly from `causcope why` so the product front door can guide/launch it;
+2. define interactive long-running Rails server observation only with explicit lifecycle and signal semantics;
+3. converge the generic persisted Investigation path further with the confirmed D3.1 X-Ray proof;
+4. support additional symptom bootstrap shapes only when backed by concrete empirical knowledge;
+5. add runtime/provider targets only for concrete investigation use cases;
+6. begin the shared Dashboard projection once the local Investigation UX is coherent enough to visualize;
+7. keep Cloud/Relay contracts compatible while remaining secondary to the Agent First core.
 ```
 
 A likely next UX progression is:
@@ -487,14 +554,14 @@ A likely next UX progression is:
 ```text
 causcope why "checkout is slow"
   -> knows configured objectives
-  -> guides/starts bounded observation session
-  -> receives runtime facts
-  -> seeds revision 1 automatically when the evidence contract is satisfied
+  -> offers/launches bounded observation
+  -> receives exact runtime facts
+  -> seeds revision 1 through the existing contract
   -> presents alternatives + next discriminator
   -> asks for explicit acquisition authorization when a provider read is needed
 ```
 
-The key constraint is that fewer commands must not mean weaker provenance or heuristic target guessing.
+The key constraint is that fewer commands must not mean weaker provenance, heuristic target guessing, or hidden execution authority.
 
 ## Guardrail
 
