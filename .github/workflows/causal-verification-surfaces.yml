@@ -6,6 +6,7 @@ on:
     paths:
       - "bin/causcope"
       - "scripts/causal_verification.py"
+      - "scripts/causal_verification_source.py"
       - "scripts/causal_verification_surfaces.py"
       - "scripts/causcope_why.py"
       - "scripts/causcope_why_entry.py"
@@ -20,6 +21,7 @@ on:
     paths:
       - "bin/causcope"
       - "scripts/causal_verification.py"
+      - "scripts/causal_verification_source.py"
       - "scripts/causal_verification_surfaces.py"
       - "scripts/causcope_why.py"
       - "scripts/causcope_why_entry.py"
