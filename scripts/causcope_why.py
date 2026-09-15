@@ -119,6 +119,9 @@ def load_workspace_diagnosis(workspace: Path) -> dict[str, Any] | None:
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or document.get("kind") != "diagnosis_snapshot":
         raise ValueError(f"{path} is not a diagnosis_snapshot")
+    incident_id = document.get("incident_id")
+    if not isinstance(incident_id, str) or not incident_id:
+        raise ValueError(f"{path} does not contain a valid incident_id")
     return document
 
 
@@ -128,6 +131,11 @@ def workspace_problem(args: argparse.Namespace, snapshot: dict[str, Any]) -> str
     context_path = args.workspace / "incident-context.yaml"
     if context_path.exists():
         context, _session, _projection = load_state(args.workspace)
+        if context["incident_id"] != snapshot["incident_id"]:
+            raise ValueError(
+                "workspace diagnosis belongs to another investigation: "
+                f"{snapshot['incident_id']} != {context['incident_id']}"
+            )
         return context["summary"]
     return f"investigation {snapshot['incident_id']}"
 
