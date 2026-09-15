@@ -1,6 +1,6 @@
 # RFC 0086: OpenAI-backed MCP agent acceptance benchmark
 
-- Status: Implemented harness, real API run opt-in
+- Status: Implemented and real API proof passed
 - Date: 2026-09-15
 
 ## Decision
@@ -49,17 +49,21 @@ RFC 0086
   OpenAI-backed MCP client
 ```
 
-RFC 0086 is specifically intended to answer:
+RFC 0086 answers:
 
 > Can a general-purpose model navigate Causcope's MCP contract and safely drive the same canonical investigation state without being given the answer?
 
-It is not intended to answer:
+The proven answer for the initial bounded Shop scenario is yes.
+
+It does not answer:
 
 > Can the model diagnose the production incident from raw logs by itself?
 
+That is intentionally not the benchmark contract.
+
 ## First scenario
 
-The first OpenAI-backed benchmark reuses:
+The OpenAI-backed benchmark reuses:
 
 ```text
 scenario.shop.mobile_bad_payload
@@ -76,7 +80,7 @@ client_platform = iOS
 app_version = 7.42.0
 ```
 
-Hidden expected result remains:
+Hidden expected result:
 
 ```text
 target
@@ -169,7 +173,7 @@ The real benchmark is intentionally not part of ordinary pull-request or push CI
 
 Normal CI runs only network-free tests using a fake Responses API transport.
 
-The paid benchmark is available only through:
+The paid benchmark is available through:
 
 ```text
 .github/workflows/acceptance-openai-mcp.yml
@@ -228,7 +232,7 @@ No API key value is persisted.
 
 ## Acceptance checks
 
-The existing hidden-oracle checks remain authoritative for the semantic outcome.
+The hidden-oracle checks remain authoritative for the semantic outcome.
 
 RFC 0086 adds client-behavior checks:
 
@@ -247,6 +251,78 @@ bounded OpenAI MCP client policy
 ```
 
 A model that guesses the right prose answer without driving Causcope state does not pass.
+
+## Proven real API run
+
+GitHub Actions run `35025847376` completed successfully on 2026-09-15 with:
+
+```text
+surface                   openai_mcp_agent
+model                     gpt-5.6-luna
+scenario                  scenario.shop.mobile_bad_payload
+hidden oracle             PASS
+final evidence revision   3
+leading hypothesis        hypothesis.client.payload_contract_mismatch
+failed MCP mutations      0
+explicit finish           yes
+Responses API responses   7
+input tokens              64,549
+output tokens             909
+total tokens              65,458
+API key exposed to child  false
+```
+
+The model's successful bounded sequence was:
+
+```text
+turn 1
+  list MCP resources
+  list MCP tools
+
+turn 2
+  read current diagnosis
+  read agent plan
+  read instrument routing
+  read status
+  read probe capabilities
+
+turn 3
+  execute probe.database.inspect_lock_error_events
+  evidence revision 1 -> 2
+
+turn 4
+  re-read current Causcope state
+
+turn 5
+  execute probe.http.compare_client_cohorts
+  evidence revision 2 -> 3
+
+turn 6
+  re-read current Causcope state
+
+turn 7
+  finish_investigation
+```
+
+The model stopped because the remaining semantic probe had no safe direct route. It did not treat that unavailable route as absent evidence or as a rejected hypothesis.
+
+The final hidden-oracle expectations all passed:
+
+```text
+single expected diagnosis scope  PASS
+leading hypothesis               PASS
+minimum evidence revision        PASS
+required completed probes        PASS
+explicit finish                  PASS
+MCP-state usage                  PASS
+failed MCP mutations = 0         PASS
+```
+
+The schema-valid persisted result is:
+
+```text
+benchmarks/results/2026-09-15-openai-mcp-mobile-bad-payload.json
+```
 
 ## Result artifacts
 
@@ -280,7 +356,7 @@ RFC 0086 does not add:
 
 ## Definition of Done
 
-The implemented harness is complete when ordinary CI proves without network access that:
+The implemented harness and real API proof now satisfy:
 
 1. the Responses function-call loop is bounded;
 2. response continuation preserves response identity;
@@ -288,11 +364,8 @@ The implemented harness is complete when ordinary CI proves without network acce
 4. explicit finish is required;
 5. finish cannot be mixed with another action in the same accepted turn;
 6. plain model prose does not silently become completion;
-7. the acceptance-result schema supports both deterministic and OpenAI-backed surfaces;
-8. existing deterministic acceptance surfaces remain green.
-
-The full acceptance proof is complete only after an explicitly triggered real API run additionally proves:
-
+7. the acceptance-result schema supports deterministic and OpenAI-backed surfaces;
+8. existing deterministic acceptance surfaces remain green;
 9. the model uses Causcope MCP state;
 10. required canonical probes execute through MCP;
 11. evidence reaches the hidden minimum revision;
@@ -304,7 +377,9 @@ The full acceptance proof is complete only after an explicitly triggered real AP
 
 ## Next slice
 
-After one real OpenAI-backed run passes, compare the three surfaces by one shared evaluation record:
+The next useful acceptance work is cross-surface comparison rather than another diagnosis engine.
+
+Compare the three proven surfaces by one shared evaluation record:
 
 ```text
 surface
@@ -318,4 +393,4 @@ token usage
 wall-clock duration
 ```
 
-Only then decide whether model-driven MCP navigation should become a product-facing default or remain an optional client integration.
+The Dashboard should consume the same canonical Investigation state and should not introduce separate diagnosis semantics.
