@@ -1,10 +1,11 @@
 id: probe.database.inspect_lock_waits
 kind: probe
 title: Inspect database lock waits
-summary: Inspect database session and lock metadata to identify blocked operations, blockers, and time spent waiting for locks.
+summary: Inspect database session and lock metadata to identify blocked operations, blockers, blocker-to-blocked chains, and time spent waiting for locks.
 produces:
   - observation.database.lock_wait_time
   - observation.database.lock_wait_event
+  - observation.database.blocking_chain
 requires:
   - capability.database.inspect_locks
 preferred_tools:
