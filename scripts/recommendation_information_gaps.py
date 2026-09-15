@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -143,8 +144,8 @@ def _gap_from_rule(missing_assumption: str) -> dict[str, Any]:
     }
 
 
-def _problem_evidence_gap() -> dict[str, Any]:
-    return {
+def _problem_evidence_gap(projection: dict[str, Any]) -> dict[str, Any]:
+    gap: dict[str, Any] = {
         "id": "information_gap.problem_evidence.active_query_latency",
         "category": "problem_evidence",
         "rank": 10,
@@ -156,6 +157,9 @@ def _problem_evidence_gap() -> dict[str, Any]:
         "probe_id": "probe.database.measure_query_latency",
         "requested_observation": "observation.database.query_latency",
     }
+    if "evidence_scope" in projection:
+        gap["scope"] = copy.deepcopy(projection["evidence_scope"])
+    return gap
 
 
 def _benefit_gap(projection: dict[str, Any], *, measured_required: bool) -> dict[str, Any]:
@@ -219,9 +223,9 @@ def _action_from_gap(gap: dict[str, Any]) -> dict[str, Any]:
         "reason": gap["why_now"],
         "execution_boundary": boundaries[kind],
     }
-    for key in ("probe_id", "requested_observation"):
+    for key in ("probe_id", "requested_observation", "scope"):
         if key in gap:
-            action[key] = gap[key]
+            action[key] = copy.deepcopy(gap[key])
     return action
 
 
@@ -251,7 +255,7 @@ def project(recommendation_projection: dict[str, Any]) -> dict[str, Any]:
     )
     if recommendation_projection["recommendation_id"] != SUPPORTED_RECOMMENDATION:
         raise ValueError(
-            "RFC 0066 proof supports only recommendation.database.denormalize_read_model"
+            "RFC 0067 proof supports only recommendation.database.denormalize_read_model"
         )
 
     state = recommendation_projection["state"]
@@ -268,7 +272,7 @@ def project(recommendation_projection: dict[str, Any]) -> dict[str, Any]:
 
     gaps: list[dict[str, Any]] = []
     if state == "NO_PROBLEM_EVIDENCE":
-        gaps.append(_problem_evidence_gap())
+        gaps.append(_problem_evidence_gap(recommendation_projection))
         gaps.extend(_gap_from_rule(item) for item in missing)
         status = "EVIDENCE_REFRESH_REQUIRED"
     elif state == "INSUFFICIENT_CONTEXT":
@@ -304,7 +308,7 @@ def project(recommendation_projection: dict[str, Any]) -> dict[str, Any]:
         "schema_version": "0.1",
         "kind": "recommendation_information_gap_projection",
         "system_id": recommendation_projection["system_id"],
-        "revision": recommendation_projection["revision"],
+        "revision": copy.deepcopy(recommendation_projection["revision"]),
         "incident_id": recommendation_projection["incident_id"],
         "recommendation_id": recommendation_projection["recommendation_id"],
         "subject_resource": recommendation_projection["subject_resource"],
