@@ -1,0 +1,46 @@
+name: Validate provider information-gain routing
+
+on:
+  pull_request:
+    paths:
+      - "scripts/information_gain_router.py"
+      - "scripts/test_information_gain_router.py"
+      - "schema/information-gain-routing-decision.schema.json"
+      - "RFC/0066-provider-information-gain-routing.md"
+      - "examples/topology/shop.yaml"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/adapters/prometheus/database-query-latency.yaml"
+      - "examples/telemetry/pgbot/postgresql-findings.json"
+      - "examples/telemetry/prometheus/database-query-latency.json"
+      - ".github/workflows/provider-information-gain-routing.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/information_gain_router.py"
+      - "scripts/test_information_gain_router.py"
+      - "schema/information-gain-routing-decision.schema.json"
+      - "RFC/0066-provider-information-gain-routing.md"
+      - "examples/topology/shop.yaml"
+      - "examples/adapters/pgbot/postgresql.yaml"
+      - "examples/adapters/prometheus/database-query-latency.yaml"
+      - "examples/telemetry/pgbot/postgresql-findings.json"
+      - "examples/telemetry/prometheus/database-query-latency.json"
+      - ".github/workflows/provider-information-gain-routing.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install validator dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate provider information-gain routing
+        run: python scripts/test_information_gain_router.py

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://causcope.dev/schema/information-gain-routing-decision.schema.json",
+  "title": "Causcope information-gain routing decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "probe",
+    "scope",
+    "target_resource",
+    "execution_requirement",
+    "selection_policy",
+    "base_router_selection",
+    "provider_candidates",
+    "selection",
+    "stop_reason"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "kind": {"const": "information_gain_routing_decision"},
+    "probe": {"$ref": "#/$defs/probe"},
+    "scope": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/scope"}
+      ]
+    },
+    "target_resource": {"$ref": "#/$defs/topology_id"},
+    "execution_requirement": {"enum": ["any", "direct"]},
+    "selection_policy": {"const": "safe_target_routes_then_information_gain_proxy"},
+    "base_router_selection": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "object"}
+      ]
+    },
+    "provider_candidates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/provider_candidate"}
+    },
+    "selection": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/selection"}
+      ]
+    },
+    "stop_reason": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "concept_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$"
+    },
+    "topology_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)+$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "minProperties": 1
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "risk"],
+      "properties": {
+        "id": {"$ref": "#/$defs/concept_id"},
+        "title": {"type": "string", "minLength": 1},
+        "risk": {"const": "read_only"}
+      }
+    },
+    "instrument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "execution_mode"],
+      "properties": {
+        "id": {"$ref": "#/$defs/topology_id"},
+        "kind": {"const": "diagnostic_provider"},
+        "execution_mode": {"const": "direct"},
+        "provider_type": {"$ref": "#/$defs/topology_id"},
+        "target_resource": {"$ref": "#/$defs/topology_id"},
+        "endpoint_resource": {"$ref": "#/$defs/topology_id"},
+        "runner": {"$ref": "#/$defs/topology_id"}
+      }
+    },
+    "pair": {
+      "type": "array",
+      "prefixItems": [
+        {"$ref": "#/$defs/concept_id"},
+        {"$ref": "#/$defs/concept_id"}
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "gain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "probabilistic_information_gain",
+        "outcome_support",
+        "discriminating_observations",
+        "observed_distinguishes_pairs",
+        "absent_distinguishes_pairs",
+        "discriminated_candidate_pairs",
+        "two_sided_candidate_pairs",
+        "top_candidate_discriminated_alternatives",
+        "top_candidate_two_sided_alternatives"
+      ],
+      "properties": {
+        "type": {"const": "deterministic_causal_contrast_proxy"},
+        "probabilistic_information_gain": {"const": false},
+        "outcome_support": {"enum": ["positive_findings_only", "observed_and_absent"]},
+        "discriminating_observations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "observed_distinguishes_pairs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/pair"},
+          "uniqueItems": true
+        },
+        "absent_distinguishes_pairs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/pair"},
+          "uniqueItems": true
+        },
+        "discriminated_candidate_pairs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/pair"},
+          "uniqueItems": true
+        },
+        "two_sided_candidate_pairs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/pair"},
+          "uniqueItems": true
+        },
+        "top_candidate_discriminated_alternatives": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        },
+        "top_candidate_two_sided_alternatives": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/concept_id"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "provider_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "instrument", "eligible", "base_reasons", "information_gain_proxy"],
+      "properties": {
+        "rank": {"type": "integer", "minimum": 1},
+        "instrument": {"$ref": "#/$defs/instrument"},
+        "eligible": {"type": "boolean"},
+        "base_reasons": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "information_gain_proxy": {"$ref": "#/$defs/gain"}
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instrument", "information_gain_proxy", "reason"],
+      "properties": {
+        "instrument": {"$ref": "#/$defs/instrument"},
+        "information_gain_proxy": {"$ref": "#/$defs/gain"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
