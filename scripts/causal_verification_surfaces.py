@@ -9,6 +9,7 @@ from typing import Any
 import causcope_why
 from causal_verification import build_causal_verification_projection
 from causal_verification_source import load_causal_verification_source
+from routed_execution_sets import build_routed_execution_sets
 
 
 def load_workspace_verification(workspace: Path, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -61,13 +62,32 @@ def render_verification(projection: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def implicit_acquisition_ready(snapshot: dict[str, Any], workspace: Path) -> bool:
+    evidence_path = workspace / causcope_why.WORKSPACE_RUNTIME_EVIDENCE
+    if not evidence_path.exists():
+        return False
+
+    routing, _resolution, _router, information_gain_router = causcope_why.workspace_route_context(
+        snapshot,
+        workspace,
+        external_execution_enabled=True,
+        information_gain=True,
+    )
+    if information_gain_router is None:
+        return False
+
+    execution_sets = build_routed_execution_sets(routing)
+    ready = [item for item in execution_sets["sets"] if item["state"] == "ready"]
+    return len(ready) == 1
+
+
 def run_canonical_workspace(args: Any) -> int | None:
     snapshot = causcope_why.load_workspace_diagnosis(args.workspace)
     if snapshot is None:
         return None
 
     problem = causcope_why.workspace_problem(args, snapshot)
-    if args.acquire:
+    if args.acquire or implicit_acquisition_ready(snapshot, args.workspace):
         acquisition, snapshot, routing, target_resolution = causcope_why.acquire_workspace_evidence(
             snapshot, args.workspace
         )
