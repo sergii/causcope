@@ -1,0 +1,13 @@
+id: causal.database.query_latency.http_request_latency
+kind: causal_edge
+source: observation.database.query_latency
+target: observation.http.request_latency
+relation: contributes_to
+strength: strong
+conditions:
+  - The measured database operation is on the synchronous HTTP request critical path.
+  - Database query delay is material relative to the request latency baseline or objective.
+explanation: Elevated database query latency contributes to end-to-end HTTP request latency when the delayed database operation lies on the synchronous request critical path.
+limitations:
+  - Elevated query latency on an unrelated database target or background operation does not explain the affected request.
+  - Request latency may include substantial application, network, queueing, or downstream time in addition to database work.

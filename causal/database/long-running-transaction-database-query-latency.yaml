@@ -1,0 +1,13 @@
+id: causal.database.long_running_transaction.database_query_latency
+kind: causal_edge
+source: hypothesis.database.long_running_transaction
+target: observation.database.query_latency
+relation: contributes_to
+strength: moderate
+conditions:
+  - The long-running transaction is the measured operation's own transaction or retains a resource needed by the measured database operation.
+  - The transaction age is material relative to the configured diagnostic threshold and affected query window.
+explanation: A long-running transaction can contribute to database query latency when the measured operation remains inside that transaction or when the transaction retains locks or state that delays the operation.
+limitations:
+  - Transaction age alone is not proof of query latency; unrelated maintenance, batch, or idle transactions may be harmless to the affected operation.
+  - Exact target identity and execution correlation remain necessary before treating this relationship as incident-specific evidence.

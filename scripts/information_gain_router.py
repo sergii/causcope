@@ -226,7 +226,14 @@ class InformationGainInstrumentRouter:
                 }
             )
 
-        eligible = [candidate for candidate in provider_candidates if candidate["eligible"]]
+        base_eligible = [
+            candidate for candidate in provider_candidates if candidate["eligible"]
+        ]
+        eligible = [
+            candidate
+            for candidate in base_eligible
+            if candidate["information_gain_proxy"]["discriminated_candidate_pairs"]
+        ]
         eligible.sort(key=_gain_sort_key)
         eligible_ids = {candidate["instrument"]["id"] for candidate in eligible}
         ordered = eligible + sorted(
@@ -243,7 +250,11 @@ class InformationGainInstrumentRouter:
         selected = eligible[0] if eligible else None
         if selected is None:
             selection = None
-            stop_reason = base_decision.get("stop_reason") or "no_safe_available_provider"
+            stop_reason = (
+                "no_informative_provider"
+                if base_eligible
+                else base_decision.get("stop_reason") or "no_safe_available_provider"
+            )
         else:
             selection = {
                 "instrument": copy.deepcopy(selected["instrument"]),
