@@ -1,0 +1,40 @@
+name: Validate PostgreSQL health causal ranking
+
+on:
+  pull_request:
+    paths:
+      - "causal/database/**"
+      - "knowledge/database/**"
+      - "knowledge/probes/inspect-database-lock-waits.yaml"
+      - "knowledge/probes/inspect-database-long-running-transactions.yaml"
+      - "knowledge/probes/inspect-database-vacuum-health.yaml"
+      - "scripts/test_postgresql_health_causal_ranking.py"
+      - ".github/workflows/postgresql-health-causal-ranking.yml"
+  push:
+    branches: [main]
+    paths:
+      - "causal/database/**"
+      - "knowledge/database/**"
+      - "knowledge/probes/inspect-database-lock-waits.yaml"
+      - "knowledge/probes/inspect-database-long-running-transactions.yaml"
+      - "knowledge/probes/inspect-database-vacuum-health.yaml"
+      - "scripts/test_postgresql_health_causal_ranking.py"
+      - ".github/workflows/postgresql-health-causal-ranking.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check PyYAML jsonschema
+
+      - name: Validate PostgreSQL health causal ranking
+        run: python scripts/test_postgresql_health_causal_ranking.py
