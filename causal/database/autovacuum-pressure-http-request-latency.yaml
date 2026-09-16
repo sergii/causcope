@@ -1,0 +1,14 @@
+id: causal.database.autovacuum_pressure.http_request_latency
+kind: causal_edge
+source: hypothesis.database.autovacuum_pressure
+target: observation.http.request_latency
+relation: contributes_to
+strength: weak
+conditions:
+  - Vacuum pressure has persisted long enough to materially degrade database work on the synchronous request critical path.
+  - The affected request reaches the exact PostgreSQL target and relation set implicated by the maintenance pressure.
+explanation: Persistent PostgreSQL vacuum pressure can contribute to end-to-end request latency when dead-tuple accumulation or disabled routine autovacuum materially degrades request-critical database work.
+limitations:
+  - Crossing an autovacuum trigger is maintenance pressure, not evidence that query latency is currently degraded.
+  - Point-in-time vacuum pressure without request-critical-path correlation must not be promoted to a root-cause conclusion.
+  - This edge is intentionally weak until stronger historical or intervention evidence establishes the performance effect.
