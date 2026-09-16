@@ -1,0 +1,13 @@
+id: causal.database.lock_contention.database_query_latency
+kind: causal_edge
+source: hypothesis.database.lock_contention
+target: observation.database.query_latency
+relation: contributes_to
+strength: strong
+conditions:
+  - The measured database operation is blocked by a conflicting lock.
+  - Lock wait duration is material relative to the query latency baseline or objective.
+explanation: Database lock contention contributes directly to query latency when a database operation must wait for a conflicting lock before it can continue.
+limitations:
+  - A blocking chain elsewhere in the database does not imply that the affected query is delayed by that chain.
+  - Exact target identity and execution correlation remain necessary before treating this relationship as incident-specific evidence.
