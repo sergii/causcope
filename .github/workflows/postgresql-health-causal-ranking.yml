@@ -8,6 +8,8 @@ on:
       - "knowledge/probes/inspect-database-lock-waits.yaml"
       - "knowledge/probes/inspect-database-long-running-transactions.yaml"
       - "knowledge/probes/inspect-database-vacuum-health.yaml"
+      - "scripts/information_gain_router.py"
+      - "scripts/test_information_gain_noop_provider.py"
       - "scripts/test_postgresql_health_causal_ranking.py"
       - ".github/workflows/postgresql-health-causal-ranking.yml"
   push:
@@ -18,6 +20,8 @@ on:
       - "knowledge/probes/inspect-database-lock-waits.yaml"
       - "knowledge/probes/inspect-database-long-running-transactions.yaml"
       - "knowledge/probes/inspect-database-vacuum-health.yaml"
+      - "scripts/information_gain_router.py"
+      - "scripts/test_information_gain_noop_provider.py"
       - "scripts/test_postgresql_health_causal_ranking.py"
       - ".github/workflows/postgresql-health-causal-ranking.yml"
 
@@ -38,3 +42,6 @@ jobs:
 
       - name: Validate PostgreSQL health causal ranking
         run: python scripts/test_postgresql_health_causal_ranking.py
+
+      - name: Validate zero-gain provider rejection
+        run: python scripts/test_information_gain_noop_provider.py
