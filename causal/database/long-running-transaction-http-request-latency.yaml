@@ -1,0 +1,13 @@
+id: causal.database.long_running_transaction.http_request_latency
+kind: causal_edge
+source: hypothesis.database.long_running_transaction
+target: observation.http.request_latency
+relation: contributes_to
+strength: moderate
+conditions:
+  - The long-running transaction is the request's own transaction or it retains a resource needed by a database operation on the request critical path.
+  - The transaction age is material relative to the configured diagnostic threshold and the affected request window.
+explanation: A long-running transaction can contribute to request latency when the request remains inside that transaction or when the transaction retains locks or an old database state that delays request-critical work.
+limitations:
+  - Transaction age alone is not proof of user-visible latency; unrelated maintenance, batch, or idle transactions may be harmless to the affected request.
+  - Exact target identity and execution correlation remain necessary before treating this relationship as incident-specific evidence.
